@@ -6,6 +6,7 @@ import { cargarPfx, generarCertificadoPrueba, SunatSimulado, type Certificado, t
 import { crearAlmacenLocal } from "../src/infra/almacen";
 import type { Contexto } from "../src/infra/contexto";
 import { sembrarDatosIniciales, type DatosIniciales } from "../src/infra/sembrar";
+import type { EntradaGuia } from "../src/guias/validar";
 
 let certificado: Certificado | undefined;
 
@@ -33,4 +34,18 @@ export async function crearContextoPrueba(o: { gateway?: SunatGateway; reloj?: (
     simulado: true,
   };
   return { ctx, cerrar };
+}
+
+export function entradaGuia(): EntradaGuia {
+  return {
+    fechaTraslado: "2026-09-14",
+    remitente: { numeroDoc: "20131312955", razonSocial: "DISTRIBUIDORA SAC" },
+    destinatario: { numeroDoc: "20602712592", razonSocial: "CHOCANO CARGO SAC" },
+    partida: { direccion: "AV. 28 DE JULIO 1275", ubigeo: "150115" },
+    llegada: { direccion: "CARRETERA FEDERICO BASADRE KM 86", ubigeo: "250101" },
+    pesoBruto: "1500.5",
+    unidadPeso: "KGM",
+    greRemitenteRef: "EG01-123",
+    items: [{ descripcion: "CAJAS DE CERAMICA", cantidad: "120", unidadMedida: "BX" }],
+  };
 }

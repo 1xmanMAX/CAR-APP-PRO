@@ -9,3 +9,7 @@ export * from "./infra/almacen";
 export * from "./infra/auditoria";
 export * from "./infra/sembrar";
 export * from "./infra/contexto";
+export * from "./guias/validar";
+export * from "./guias/registrar";
+export * from "./guias/cargar";
+export * from "./guias/emitir";

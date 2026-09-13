@@ -33,18 +33,21 @@ try {
   const guia = await emitirGuia(ctx, guiaId);
   console.log(`Guía ${guia.serieNumero}: ${guia.estado} ${guia.mensaje ?? ""}`);
   if (guia.rutaPdf) console.log(`  PDF: ${ctx.almacen.rutaAbsoluta(guia.rutaPdf)}`);
-  if (guia.estado !== "aceptada") process.exit(1);
 
-  const { facturaId, montos } = await prepararFactura(ctx, { guiaId, montoCentimos: 150000, incluyeIgv: true, formaPago: "credito", diasCredito: 30 });
-  console.log(`Factura preparada: total ${formatearSoles(montos.total)}, detracción ${formatearSoles(montos.detraccionMonto)}`);
-  const fac = await emitirFactura(ctx, facturaId);
-  console.log(`Factura ${fac.serieNumero}: ${fac.estado} ${fac.mensaje ?? ""}`);
-  if (fac.rutaPdf) console.log(`  PDF: ${ctx.almacen.rutaAbsoluta(fac.rutaPdf)}`);
+  if (guia.estado !== "aceptada") {
+    process.exitCode = 1;
+  } else {
+    const { facturaId, montos } = await prepararFactura(ctx, { guiaId, montoCentimos: 150000, incluyeIgv: true, formaPago: "credito", diasCredito: 30 });
+    console.log(`Factura preparada: total ${formatearSoles(montos.total)}, detracción ${formatearSoles(montos.detraccionMonto)}`);
+    const fac = await emitirFactura(ctx, facturaId);
+    console.log(`Factura ${fac.serieNumero}: ${fac.estado} ${fac.mensaje ?? ""}`);
+    if (fac.rutaPdf) console.log(`  PDF: ${ctx.almacen.rutaAbsoluta(fac.rutaPdf)}`);
 
-  if (fac.estado === "aceptada" || fac.estado === "observada") {
-    await registrarCobro(ctx, { facturaId, montoCentimos: 50000, fecha: new Date().toISOString().slice(0, 10), medio: "transferencia" });
-    const cobros = await listarCobrosPendientes(ctx);
-    console.log(`Por cobrar: ${formatearSoles(cobros.totalPendiente)} (vencido ${formatearSoles(cobros.totalVencido)})`);
+    if (fac.estado === "aceptada" || fac.estado === "observada") {
+      await registrarCobro(ctx, { facturaId, montoCentimos: 50000, fecha: new Date().toISOString().slice(0, 10), medio: "transferencia" });
+      const cobros = await listarCobrosPendientes(ctx);
+      console.log(`Por cobrar: ${formatearSoles(cobros.totalPendiente)} (vencido ${formatearSoles(cobros.totalVencido)})`);
+    }
   }
 } finally {
   await cerrar();

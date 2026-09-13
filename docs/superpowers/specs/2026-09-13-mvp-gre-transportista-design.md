@@ -139,16 +139,18 @@ interface SunatGateway {
 Además: `construirGreTransportista(datos)`, `construirFactura(datos)`, `firmar(xml, certificado)`, `leerCdr(zip)`.
 
 ### Modo real
-- GRE: token OAuth2 en `api-seguridad.sunat.gob.pe/v1/clientessol/{client_id}/oauth2/token` (cacheado hasta expirar); envío a `api-cpe.sunat.gob.pe/v1/contribuyente/gem/comprobantes/{archivo}` (ZIP base64 + hash); consulta en `.../envios/{ticket}` con backoff (2 s, 4 s, 8 s… hasta 2 min; luego continúa en segundo plano).
+- Firma XMLDSig enveloped con RSA-SHA256 / digest SHA-256 (como el ejemplo GRE-T de GasperSoft), c14n inclusiva.
+- GRE: token OAuth2 *password grant* en `api-seguridad.sunat.gob.pe/v1/clientessol/{client_id}/oauth2/token/` (username = RUC + usuario SOL, password = clave SOL, scope `https://api-cpe.sunat.gob.pe`; cacheado hasta expirar); envío a `api-cpe.sunat.gob.pe/v1/contribuyente/gem/comprobantes/{archivo}` (ZIP base64 + hash); consulta en `.../envios/{ticket}` con backoff (2 s, 4 s, 8 s… hasta 2 min; luego continúa en segundo plano).
 - Factura: SOAP `sendBill` con usuario SOL secundario; CDR síncrono.
 - Referencias: `referencias/sunat/sunat-cli` (OAuth, GRE REST, SOAP, CDR), `referencias/sunat/fractuyo` (UBL tipo 31 y firma), validación cruzada con `referencias/sunat/GasperSoft.SUNAT` (`Pruebas/GRETransportista1.cs`). **No** copiar código de `odoo18-peru-localization` (AGPL).
 
 ### Modo simulado
 - Genera y **firma** el XML real con un certificado autofirmado de prueba generado localmente.
-- Valida el XML contra los **XSD oficiales** (tomados de GasperSoft.SUNAT).
+- Valida el XML contra los **XSD UBL 2.1** (tomados de `xhandler-java`, Apache-2.0) con `xmllint-wasm`.
 - Respuestas simuladas: ticket → `en_proceso` durante ~3 s → `aceptada` con CDR sintético.
 - Rechazo forzable para pruebas (variable `SUNAT_SIMULAR_RECHAZO=<codigo>`).
-- Factura: además se puede apuntar al **ambiente beta oficial** de SUNAT para validar el XML sin certificado real.
+- Modo intermedio `SUNAT_MODO=beta`: guías simuladas, facturas enviadas al **ambiente beta oficial** de SUNAT (usuario `MODDATOS`) para validar reglas de negocio sin certificado real.
+- Detracción en factura: tipo de operación `1001`, código de bien/servicio `027` (transporte de carga), leyenda `2006`. Monto redondeado a soles enteros. Confirmar en beta que SUNAT acepta `1001` con `027` (alternativa: `1004`, que exige datos adicionales del viaje).
 - GRE: verificar en implementación si existe ambiente beta. Si no existe, la primera emisión real se hace asistida.
 
 ### Manejo de fallas

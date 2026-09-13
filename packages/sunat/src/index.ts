@@ -5,3 +5,7 @@ export * from "./xsd";
 export * from "./letras";
 export * from "./ubl/gre-transportista";
 export * from "./ubl/factura";
+export * from "./tipos";
+export * from "./zip";
+export * from "./cdr";
+export * from "./simulado";

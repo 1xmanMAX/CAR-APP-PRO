@@ -1,0 +1,21 @@
+node_modules/
+.next/
+dist/
+coverage/
+
+# Secretos
+.env
+.env.*
+!.env.example
+*.pfx
+*.p12
+*.pem
+*.key
+
+# Datos locales
+storage/
+data/
+referencias/
+
+.DS_Store
+Thumbs.db

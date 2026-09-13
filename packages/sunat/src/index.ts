@@ -9,3 +9,5 @@ export * from "./tipos";
 export * from "./zip";
 export * from "./cdr";
 export * from "./simulado";
+export * from "./real";
+export * from "./mixto";

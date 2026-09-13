@@ -20,16 +20,23 @@ export interface Contexto {
 const PFX_PRUEBA = "certificado-prueba.pfx";
 const CLAVE_PRUEBA = "prueba";
 
+function esArchivoNoEncontrado(error: unknown): boolean {
+  return typeof error === "object" && error !== null && "code" in error && (error as { code?: unknown }).code === "ENOENT";
+}
+
 async function obtenerCertificado(config: Config, almacen: Almacen, db: Db): Promise<Certificado> {
   if (config.sunatModo === "real") return cargarPfx(await readFile(config.certPath!), config.certPassword!);
+  let pfxExistente: Buffer;
   try {
-    return cargarPfx(await almacen.leer(PFX_PRUEBA), CLAVE_PRUEBA);
-  } catch {
+    pfxExistente = await almacen.leer(PFX_PRUEBA);
+  } catch (error) {
+    if (!esArchivoNoEncontrado(error)) throw error;
     const [emp] = await db.select().from(empresa).limit(1);
     const pfx = generarCertificadoPrueba({ ruc: emp?.ruc ?? "20000000001", razonSocial: emp?.razonSocial ?? "EMPRESA DE PRUEBA", password: CLAVE_PRUEBA });
     await almacen.guardar(PFX_PRUEBA, pfx);
     return cargarPfx(pfx, CLAVE_PRUEBA);
   }
+  return cargarPfx(pfxExistente, CLAVE_PRUEBA);
 }
 
 async function crearGateway(config: Config, db: Db): Promise<SunatGateway> {
@@ -62,14 +69,21 @@ export async function crearContexto(config: Config): Promise<{ ctx: Contexto; ce
     ({ db, cerrar } = await crearDb({ tipo: "pglite", directorio }));
   }
   const almacen = crearAlmacenLocal(config.storageDir);
-  const ctx: Contexto = {
-    db,
-    almacen,
-    gateway: await crearGateway(config, db),
-    certificado: await obtenerCertificado(config, almacen, db),
-    reloj: () => new Date(),
-    dormir: (ms) => new Promise((r) => setTimeout(r, ms)),
-    simulado: config.sunatModo !== "real",
-  };
-  return { ctx, cerrar };
+  try {
+    const ctx: Contexto = {
+      db,
+      almacen,
+      gateway: await crearGateway(config, db),
+      certificado: await obtenerCertificado(config, almacen, db),
+      reloj: () => new Date(),
+      dormir: (ms) => new Promise((r) => setTimeout(r, ms)),
+      simulado: config.sunatModo !== "real",
+    };
+    return { ctx, cerrar };
+  } catch (error) {
+    // Si falla el gateway o el certificado, no dejar la conexión/handle de PGlite abierto:
+    // podría bloquear dataDir en un reintento posterior.
+    await cerrar();
+    throw error;
+  }
 }

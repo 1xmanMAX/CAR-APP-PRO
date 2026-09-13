@@ -1,4 +1,4 @@
-import { and, contraparte, empresa, eq, factura, facturaGuia, guiaTransportista, isNull, lt, lte, or, siguienteCorrelativo } from "@sunatapp/db";
+import { and, contraparte, empresa, eq, factura, facturaGuia, guiaTransportista, inArray, isNull, lt, lte, or, siguienteCorrelativo } from "@sunatapp/db";
 import { generarPdfFactura } from "@sunatapp/pdf";
 import {
   construirXmlFactura, extraerDigest, firmarXml, montoEnLetras, nombreArchivo, SunatNoDisponibleError, validarXsd,
@@ -85,42 +85,73 @@ async function manejarFalloEnvio(
   });
 }
 
-async function aplicarRespuestaFactura(ctx: Contexto, id: number, r: RespuestaSunat): Promise<void> {
-  const d = await cargarFactura(ctx, id);
-  const f = d.factura;
-  const nombre = nombreArchivo(d.empresa.ruc, "01", f.serie, f.numero!);
+/**
+ * Persiste el resultado de SUNAT (aceptada/observada/rechazada) en un único update, de
+ * inmediato al recibir la respuesta — antes de tocar CDR o PDF. A partir de aquí la factura
+ * queda en un estado terminal (rechazada) o "emitida ante SUNAT" (aceptada/observada) y
+ * emitirFactura/procesarPendientesFacturas nunca vuelven a llamar a gateway.enviarFactura para
+ * ella: el CDR y el PDF son pasos posteriores, independientes y reintentables sin reenviar.
+ * Un fallo al guardar el CDR no debe impedir persistir el resultado (queda rutaCdr null).
+ */
+async function aplicarRespuestaSunat(ctx: Contexto, id: number, r: RespuestaSunat, nombre: string): Promise<void> {
   if (r.estado === "rechazada" || r.estado === "en_proceso") {
     await actualizar(ctx, id, { estadoSunat: "rechazada", codigoRespuesta: r.codigo, mensajeRespuesta: r.mensaje, proximoIntentoEn: null });
     await registrarAuditoria(ctx.db, { accion: "factura_rechazada", entidad: "factura", entidadId: id, detalle: { codigo: r.codigo } });
     return;
   }
-  const rutaCdr = r.cdrZip ? await ctx.almacen.guardar(`facturas/R-${nombre}.zip`, r.cdrZip) : null;
-  const xml = await ctx.almacen.leerTexto(f.rutaXml!);
-  const m = (c: number) => (c / 100).toFixed(2);
-  const textoQr = `${d.empresa.ruc}|01|${f.serie}|${f.numero}|${m(f.igv)}|${m(f.total)}|${f.fechaEmision}|${d.cliente.tipoDoc}|${d.cliente.numeroDoc}|${extraerDigest(xml)}|`;
-  const pdf = await generarPdfFactura({
-    emisor: { ruc: d.empresa.ruc, razonSocial: d.empresa.razonSocial, direccion: d.empresa.direccion },
-    serieNumero: `${f.serie}-${f.numero}`,
-    fechaEmision: f.fechaEmision!,
-    fechaVencimiento: f.formaPago === "credito" ? f.fechaVencimiento : null,
-    formaPago: f.formaPago === "credito" ? "Crédito" : "Contado",
-    cliente: { numeroDoc: d.cliente.numeroDoc, razonSocial: d.cliente.razonSocial, ...(d.cliente.direccion ? { direccion: d.cliente.direccion } : {}) },
-    descripcion: f.descripcion,
-    subtotal: formatearSoles(f.subtotal),
-    igv: formatearSoles(f.igv),
-    total: formatearSoles(f.total),
-    montoEnLetras: montoEnLetras(f.total),
-    detraccion: f.detraccionMonto > 0 ? { porcentaje: `${f.detraccionPorcentaje}%`, monto: formatearSoles(f.detraccionMonto), cuenta: d.empresa.cuentaDetraccionBn ?? "" } : null,
-    guiasRelacionadas: d.guias,
-    textoQr,
-    simulado: ctx.simulado,
-  });
-  const rutaPdf = await ctx.almacen.guardar(`facturas/${nombre}.pdf`, pdf);
+  let rutaCdr: string | null = null;
+  if (r.cdrZip) {
+    try {
+      rutaCdr = await ctx.almacen.guardar(`facturas/R-${nombre}.zip`, r.cdrZip);
+    } catch (error) {
+      await registrarAuditoria(ctx.db, { accion: "factura_cdr_no_guardado", entidad: "factura", entidadId: id, detalle: { error: (error as Error).message } });
+    }
+  }
   await actualizar(ctx, id, {
     estadoSunat: r.estado, codigoRespuesta: r.codigo,
-    mensajeRespuesta: [r.mensaje, ...r.notas].join(" | "), rutaCdr, rutaPdf, proximoIntentoEn: null,
+    mensajeRespuesta: [r.mensaje, ...r.notas].join(" | "), rutaCdr, proximoIntentoEn: null, intentos: 0,
   });
   await registrarAuditoria(ctx.db, { accion: "factura_aceptada", entidad: "factura", entidadId: id });
+}
+
+/**
+ * Genera y guarda el PDF de una factura ya aceptada/observada por SUNAT que todavía no tiene
+ * rutaPdf. Es un paso retryable e idempotente que nunca reenvía a SUNAT: si falla (almacenamiento
+ * caído, etc.) la factura queda aceptada/observada con rutaPdf null y el fallo se audita para
+ * que quede visible, sin lanzar la excepción hacia el llamador ni contar como intento de envío.
+ */
+async function generarPdfFacturaSiFalta(ctx: Contexto, id: number): Promise<void> {
+  const [f0] = await ctx.db.select({ rutaPdf: factura.rutaPdf, estadoSunat: factura.estadoSunat }).from(factura).where(eq(factura.id, id));
+  if (!f0 || f0.rutaPdf || (f0.estadoSunat !== "aceptada" && f0.estadoSunat !== "observada")) return;
+  try {
+    const d = await cargarFactura(ctx, id);
+    const f = d.factura;
+    const nombre = nombreArchivo(d.empresa.ruc, "01", f.serie, f.numero!);
+    const xml = await ctx.almacen.leerTexto(f.rutaXml!);
+    const m = (c: number) => (c / 100).toFixed(2);
+    const textoQr = `${d.empresa.ruc}|01|${f.serie}|${f.numero}|${m(f.igv)}|${m(f.total)}|${f.fechaEmision}|${d.cliente.tipoDoc}|${d.cliente.numeroDoc}|${extraerDigest(xml)}|`;
+    const pdf = await generarPdfFactura({
+      emisor: { ruc: d.empresa.ruc, razonSocial: d.empresa.razonSocial, direccion: d.empresa.direccion },
+      serieNumero: `${f.serie}-${f.numero}`,
+      fechaEmision: f.fechaEmision!,
+      fechaVencimiento: f.formaPago === "credito" ? f.fechaVencimiento : null,
+      formaPago: f.formaPago === "credito" ? "Crédito" : "Contado",
+      cliente: { numeroDoc: d.cliente.numeroDoc, razonSocial: d.cliente.razonSocial, ...(d.cliente.direccion ? { direccion: d.cliente.direccion } : {}) },
+      descripcion: f.descripcion,
+      subtotal: formatearSoles(f.subtotal),
+      igv: formatearSoles(f.igv),
+      total: formatearSoles(f.total),
+      montoEnLetras: montoEnLetras(f.total),
+      detraccion: f.detraccionMonto > 0 ? { porcentaje: `${f.detraccionPorcentaje}%`, monto: formatearSoles(f.detraccionMonto), cuenta: d.empresa.cuentaDetraccionBn ?? "" } : null,
+      guiasRelacionadas: d.guias,
+      textoQr,
+      simulado: ctx.simulado,
+    });
+    const rutaPdf = await ctx.almacen.guardar(`facturas/${nombre}.pdf`, pdf);
+    await actualizar(ctx, id, { rutaPdf });
+  } catch (error) {
+    await registrarAuditoria(ctx.db, { accion: "factura_pdf_pendiente", entidad: "factura", entidadId: id, detalle: { error: (error as Error).message } });
+  }
 }
 
 export async function emitirFactura(ctx: Contexto, facturaId: number): Promise<ResultadoEmision> {
@@ -214,15 +245,18 @@ export async function emitirFactura(ctx: Contexto, facturaId: number): Promise<R
     return resultadoFactura(ctx, facturaId);
   }
 
-  // El envío llegó a SUNAT: se reinicia el contador de intentos antes de aplicar la respuesta.
+  // El envío llegó a SUNAT: se persiste su resultado de inmediato (aplicarRespuestaSunat), antes
+  // de cualquier paso adicional — desde aquí la factura ya no se reenvía nunca. El PDF es un
+  // paso separado y reintentable que no debe poder revertir ni bloquear ese resultado.
   await actualizar(ctx, facturaId, { rutaXml, intentos: 0 });
-  await aplicarRespuestaFactura(ctx, facturaId, r);
+  await aplicarRespuestaSunat(ctx, facturaId, r, nombre);
+  await generarPdfFacturaSiFalta(ctx, facturaId);
   return resultadoFactura(ctx, facturaId);
 }
 
 export async function procesarPendientesFacturas(ctx: Contexto): Promise<ResultadoEmision[]> {
   const ahora = ctx.reloj();
-  const candidatas = await ctx.db
+  const pendientesEnvio = await ctx.db
     .select({ id: factura.id })
     .from(factura)
     .where(
@@ -234,14 +268,32 @@ export async function procesarPendientesFacturas(ctx: Contexto): Promise<Resulta
       ),
     );
   const cambios: ResultadoEmision[] = [];
-  for (const { id } of candidatas) {
+  for (const { id } of pendientesEnvio) {
     try {
       const r = await emitirFactura(ctx, id);
       if (r.estado !== "pendiente_envio") cambios.push(r);
     } catch {
-      // Ninguna factura debe bloquear el procesamiento de las demás: un fallo inesperado
-      // (p. ej. al persistir el PDF/CDR después de una respuesta ya recibida de SUNAT) se
-      // aísla aquí y se reintenta en la siguiente pasada.
+      // Ninguna factura debe bloquear el procesamiento de las demás: un fallo inesperado (p. ej.
+      // la factura desapareció por una condición de carrera) se aísla aquí y se reintenta en la
+      // siguiente pasada; nunca implica volver a llamar a gateway.enviarFactura para una factura
+      // que SUNAT ya haya aceptado.
+    }
+  }
+
+  // Segundo barrido, independiente del envío: facturas ya aceptadas/observadas por SUNAT a las
+  // que les falta el PDF (por un fallo previo de almacenamiento). Nunca llama a enviarFactura.
+  const pdfPendientes = await ctx.db
+    .select({ id: factura.id })
+    .from(factura)
+    .where(and(inArray(factura.estadoSunat, ["aceptada", "observada"]), isNull(factura.rutaPdf)));
+  for (const { id } of pdfPendientes) {
+    try {
+      await generarPdfFacturaSiFalta(ctx, id);
+      const r = await resultadoFactura(ctx, id);
+      if (r.rutaPdf) cambios.push(r);
+    } catch {
+      // generarPdfFacturaSiFalta ya captura y audita sus propios fallos; este catch es una red
+      // de seguridad adicional para que una factura no bloquee el resto del barrido.
     }
   }
   return cambios;

@@ -26,19 +26,26 @@ export async function registrarCobro(
   e: { facturaId: number; montoCentimos: number; fecha: string; medio: "transferencia" | "efectivo" | "otro"; nota?: string; usuarioId?: number },
 ): Promise<{ estadoCobro: EstadoCobro; saldo: number }> {
   if (!Number.isInteger(e.montoCentimos) || e.montoCentimos <= 0) throw new ErrorNegocio("El monto cobrado debe ser mayor a cero");
-  const [f] = await ctx.db.select().from(factura).where(eq(factura.id, e.facturaId));
-  if (!f || !EMITIDAS.includes(f.estadoSunat as (typeof EMITIDAS)[number])) throw new ErrorNegocio("Solo se registran cobros de facturas aceptadas por SUNAT");
-  const cobrable = f.total - f.detraccionMonto;
-  const saldoAntes = cobrable - (await cobrado(ctx, f.id));
-  if (e.montoCentimos > saldoAntes) throw new ErrorNegocio(`El monto supera el saldo pendiente (${saldoAntes / 100})`);
-  const saldo = saldoAntes - e.montoCentimos;
-  const estadoCobro: EstadoCobro = saldo === 0 ? "pagada" : "parcial";
-  await ctx.db.transaction(async (tx) => {
+  // Todo el cálculo del saldo (lectura de la factura, suma de cobros previos, la validación y
+  // estadoCobro derivado) debe ocurrir dentro de la misma transacción, con la factura bloqueada
+  // vía FOR UPDATE: así dos cobros concurrentes sobre la misma factura se serializan y el
+  // segundo ve el saldo ya actualizado por el primero, en vez de calcular ambos sobre el mismo
+  // valor stale leído antes de que cualquiera insertara su cobro.
+  return ctx.db.transaction(async (tx) => {
+    const [f] = await tx.select().from(factura).where(eq(factura.id, e.facturaId)).for("update");
+    if (!f || !EMITIDAS.includes(f.estadoSunat as (typeof EMITIDAS)[number])) throw new ErrorNegocio("Solo se registran cobros de facturas aceptadas por SUNAT");
+    const cobrable = f.total - f.detraccionMonto;
+    const [fila] = await tx.select({ suma: sql<string>`coalesce(sum(${cobro.monto}), 0)` }).from(cobro).where(eq(cobro.facturaId, f.id));
+    const cobradoPrevio = Number(fila?.suma ?? 0);
+    const saldoAntes = cobrable - cobradoPrevio;
+    if (e.montoCentimos > saldoAntes) throw new ErrorNegocio(`El monto supera el saldo pendiente (${saldoAntes / 100})`);
+    const saldo = saldoAntes - e.montoCentimos;
+    const estadoCobro: EstadoCobro = saldo === 0 ? "pagada" : "parcial";
     await tx.insert(cobro).values({ facturaId: f.id, fecha: e.fecha, monto: e.montoCentimos, medio: e.medio, nota: e.nota ?? null, usuarioId: e.usuarioId ?? null });
     await tx.update(factura).set({ estadoCobro, actualizadoEn: ctx.reloj() }).where(eq(factura.id, f.id));
     await registrarAuditoria(tx, { usuarioId: e.usuarioId, accion: "cobro_registrado", entidad: "factura", entidadId: f.id, detalle: { monto: e.montoCentimos } });
+    return { estadoCobro, saldo };
   });
-  return { estadoCobro, saldo };
 }
 
 export async function buscarFacturaPorSerieNumero(ctx: Contexto, texto: string): Promise<{ id: number } | null> {

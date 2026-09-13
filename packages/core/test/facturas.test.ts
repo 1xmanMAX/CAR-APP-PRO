@@ -1,4 +1,4 @@
-import { empresa, eq, factura, type EstadoSunatFactura } from "@sunatapp/db";
+import { cobro, empresa, eq, factura, sql, type EstadoSunatFactura } from "@sunatapp/db";
 import { SunatNoDisponibleError, SunatSimulado, type DocumentoFirmado, type RespuestaSunat, type SunatGateway } from "@sunatapp/sunat";
 import { afterEach, describe, expect, it } from "vitest";
 import { buscarFacturaPorSerieNumero, listarCobrosPendientes, registrarCobro } from "../src/cobros/cobros";
@@ -163,18 +163,76 @@ describe("emitirFactura", () => {
     ]);
   });
 
-  it("aísla el fallo de una factura del resto durante la pasada de fondo", async () => {
+  it("si falla el guardado del PDF, la factura queda aceptada con rutaPdf null y no se reenvía a SUNAT", async () => {
+    let llamadasEnvio = 0;
     const base = new SunatSimulado({ demoraMs: 0 });
     const gw: SunatGateway = {
       enviarGuia: (d: DocumentoFirmado) => base.enviarGuia(d),
       consultarTicket: (t: string) => base.consultarTicket(t),
-      enviarFactura: (d: DocumentoFirmado) => base.enviarFactura(d),
+      enviarFactura: (d: DocumentoFirmado) => {
+        llamadasEnvio++;
+        return base.enviarFactura(d);
+      },
     };
-    const { ctx, guiaId: guiaId1 } = await contextoConGuia(gw);
+    const { ctx, guiaId } = await contextoConGuia(gw);
+    const { facturaId } = await prepararFactura(ctx, { guiaId, montoCentimos: 50000, incluyeIgv: true, formaPago: "contado" });
+
+    let fallarPdf = true;
+    const almacenOriginal = ctx.almacen;
+    ctx.almacen = {
+      ...almacenOriginal,
+      guardar: async (ruta: string, contenido: Buffer | string) => {
+        if (fallarPdf && ruta.endsWith(".pdf")) throw new Error("disco lleno (simulado)");
+        return almacenOriginal.guardar(ruta, contenido);
+      },
+    };
+
+    // SUNAT acepta la factura, pero el guardado del PDF falla: el resultado de SUNAT no debe
+    // perderse ni reintentarse como envío — queda "aceptada" con rutaPdf null.
+    const r = await emitirFactura(ctx, facturaId);
+    expect(r).toMatchObject({ estado: "aceptada", rutaPdf: null });
+    expect(llamadasEnvio).toBe(1);
+    const [f] = await ctx.db.select().from(factura).where(eq(factura.id, facturaId));
+    expect(f).toMatchObject({ estadoSunat: "aceptada", rutaPdf: null });
+
+    // Un reintento directo tampoco debe volver a llamar a SUNAT: la factura ya está "aceptada".
+    await emitirFactura(ctx, facturaId);
+    expect(llamadasEnvio).toBe(1);
+
+    // Una vez que el almacenamiento vuelve a funcionar, el proceso de fondo completa el PDF sin
+    // tocar SUNAT.
+    fallarPdf = false;
+    const cambios = await procesarPendientesFacturas(ctx);
+    expect(llamadasEnvio).toBe(1); // sigue sin volver a llamar a enviarFactura
+    expect(cambios).toEqual([expect.objectContaining({ id: facturaId, estado: "aceptada", rutaPdf: expect.stringContaining(".pdf") })]);
+    const [f2] = await ctx.db.select().from(factura).where(eq(factura.id, facturaId));
+    expect(f2!.rutaPdf).not.toBeNull();
+    expect((await ctx.almacen.leer(f2!.rutaPdf!)).subarray(0, 5).toString()).toBe("%PDF-");
+  });
+
+  it("aísla el fallo de una factura del resto durante la pasada de fondo", async () => {
+    const { ctx, guiaId: guiaId1 } = await contextoConGuia();
     const { facturaId: facturaId1 } = await prepararFactura(ctx, { guiaId: guiaId1, montoCentimos: 50000, incluyeIgv: true, formaPago: "contado" });
     const guiaId2 = await registrarGuiaBorrador(ctx, entradaGuia());
     await emitirGuia(ctx, guiaId2);
     const { facturaId: facturaId2 } = await prepararFactura(ctx, { guiaId: guiaId2, montoCentimos: 50000, incluyeIgv: true, formaPago: "contado" });
+
+    // Sustituye el gateway después de preparar ambas facturas: solo afecta el envío de facturas.
+    // Simula que, justo cuando el envío de la factura 1 llega a SUNAT, esa factura desaparece por
+    // una condición de carrera (p. ej. borrada por otro proceso) — un fallo genuinamente
+    // inesperado, no una simple caída de red ni un fallo de almacenamiento.
+    const base = new SunatSimulado({ demoraMs: 0 });
+    ctx.gateway = {
+      enviarGuia: (d: DocumentoFirmado) => base.enviarGuia(d),
+      consultarTicket: (t: string) => base.consultarTicket(t),
+      enviarFactura: async (d: DocumentoFirmado) => {
+        const r = await base.enviarFactura(d);
+        if (d.nombreArchivo.includes("-01-F001-10")) {
+          await ctx.db.delete(factura).where(eq(factura.id, facturaId1));
+        }
+        return r;
+      },
+    };
 
     // Deja ambas facturas en "pendiente_envio", como si un intento previo hubiera reservado
     // número/fecha y luego se hubiera interrumpido antes de enviar.
@@ -188,21 +246,10 @@ describe("emitirFactura", () => {
       estadoSunat: "pendiente_envio" as EstadoSunatFactura, intentos: 0, proximoIntentoEn: null, actualizadoEn: viejo,
     }).where(eq(factura.id, facturaId2));
 
-    // El almacén falla solo al guardar el PDF de la factura 1 (fallo inesperado después de que
-    // SUNAT ya respondió): debe aislarse en procesarPendientesFacturas sin afectar a la factura 2.
-    const almacenOriginal = ctx.almacen;
-    ctx.almacen = {
-      ...almacenOriginal,
-      guardar: async (ruta: string, contenido: Buffer | string) => {
-        if (ruta.includes("-01-F001-10") && ruta.endsWith(".pdf")) throw new Error("disco lleno (simulado)");
-        return almacenOriginal.guardar(ruta, contenido);
-      },
-    };
-
     const cambios = await procesarPendientesFacturas(ctx);
     expect(cambios).toEqual([expect.objectContaining({ id: facturaId2, estado: "aceptada" })]);
-    const [f1] = await ctx.db.select().from(factura).where(eq(factura.id, facturaId1));
-    expect(f1!.estadoSunat).toBe("pendiente_envio"); // no completó, pero tampoco tumbó la pasada
+    const restante = await ctx.db.select().from(factura).where(eq(factura.id, facturaId1));
+    expect(restante).toHaveLength(0); // la factura 1 desapareció, pero no bloqueó a la 2
   });
 });
 
@@ -222,6 +269,28 @@ describe("cobros", () => {
     expect(await registrarCobro(ctx, { facturaId, montoCentimos: 50000, fecha: "2026-09-14", medio: "transferencia" })).toEqual({ estadoCobro: "parcial", saldo: 63300 });
     expect(await registrarCobro(ctx, { facturaId, montoCentimos: 63300, fecha: "2026-09-15", medio: "efectivo" })).toEqual({ estadoCobro: "pagada", saldo: 0 });
     await expect(registrarCobro(ctx, { facturaId, montoCentimos: 1, fecha: "2026-09-15", medio: "otro" })).rejects.toThrow("supera el saldo");
+  });
+
+  it("dos cobros concurrentes que exceden el saldo: solo uno tiene éxito y nunca se sobrepasa el cobrable", async () => {
+    const { ctx, facturaId } = await facturaEmitida(); // total 118000, detracción 4700, cobrable 113300
+    const resultados = await Promise.allSettled([
+      registrarCobro(ctx, { facturaId, montoCentimos: 70000, fecha: "2026-09-14", medio: "transferencia" }),
+      registrarCobro(ctx, { facturaId, montoCentimos: 70000, fecha: "2026-09-14", medio: "efectivo" }),
+    ]);
+    const exitosos = resultados.filter((r) => r.status === "fulfilled");
+    const fallidos = resultados.filter((r) => r.status === "rejected");
+    expect(exitosos).toHaveLength(1); // el segundo (70000+70000 > 113300) debe fallar, no sobre-cobrar
+    expect(fallidos).toHaveLength(1);
+
+    const [fila] = await ctx.db.select({ suma: sql<string>`coalesce(sum(${cobro.monto}), 0)` }).from(cobro).where(eq(cobro.facturaId, facturaId));
+    const totalCobrado = Number(fila?.suma ?? 0);
+    expect(totalCobrado).toBe(70000);
+    expect(totalCobrado).toBeLessThanOrEqual(113300);
+
+    const [f] = await ctx.db.select().from(factura).where(eq(factura.id, facturaId));
+    expect(f!.estadoCobro).toBe("parcial"); // consistente con el único cobro que sí se aplicó
+    const exitoso = exitosos[0] as PromiseFulfilledResult<{ estadoCobro: string; saldo: number }>;
+    expect(exitoso.value).toEqual({ estadoCobro: "parcial", saldo: 43300 });
   });
 
   it("busca por serie-número con o sin ceros", async () => {

@@ -11,5 +11,8 @@
     "@sunatapp/pdf": "workspace:*",
     "@sunatapp/sunat": "workspace:*",
     "zod": "^4.6.4"
+  },
+  "devDependencies": {
+    "unpdf": "^1.8.1"
   }
 }

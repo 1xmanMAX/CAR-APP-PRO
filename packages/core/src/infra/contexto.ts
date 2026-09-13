@@ -14,7 +14,17 @@ export interface Contexto {
   almacen: Almacen;
   reloj: () => Date;
   dormir: (ms: number) => Promise<void>;
+  /** Guías: simuladas salvo en modo real (certificado propio, GRE real). */
   simulado: boolean;
+  /**
+   * Facturas: simuladas cuando van al ambiente beta de SUNAT — modo "simulado", modo "beta"
+   * (siempre envía la factura al beta oficial vía MODDATOS) o modo "real" con
+   * sunatAmbienteFactura="beta". Solo es false en real + producción. Independiente de
+   * `simulado` porque en modo "beta" las guías son simuladas pero las facturas SÍ llegan a un
+   * ambiente real de SUNAT (aunque no de producción), y en real+beta las guías son reales pero
+   * la factura no: cada documento debe llevar el sello "DOCUMENTO SIMULADO" según corresponda.
+   */
+  facturaSimulada: boolean;
 }
 
 const PFX_PRUEBA = "certificado-prueba.pfx";
@@ -78,6 +88,7 @@ export async function crearContexto(config: Config): Promise<{ ctx: Contexto; ce
       reloj: () => new Date(),
       dormir: (ms) => new Promise((r) => setTimeout(r, ms)),
       simulado: config.sunatModo !== "real",
+      facturaSimulada: config.sunatModo !== "real" || config.sunatAmbienteFactura === "beta",
     };
     return { ctx, cerrar };
   } catch (error) {

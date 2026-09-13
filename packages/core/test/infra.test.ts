@@ -1,8 +1,9 @@
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type * as DbModulo from "@sunatapp/db";
 import { auditoria, empresa, usuario } from "@sunatapp/db";
+import { generarCertificadoPrueba } from "@sunatapp/sunat";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ErrorNegocio } from "../src/errores";
 import { crearAlmacenLocal } from "../src/infra/almacen";
@@ -52,6 +53,26 @@ describe("cargarConfig", () => {
 
   it("en modo real exige certificado y credenciales", () => {
     expect(() => cargarConfig({ SUNAT_MODO: "real" })).toThrow(/SUNAT_CERT_PATH/);
+  });
+
+  const CREDENCIALES_REAL = {
+    SUNAT_MODO: "real", SUNAT_CERT_PATH: "x", SUNAT_CERT_PASSWORD: "x",
+    SUNAT_SOL_USUARIO: "x", SUNAT_SOL_CLAVE: "x", SUNAT_GRE_CLIENT_ID: "x", SUNAT_GRE_CLIENT_SECRET: "x",
+  } as const;
+
+  it("en modo real sin SUNAT_AMBIENTE_FACTURA definido usa producción (nunca beta por defecto)", () => {
+    expect(cargarConfig(CREDENCIALES_REAL).sunatAmbienteFactura).toBe("produccion");
+    // También cuando la variable está presente pero vacía (como en .env.example).
+    expect(cargarConfig({ ...CREDENCIALES_REAL, SUNAT_AMBIENTE_FACTURA: "" }).sunatAmbienteFactura).toBe("produccion");
+  });
+
+  it("en modo real permite forzar SUNAT_AMBIENTE_FACTURA=beta explícitamente", () => {
+    expect(cargarConfig({ ...CREDENCIALES_REAL, SUNAT_AMBIENTE_FACTURA: "beta" }).sunatAmbienteFactura).toBe("beta");
+  });
+
+  it("en modo simulado/beta SUNAT_AMBIENTE_FACTURA sin definir sigue siendo beta", () => {
+    expect(cargarConfig({}).sunatAmbienteFactura).toBe("beta");
+    expect(cargarConfig({ SUNAT_MODO: "beta" }).sunatAmbienteFactura).toBe("beta");
   });
 });
 
@@ -130,5 +151,42 @@ describe("crearContexto", () => {
 
     // El archivo corrupto no debe haber sido reemplazado por uno nuevo.
     expect(await almacenPrevio.leer("certificado-prueba.pfx")).toEqual(contenidoInvalido);
+  });
+
+  it("en real: guías reales (no simuladas), y la factura queda marcada simulada solo si el ambiente es beta", async () => {
+    const base = mkdtempSync(join(tmpdir(), "ctx-real-"));
+    const storageDir = join(base, "storage");
+    const dataDir = join(base, "data");
+    const certPath = join(base, "cert.pfx");
+    writeFileSync(certPath, generarCertificadoPrueba({ ruc: DATOS_INICIALES.empresa.ruc, razonSocial: DATOS_INICIALES.empresa.razonSocial, password: "clave" }));
+
+    // Siembra los datos iniciales (requeridos para construir el gateway real) sobre el mismo
+    // dataDir, en modo simulado, antes de abrir el contexto real.
+    const previo = await crearContexto(cargarConfig({ STORAGE_DIR: storageDir, DATA_DIR: dataDir }));
+    await sembrarDatosIniciales(previo.ctx.db, DATOS_INICIALES);
+    await previo.cerrar();
+
+    const envBase = {
+      STORAGE_DIR: storageDir, DATA_DIR: dataDir, SUNAT_MODO: "real",
+      SUNAT_CERT_PATH: certPath, SUNAT_CERT_PASSWORD: "clave",
+      SUNAT_SOL_USUARIO: "usuario", SUNAT_SOL_CLAVE: "clave",
+      SUNAT_GRE_CLIENT_ID: "id", SUNAT_GRE_CLIENT_SECRET: "secreto",
+    } as const;
+
+    // Sin SUNAT_AMBIENTE_FACTURA: por defecto produccion → ni guías ni facturas simuladas.
+    const configProduccion = cargarConfig(envBase);
+    expect(configProduccion.sunatAmbienteFactura).toBe("produccion");
+    const produccion = await crearContexto(configProduccion);
+    expect(produccion.ctx.simulado).toBe(false);
+    expect(produccion.ctx.facturaSimulada).toBe(false);
+    await produccion.cerrar();
+
+    // Real + beta explícito: las guías siguen siendo reales, pero la factura va a beta y debe
+    // quedar marcada como simulada (para llevar el sello "DOCUMENTO SIMULADO" en el PDF).
+    const configBeta = cargarConfig({ ...envBase, SUNAT_AMBIENTE_FACTURA: "beta" });
+    const beta = await crearContexto(configBeta);
+    cerrables.push(beta.cerrar);
+    expect(beta.ctx.simulado).toBe(false);
+    expect(beta.ctx.facturaSimulada).toBe(true);
   });
 });

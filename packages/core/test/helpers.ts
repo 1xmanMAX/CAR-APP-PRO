@@ -20,7 +20,7 @@ export const DATOS_INICIALES: DatosIniciales = {
   usuario: { nombre: "Dueño", email: "dueno@demo.pe", telegramId: 111 },
 };
 
-export async function crearContextoPrueba(o: { gateway?: SunatGateway; reloj?: () => Date } = {}) {
+export async function crearContextoPrueba(o: { gateway?: SunatGateway; reloj?: () => Date; facturaSimulada?: boolean } = {}) {
   certificado ??= cargarPfx(generarCertificadoPrueba({ ruc: "20606433094", razonSocial: "TRANSPORTES DEMO SAC", password: "x" }), "x");
   const { db, cerrar } = await crearDb({ tipo: "pglite" });
   await sembrarDatosIniciales(db, DATOS_INICIALES);
@@ -32,6 +32,7 @@ export async function crearContextoPrueba(o: { gateway?: SunatGateway; reloj?: (
     reloj: o.reloj ?? (() => new Date("2026-09-13T15:00:00Z")),
     dormir: async () => {},
     simulado: true,
+    facturaSimulada: o.facturaSimulada ?? true,
   };
   return { ctx, cerrar };
 }

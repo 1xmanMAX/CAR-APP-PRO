@@ -1,4 +1,4 @@
-import { and, eq, guiaTransportista, isNull, lt, lte, or, siguienteCorrelativo } from "@sunatapp/db";
+import { and, empresa, eq, guiaTransportista, isNull, lt, lte, or, siguienteCorrelativo } from "@sunatapp/db";
 import { generarPdfGuia } from "@sunatapp/pdf";
 import {
   construirXmlGreTransportista, extraerDigest, firmarXml, nombreArchivo, SunatNoDisponibleError, validarXsd, type RespuestaSunat,
@@ -7,7 +7,7 @@ import { fechaHoraLima } from "../dominio/fechas";
 import { ErrorNegocio } from "../errores";
 import { registrarAuditoria } from "../infra/auditoria";
 import type { Contexto } from "../infra/contexto";
-import { cargarGuiaCompleta, datosGreDesde, datosPdfGuiaDesde, type GuiaCompleta } from "./cargar";
+import { cargarGuiaCompleta, datosGreDesde, datosPdfGuiaDesde } from "./cargar";
 
 export const ESPERAS_TICKET_MS = [2000, 4000, 8000, 16000, 30000, 30000, 30000];
 export const REINTENTO_MS = 5 * 60_000;
@@ -31,6 +31,15 @@ type CambiosGuia = Partial<typeof guiaTransportista.$inferInsert>;
 
 async function actualizar(ctx: Contexto, id: number, cambios: CambiosGuia): Promise<void> {
   await ctx.db.update(guiaTransportista).set({ ...cambios, actualizadoEn: ctx.reloj() }).where(eq(guiaTransportista.id, id));
+}
+
+/** Lee un XML ya almacenado para reenviarlo tal cual; null si no existe o no es legible (se reconstruye). */
+async function leerSiExiste(ctx: Contexto, ruta: string): Promise<string | null> {
+  try {
+    return await ctx.almacen.leerTexto(ruta);
+  } catch {
+    return null;
+  }
 }
 
 export async function resultadoGuia(ctx: Contexto, guiaId: number): Promise<ResultadoEmision> {
@@ -80,32 +89,47 @@ async function manejarFalloEnvio(
   });
 }
 
-/** Aplica una respuesta de SUNAT (aceptada/rechazada) solo si la guía sigue "enviada" con ese ticket. */
+/**
+ * Aplica una respuesta de SUNAT (aceptada/rechazada) solo si la guía sigue "enviada" con ese
+ * ticket. El resultado se reclama con un único update compare-and-set (WHERE estado="enviada"
+ * AND ticket=$ticket) ANTES de generar el CDR/PDF: si la guía ya no está en ese estado con ese
+ * ticket (superada por otro reenvío, ya resuelta, o dos llamadas concurrentes para el mismo
+ * ticket) el update afecta 0 filas y se sale sin generar el PDF ni auditar — así nunca hay dos
+ * "holders" del mismo ticket aplicando la respuesta ni generando el PDF dos veces.
+ */
 export async function aplicarRespuestaGuia(ctx: Contexto, guiaId: number, r: RespuestaSunat, ticket: string): Promise<boolean> {
   if (r.estado === "en_proceso") return false;
-  // Guarda atómica: si la guía ya no está "enviada" con este ticket (superada por otro
-  // reenvío o ya resuelta), el ticket está obsoleto y no se aplica nada.
-  const vigente = await ctx.db
+
+  const estadoFinal = r.estado === "rechazada" ? "rechazada" : "aceptada";
+  const reclamada = await ctx.db
     .update(guiaTransportista)
-    .set({ actualizadoEn: ctx.reloj() })
+    .set({ estado: estadoFinal, codigoRespuesta: r.codigo, mensajeRespuesta: r.mensaje, ticket: null, actualizadoEn: ctx.reloj() })
     .where(and(eq(guiaTransportista.id, guiaId), eq(guiaTransportista.estado, "enviada"), eq(guiaTransportista.ticket, ticket)))
     .returning({ id: guiaTransportista.id });
-  if (vigente.length === 0) return false;
+  if (reclamada.length === 0) return false;
 
-  const d = await cargarGuiaCompleta(ctx.db, guiaId);
-  const nombre = nombreArchivo(d.empresa.ruc, "31", d.guia.serie, d.guia.numero!);
-  if (r.estado === "rechazada") {
-    await actualizar(ctx, guiaId, { estado: "rechazada", codigoRespuesta: r.codigo, mensajeRespuesta: r.mensaje, ticket: null });
+  if (estadoFinal === "rechazada") {
     await registrarAuditoria(ctx.db, { accion: "guia_rechazada", entidad: "guia_transportista", entidadId: guiaId, detalle: { codigo: r.codigo } });
     return true;
   }
-  const rutaCdr = r.cdrZip ? await ctx.almacen.guardar(`guias/R-${nombre}.zip`, r.cdrZip) : null;
-  const xml = await ctx.almacen.leerTexto(d.guia.rutaXml!);
-  const textoQr = r.urlQr ?? `${d.empresa.ruc}|31|${d.guia.serie}|${d.guia.numero}|${extraerDigest(xml)}|`;
-  const pdf = await generarPdfGuia(datosPdfGuiaDesde(d, textoQr, ctx.simulado));
-  const rutaPdf = await ctx.almacen.guardar(`guias/${nombre}.pdf`, pdf);
-  await actualizar(ctx, guiaId, { estado: "aceptada", codigoRespuesta: r.codigo, mensajeRespuesta: r.mensaje, rutaCdr, rutaPdf });
   await registrarAuditoria(ctx.db, { accion: "guia_aceptada", entidad: "guia_transportista", entidadId: guiaId });
+
+  // El resultado de SUNAT ya quedó confirmado arriba; el CDR y el PDF son pasos posteriores,
+  // independientes y reintentables, que nunca deben revertir esa aceptación ya aplicada. Un
+  // fallo aquí (almacenamiento caído, XML no legible...) queda auditado con rutaCdr/rutaPdf en
+  // null, sin relanzar la excepción.
+  try {
+    const d = await cargarGuiaCompleta(ctx.db, guiaId);
+    const nombre = nombreArchivo(d.empresa.ruc, "31", d.guia.serie, d.guia.numero!);
+    const rutaCdr = r.cdrZip ? await ctx.almacen.guardar(`guias/R-${nombre}.zip`, r.cdrZip) : null;
+    const xml = await ctx.almacen.leerTexto(d.guia.rutaXml!);
+    const textoQr = r.urlQr ?? `${d.empresa.ruc}|31|${d.guia.serie}|${d.guia.numero}|${extraerDigest(xml)}|`;
+    const pdf = await generarPdfGuia(datosPdfGuiaDesde(d, textoQr, ctx.simulado));
+    const rutaPdf = await ctx.almacen.guardar(`guias/${nombre}.pdf`, pdf);
+    await actualizar(ctx, guiaId, { rutaCdr, rutaPdf });
+  } catch (error) {
+    await registrarAuditoria(ctx.db, { accion: "guia_pdf_pendiente", entidad: "guia_transportista", entidadId: guiaId, detalle: { error: (error as Error).message } });
+  }
   return true;
 }
 
@@ -141,24 +165,42 @@ export async function emitirGuia(ctx: Contexto, guiaId: number, o: { esperarResp
       cambios.intentos = 0;
     }
     await tx.update(guiaTransportista).set(cambios).where(eq(guiaTransportista.id, guiaId));
-    return { tipo: "reservada", intentosPrevios: fechaNueva ? 0 : g.intentos } as const;
+    return {
+      tipo: "reservada", intentosPrevios: fechaNueva ? 0 : g.intentos,
+      fechaNueva, serie: g.serie, numero, rutaXmlPrevia: g.rutaXml,
+    } as const;
   });
   if (reserva.tipo === "ocupada") return resultadoGuia(ctx, guiaId);
 
-  let d!: GuiaCompleta;
   let nombre!: string;
   let xml!: string;
   let rutaXml!: string;
   try {
-    d = await cargarGuiaCompleta(ctx.db, guiaId);
-    nombre = nombreArchivo(d.empresa.ruc, "31", d.guia.serie, d.guia.numero!);
-    xml = firmarXml(construirXmlGreTransportista(datosGreDesde(d)), ctx.certificado);
-    const xsd = await validarXsd(xml, "DespatchAdvice");
-    if (!xsd.valido) {
-      await actualizar(ctx, guiaId, { estado: "rechazada", codigoRespuesta: "XSD", mensajeRespuesta: xsd.errores.slice(0, 5).join(" | ") });
-      return resultadoGuia(ctx, guiaId);
+    // Reintento sobre una guía que ya se firmó antes (pendiente_envio con XML almacenado): se
+    // reenvía exactamente ese XML en vez de reconstruirlo y volver a firmar — los datos de
+    // contraparte/empresa pueden haber cambiado desde el primer intento (p. ej. otra guía
+    // registrada después corrigió la razón social del mismo RUC), y no deben alterar un
+    // documento que SUNAT podría terminar recibiendo dos veces con contenidos distintos. Solo se
+    // reconstruye si no hay XML almacenado (primer intento) o al reemitir desde "rechazada"
+    // (fechaNueva: hay que firmar con fecha/hora nuevas).
+    const xmlPrevio = !reserva.fechaNueva && reserva.rutaXmlPrevia ? await leerSiExiste(ctx, reserva.rutaXmlPrevia) : null;
+    if (xmlPrevio !== null) {
+      const [emp] = await ctx.db.select({ ruc: empresa.ruc }).from(empresa).limit(1);
+      if (!emp) throw new Error("Falta configurar la empresa");
+      nombre = nombreArchivo(emp.ruc, "31", reserva.serie, reserva.numero);
+      xml = xmlPrevio;
+      rutaXml = reserva.rutaXmlPrevia!;
+    } else {
+      const d = await cargarGuiaCompleta(ctx.db, guiaId);
+      nombre = nombreArchivo(d.empresa.ruc, "31", d.guia.serie, d.guia.numero!);
+      xml = firmarXml(construirXmlGreTransportista(datosGreDesde(d)), ctx.certificado);
+      const xsd = await validarXsd(xml, "DespatchAdvice");
+      if (!xsd.valido) {
+        await actualizar(ctx, guiaId, { estado: "rechazada", codigoRespuesta: "XSD", mensajeRespuesta: xsd.errores.slice(0, 5).join(" | ") });
+        return resultadoGuia(ctx, guiaId);
+      }
+      rutaXml = await ctx.almacen.guardar(`guias/${nombre}.xml`, xml);
     }
-    rutaXml = await ctx.almacen.guardar(`guias/${nombre}.xml`, xml);
   } catch (error) {
     // Fallo al preparar el envío (datos incompletos, firma, almacenamiento...): no es una
     // respuesta de SUNAT, así que se trata como reintento, no como rechazo.

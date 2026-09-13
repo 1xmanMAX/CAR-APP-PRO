@@ -5,13 +5,24 @@ import { registrarAuditoria } from "../infra/auditoria";
 import type { Contexto } from "../infra/contexto";
 import { validarEntradaGuia, type EntradaGuia } from "./validar";
 
+/**
+ * Reutiliza la contraparte existente para ese numeroDoc sin tocar su razonSocial (podría
+ * diferir de la registrada la primera vez, p. ej. por una corrección posterior en SUNAT/RENIEC;
+ * cambiarla aquí alteraría el XML de una guía pendiente que se reintente más adelante — ver
+ * Tarea de robustez en emitir.ts). Solo inserta si no existe todavía.
+ */
 async function asegurarContraparte(tx: Tx, p: { numeroDoc: string; razonSocial: string }): Promise<number> {
+  const [existente] = await tx.select({ id: contraparte.id }).from(contraparte).where(eq(contraparte.numeroDoc, p.numeroDoc));
+  if (existente) return existente.id;
   const [fila] = await tx
     .insert(contraparte)
     .values({ tipoDoc: tipoDocumentoDe(p.numeroDoc)!, numeroDoc: p.numeroDoc, razonSocial: p.razonSocial.trim() })
-    .onConflictDoUpdate({ target: contraparte.numeroDoc, set: { razonSocial: p.razonSocial.trim() } })
+    .onConflictDoNothing({ target: contraparte.numeroDoc })
     .returning({ id: contraparte.id });
-  return fila!.id;
+  if (fila) return fila.id;
+  // Carrera: otra transacción insertó el mismo numeroDoc entre el select y el insert.
+  const [ganador] = await tx.select({ id: contraparte.id }).from(contraparte).where(eq(contraparte.numeroDoc, p.numeroDoc));
+  return ganador!.id;
 }
 
 export async function registrarGuiaBorrador(ctx: Contexto, e: EntradaGuia, usuarioId?: number): Promise<number> {

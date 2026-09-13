@@ -1,4 +1,4 @@
-import { contraparte, correlativo, eq, guiaTransportista } from "@sunatapp/db";
+import { and, auditoria, contraparte, correlativo, eq, guiaTransportista } from "@sunatapp/db";
 import { SunatNoDisponibleError, SunatSimulado, type DocumentoFirmado, type SunatGateway } from "@sunatapp/sunat";
 import { afterEach, describe, expect, it } from "vitest";
 import { ErrorValidacion } from "../src/errores";
@@ -61,6 +61,20 @@ describe("registrarGuiaBorrador", () => {
     expect(await ctx.db.select().from(contraparte)).toHaveLength(2);
     const [g] = await ctx.db.select().from(guiaTransportista).where(eq(guiaTransportista.id, id1));
     expect(g).toMatchObject({ estado: "borrador", numero: null, serie: "V001" });
+  });
+
+  it("no sobrescribe la razón social de una contraparte existente al registrar otra guía con el mismo RUC", async () => {
+    const ctx = await contexto();
+    const primera = entradaGuia();
+    await registrarGuiaBorrador(ctx, primera);
+
+    const segunda = entradaGuia();
+    segunda.remitente = { ...segunda.remitente, razonSocial: "OTRO NOMBRE SAC" };
+    await registrarGuiaBorrador(ctx, segunda);
+
+    const filas = await ctx.db.select().from(contraparte).where(eq(contraparte.numeroDoc, primera.remitente.numeroDoc));
+    expect(filas).toHaveLength(1);
+    expect(filas[0]!.razonSocial).toBe(primera.remitente.razonSocial);
   });
 
   it("rechaza entradas inválidas", async () => {
@@ -293,7 +307,14 @@ describe("emitirGuia", () => {
     expect(cambios).toEqual([expect.objectContaining({ id, estado: "aceptada" })]);
   });
 
-  it("una falla inesperada al aplicar la respuesta de una guía no bloquea a las demás", async () => {
+  it("un fallo al generar el PDF no revierte la aceptación ya confirmada, y no bloquea a las demás guías", async () => {
+    // Nota: este caso cambió con la corrección de la Tarea de compare-and-set en
+    // aplicarRespuestaGuia (findings de revisión): el resultado de SUNAT (estado, código,
+    // mensaje) se reclama y persiste ANTES de generar el CDR/PDF, así dos llamadas concurrentes
+    // para el mismo ticket nunca generan el PDF ni auditan dos veces. En consecuencia, un fallo
+    // posterior al generar el PDF (aquí, un rutaXml no legible) ya no puede dejar la guía varada
+    // en "enviada": el resultado ya fue aplicado y queda "aceptada" con rutaPdf null, auditado
+    // aparte, sin relanzar el error hacia procesarPendientesGuias.
     let ahora = new Date("2026-09-13T15:00:00Z");
     const ctx = await contexto({ gateway: new SunatSimulado({ demoraMs: 0 }), reloj: () => ahora });
     const idA = await registrarGuiaBorrador(ctx, entradaGuia());
@@ -301,17 +322,90 @@ describe("emitirGuia", () => {
     await emitirGuia(ctx, idA, { esperarRespuesta: false }); // queda "enviada"
     await emitirGuia(ctx, idB, { esperarRespuesta: false }); // queda "enviada"
 
-    // Fuerza un fallo real (no relacionado con SUNAT) dentro de aplicarRespuestaGuia para A,
-    // sin usar un gateway de prueba: apunta rutaXml a un archivo inexistente, así
-    // ctx.almacen.leerTexto lanza al intentar generar el texto del QR / CDR.
+    // Fuerza un fallo real (no relacionado con SUNAT) al generar el PDF de A, sin usar un
+    // gateway de prueba: apunta rutaXml a un archivo inexistente, así ctx.almacen.leerTexto
+    // lanza al intentar generar el texto del QR.
     await ctx.db.update(guiaTransportista).set({ rutaXml: "guias/no-existe.xml" }).where(eq(guiaTransportista.id, idA));
 
     ahora = new Date(ahora.getTime() + 200_000); // deja pasar el reposo de la rama "enviada"
     const cambios = await procesarPendientesGuias(ctx);
 
-    expect(cambios).toEqual([expect.objectContaining({ id: idB, estado: "aceptada" })]);
+    expect(cambios).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: idA, estado: "aceptada", rutaPdf: null }),
+      expect.objectContaining({ id: idB, estado: "aceptada" }),
+    ]));
     const [a] = await ctx.db.select().from(guiaTransportista).where(eq(guiaTransportista.id, idA));
-    expect(a).toMatchObject({ estado: "enviada", intentos: 1 });
-    expect(a!.mensajeRespuesta).toMatch(/^Error al procesar la guía:/);
+    expect(a).toMatchObject({ estado: "aceptada", rutaPdf: null, rutaCdr: null, ticket: null });
+  });
+
+  it("un reintento reenvía el mismo XML firmado (byte a byte) aunque cambie la razón social de la contraparte", async () => {
+    let ahora = new Date("2026-09-13T15:00:00Z");
+    let caido = true;
+    const base = new SunatSimulado({ demoraMs: 0 });
+    const xmlsEnviados: string[] = [];
+    const ctx = await contexto({
+      reloj: () => ahora,
+      gateway: {
+        async enviarGuia(doc: DocumentoFirmado) {
+          xmlsEnviados.push(doc.xml);
+          if (caido) throw new SunatNoDisponibleError("sin red");
+          return base.enviarGuia(doc);
+        },
+        consultarTicket: (t: string) => base.consultarTicket(t),
+        enviarFactura: (doc: DocumentoFirmado) => base.enviarFactura(doc),
+      },
+    });
+    const id = await registrarGuiaBorrador(ctx, entradaGuia());
+    await emitirGuia(ctx, id); // SUNAT caído: queda pendiente_envio con el XML ya firmado y guardado
+    expect(xmlsEnviados).toHaveLength(1);
+
+    // Cambia la razón social de la contraparte (remitente) ya usada en el XML firmado.
+    await ctx.db.update(contraparte).set({ razonSocial: "OTRO NOMBRE SAC" }).where(eq(contraparte.numeroDoc, "20131312955"));
+
+    caido = false;
+    ahora = new Date(ahora.getTime() + 6 * 60_000);
+    const cambios = await procesarPendientesGuias(ctx);
+
+    expect(cambios).toEqual([expect.objectContaining({ id, estado: "aceptada" })]);
+    expect(xmlsEnviados).toHaveLength(2);
+    expect(xmlsEnviados[1]).toBe(xmlsEnviados[0]); // byte-idéntico: se reenvía el XML ya firmado
+    expect(xmlsEnviados[1]).toContain("DISTRIBUIDORA SAC"); // no se reconstruyó con la razón social nueva
+  });
+
+  it("dos llamadas concurrentes a aplicarRespuestaGuia para el mismo ticket aplican el resultado una sola vez", async () => {
+    const ctx = await contexto();
+    const id = await registrarGuiaBorrador(ctx, entradaGuia());
+    await emitirGuia(ctx, id, { esperarRespuesta: false }); // queda "enviada" con ticket
+    const [antes] = await ctx.db.select().from(guiaTransportista).where(eq(guiaTransportista.id, id));
+    const ticket = antes!.ticket!;
+    const respuesta = await ctx.gateway.consultarTicket(ticket);
+
+    let escrituraPdf = 0;
+    const almacenOriginal = ctx.almacen;
+    ctx.almacen = {
+      ...almacenOriginal,
+      guardar: async (ruta: string, contenido: Buffer | string) => {
+        if (ruta.endsWith(".pdf")) escrituraPdf++;
+        return almacenOriginal.guardar(ruta, contenido);
+      },
+    };
+
+    const [r1, r2] = await Promise.all([
+      aplicarRespuestaGuia(ctx, id, respuesta, ticket),
+      aplicarRespuestaGuia(ctx, id, respuesta, ticket),
+    ]);
+    expect([r1, r2].filter(Boolean)).toHaveLength(1); // solo una de las dos llamadas aplicó algo
+
+    expect(escrituraPdf).toBe(1); // el PDF se generó exactamente una vez
+
+    const auditorias = await ctx.db
+      .select()
+      .from(auditoria)
+      .where(and(eq(auditoria.entidad, "guia_transportista"), eq(auditoria.entidadId, String(id)), eq(auditoria.accion, "guia_aceptada")));
+    expect(auditorias).toHaveLength(1); // una sola fila de auditoría "guia_aceptada"
+
+    const [gFinal] = await ctx.db.select().from(guiaTransportista).where(eq(guiaTransportista.id, id));
+    expect(gFinal).toMatchObject({ estado: "aceptada", ticket: null });
+    expect(gFinal!.rutaPdf).not.toBeNull();
   });
 });

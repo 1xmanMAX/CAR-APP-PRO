@@ -1,5 +1,6 @@
-import { cobro, empresa, eq, factura, sql, type EstadoSunatFactura } from "@sunatapp/db";
+import { cobro, contraparte, empresa, eq, factura, sql, type EstadoSunatFactura } from "@sunatapp/db";
 import { SunatNoDisponibleError, SunatSimulado, type DocumentoFirmado, type RespuestaSunat, type SunatGateway } from "@sunatapp/sunat";
+import { extractText, getDocumentProxy } from "unpdf";
 import { afterEach, describe, expect, it } from "vitest";
 import { buscarFacturaPorSerieNumero, listarCobrosPendientes, registrarCobro } from "../src/cobros/cobros";
 import { ErrorNegocio } from "../src/errores";
@@ -10,6 +11,11 @@ import { registrarGuiaBorrador } from "../src/guias/registrar";
 import type { Contexto } from "../src/infra/contexto";
 import { crearContextoPrueba, entradaGuia } from "./helpers";
 
+async function textoPdf(pdf: Buffer): Promise<string> {
+  const doc = await getDocumentProxy(new Uint8Array(pdf));
+  return ((await extractText(doc, { mergePages: true })).text as string).replace(/\s+/g, " ");
+}
+
 const cerrables: Array<() => Promise<void>> = [];
 afterEach(async () => {
   while (cerrables.length) await cerrables.pop()!();
@@ -17,9 +23,9 @@ afterEach(async () => {
 
 let ahora = new Date("2026-09-13T15:00:00Z");
 
-async function contextoConGuia(gateway?: SunatGateway): Promise<{ ctx: Contexto; guiaId: number }> {
+async function contextoConGuia(gateway?: SunatGateway, o: { facturaSimulada?: boolean } = {}): Promise<{ ctx: Contexto; guiaId: number }> {
   ahora = new Date("2026-09-13T15:00:00Z");
-  const r = await crearContextoPrueba({ reloj: () => ahora, ...(gateway ? { gateway } : {}) });
+  const r = await crearContextoPrueba({ reloj: () => ahora, ...(gateway ? { gateway } : {}), ...(o.facturaSimulada !== undefined ? { facturaSimulada: o.facturaSimulada } : {}) });
   cerrables.push(r.cerrar);
   const guiaId = await registrarGuiaBorrador(r.ctx, entradaGuia());
   await emitirGuia(r.ctx, guiaId);
@@ -66,6 +72,23 @@ describe("emitirFactura", () => {
     expect(await ctx.almacen.leerTexto(f!.rutaXml!)).toContain("<cbc:PaymentDueDate>2026-10-13</cbc:PaymentDueDate>");
     expect((await ctx.almacen.leer(f!.rutaPdf!)).subarray(0, 5).toString()).toBe("%PDF-");
     expect(await emitirFactura(ctx, facturaId)).toMatchObject({ serieNumero: "F001-1" }); // idempotente
+  });
+
+  it("el PDF de la factura lleva el sello DOCUMENTO SIMULADO cuando facturaSimulada es true, y no cuando es false", async () => {
+    const { ctx: ctxSimulado, guiaId: guiaId1 } = await contextoConGuia(undefined, { facturaSimulada: true });
+    const { facturaId: facturaId1 } = await prepararFactura(ctxSimulado, { guiaId: guiaId1, montoCentimos: 100000, incluyeIgv: false, formaPago: "contado" });
+    const r1 = await emitirFactura(ctxSimulado, facturaId1);
+    const [f1] = await ctxSimulado.db.select().from(factura).where(eq(factura.id, facturaId1));
+    expect(await textoPdf(await ctxSimulado.almacen.leer(f1!.rutaPdf!))).toContain("DOCUMENTO SIMULADO");
+    expect(r1.estado).toBe("aceptada");
+
+    // facturaSimulada=false representa un contexto real + ambiente producción (finding 1): el
+    // PDF no debe llevar el sello de simulado.
+    const { ctx: ctxReal, guiaId: guiaId2 } = await contextoConGuia(undefined, { facturaSimulada: false });
+    const { facturaId: facturaId2 } = await prepararFactura(ctxReal, { guiaId: guiaId2, montoCentimos: 100000, incluyeIgv: false, formaPago: "contado" });
+    await emitirFactura(ctxReal, facturaId2);
+    const [f2] = await ctxReal.db.select().from(factura).where(eq(factura.id, facturaId2));
+    expect(await textoPdf(await ctxReal.almacen.leer(f2!.rutaPdf!))).not.toContain("DOCUMENTO SIMULADO");
   });
 
   it("SUNAT caído: pendiente y luego enviada por el proceso de fondo", async () => {
@@ -208,6 +231,89 @@ describe("emitirFactura", () => {
     const [f2] = await ctx.db.select().from(factura).where(eq(factura.id, facturaId));
     expect(f2!.rutaPdf).not.toBeNull();
     expect((await ctx.almacen.leer(f2!.rutaPdf!)).subarray(0, 5).toString()).toBe("%PDF-");
+  });
+
+  it("el resultado de SUNAT (rutaXml/intentos/estadoSunat/código/mensaje) queda persistido en un único update ANTES de intentar el CDR; si el CDR falla, la factura queda aceptada con rutaCdr null y no se reenvía a SUNAT", async () => {
+    let llamadasEnvio = 0;
+    const base = new SunatSimulado({ demoraMs: 0 });
+    const gw: SunatGateway = {
+      enviarGuia: (d: DocumentoFirmado) => base.enviarGuia(d),
+      consultarTicket: (t: string) => base.consultarTicket(t),
+      enviarFactura: (d: DocumentoFirmado) => {
+        llamadasEnvio++;
+        return base.enviarFactura(d);
+      },
+    };
+    const { ctx, guiaId } = await contextoConGuia(gw);
+    const { facturaId } = await prepararFactura(ctx, { guiaId, montoCentimos: 50000, incluyeIgv: true, formaPago: "contado" });
+
+    const almacenOriginal = ctx.almacen;
+    let estadoAlIntentarCdr: { estadoSunat: string; rutaXml: string | null; intentos: number } | undefined;
+    ctx.almacen = {
+      ...almacenOriginal,
+      guardar: async (ruta: string, contenido: Buffer | string) => {
+        if (ruta.startsWith("facturas/R-")) {
+          // Comprueba el estado de la factura en la BD justo cuando se intenta guardar el CDR:
+          // el resultado (rutaXml, intentos, estadoSunat, código, mensaje) ya debe estar
+          // persistido en un único update previo, no partido en dos escrituras con el CDR en
+          // medio (finding 4).
+          const [f] = await ctx.db.select().from(factura).where(eq(factura.id, facturaId));
+          estadoAlIntentarCdr = { estadoSunat: f!.estadoSunat, rutaXml: f!.rutaXml, intentos: f!.intentos };
+          throw new Error("disco lleno (simulado)");
+        }
+        return almacenOriginal.guardar(ruta, contenido);
+      },
+    };
+
+    // SUNAT acepta la factura, pero el guardado del CDR falla: el resultado de SUNAT no debe
+    // perderse ni reintentarse como envío — queda "aceptada" con rutaCdr null.
+    const r = await emitirFactura(ctx, facturaId);
+
+    expect(estadoAlIntentarCdr).toMatchObject({ estadoSunat: "aceptada", intentos: 0 });
+    expect(estadoAlIntentarCdr!.rutaXml).not.toBeNull();
+
+    expect(r).toMatchObject({ estado: "aceptada" });
+    expect(llamadasEnvio).toBe(1);
+    const [f] = await ctx.db.select().from(factura).where(eq(factura.id, facturaId));
+    expect(f).toMatchObject({ estadoSunat: "aceptada", rutaCdr: null });
+    expect(f!.rutaPdf).not.toBeNull();
+    expect((await ctx.almacen.leer(f!.rutaPdf!)).subarray(0, 5).toString()).toBe("%PDF-");
+
+    // Un reintento directo, y una pasada de fondo, tampoco vuelven a llamar a SUNAT.
+    await emitirFactura(ctx, facturaId);
+    await procesarPendientesFacturas(ctx);
+    expect(llamadasEnvio).toBe(1);
+  });
+
+  it("un reintento de factura reenvía el mismo XML firmado (byte a byte) aunque cambie la razón social del cliente", async () => {
+    let caido = true;
+    const base = new SunatSimulado({ demoraMs: 0 });
+    const xmlsEnviados: string[] = [];
+    const gw: SunatGateway = {
+      enviarGuia: (d: DocumentoFirmado) => base.enviarGuia(d),
+      consultarTicket: (t: string) => base.consultarTicket(t),
+      enviarFactura: async (d: DocumentoFirmado) => {
+        xmlsEnviados.push(d.xml);
+        if (caido) throw new SunatNoDisponibleError("sin red");
+        return base.enviarFactura(d);
+      },
+    };
+    const { ctx, guiaId } = await contextoConGuia(gw);
+    const { facturaId } = await prepararFactura(ctx, { guiaId, montoCentimos: 50000, incluyeIgv: true, formaPago: "contado" });
+    expect((await emitirFactura(ctx, facturaId)).estado).toBe("pendiente_envio");
+    expect(xmlsEnviados).toHaveLength(1);
+
+    const [f] = await ctx.db.select().from(factura).where(eq(factura.id, facturaId));
+    await ctx.db.update(contraparte).set({ razonSocial: "OTRO NOMBRE SAC" }).where(eq(contraparte.id, f!.clienteId));
+
+    caido = false;
+    ahora = new Date(ahora.getTime() + 6 * 60_000);
+    const cambios = await procesarPendientesFacturas(ctx);
+
+    expect(cambios).toEqual([expect.objectContaining({ id: facturaId, estado: "aceptada" })]);
+    expect(xmlsEnviados).toHaveLength(2);
+    expect(xmlsEnviados[1]).toBe(xmlsEnviados[0]); // byte-idéntico: se reenvía el XML ya firmado
+    expect(xmlsEnviados[1]).toContain("DISTRIBUIDORA SAC"); // no se reconstruyó con la razón social nueva
   });
 
   it("aísla el fallo de una factura del resto durante la pasada de fondo", async () => {

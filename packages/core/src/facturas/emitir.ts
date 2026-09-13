@@ -24,6 +24,15 @@ async function actualizar(ctx: Contexto, id: number, cambios: CambiosFactura): P
   await ctx.db.update(factura).set({ ...cambios, actualizadoEn: ctx.reloj() }).where(eq(factura.id, id));
 }
 
+/** Lee un XML ya almacenado para reenviarlo tal cual; null si no existe o no es legible (se reconstruye). */
+async function leerSiExiste(ctx: Contexto, ruta: string): Promise<string | null> {
+  try {
+    return await ctx.almacen.leerTexto(ruta);
+  } catch {
+    return null;
+  }
+}
+
 async function resultadoFactura(ctx: Contexto, id: number): Promise<ResultadoEmision> {
   const [f] = await ctx.db.select().from(factura).where(eq(factura.id, id));
   if (!f) throw new ErrorNegocio(`La factura ${id} no existe`);
@@ -87,31 +96,33 @@ async function manejarFalloEnvio(
 
 /**
  * Persiste el resultado de SUNAT (aceptada/observada/rechazada) en un único update, de
- * inmediato al recibir la respuesta — antes de tocar CDR o PDF. A partir de aquí la factura
- * queda en un estado terminal (rechazada) o "emitida ante SUNAT" (aceptada/observada) y
- * emitirFactura/procesarPendientesFacturas nunca vuelven a llamar a gateway.enviarFactura para
- * ella: el CDR y el PDF son pasos posteriores, independientes y reintentables sin reenviar.
- * Un fallo al guardar el CDR no debe impedir persistir el resultado (queda rutaCdr null).
+ * inmediato al recibir la respuesta — junto con rutaXml/intentos del envío que acaba de
+ * ocurrir, antes de tocar CDR o PDF. A partir de aquí la factura queda en un estado terminal
+ * (rechazada) o "emitida ante SUNAT" (aceptada/observada) y emitirFactura/
+ * procesarPendientesFacturas nunca vuelven a llamar a gateway.enviarFactura para ella: el CDR y
+ * el PDF son pasos posteriores, independientes y reintentables sin reenviar. Un fallo al
+ * guardar el CDR no debe impedir persistir el resultado (queda rutaCdr null) ni revertirlo.
  */
-async function aplicarRespuestaSunat(ctx: Contexto, id: number, r: RespuestaSunat, nombre: string): Promise<void> {
+async function aplicarRespuestaSunat(ctx: Contexto, id: number, r: RespuestaSunat, nombre: string, rutaXml: string): Promise<void> {
   if (r.estado === "rechazada" || r.estado === "en_proceso") {
-    await actualizar(ctx, id, { estadoSunat: "rechazada", codigoRespuesta: r.codigo, mensajeRespuesta: r.mensaje, proximoIntentoEn: null });
+    await actualizar(ctx, id, { rutaXml, intentos: 0, estadoSunat: "rechazada", codigoRespuesta: r.codigo, mensajeRespuesta: r.mensaje, proximoIntentoEn: null });
     await registrarAuditoria(ctx.db, { accion: "factura_rechazada", entidad: "factura", entidadId: id, detalle: { codigo: r.codigo } });
     return;
   }
-  let rutaCdr: string | null = null;
+  await actualizar(ctx, id, {
+    rutaXml, intentos: 0, estadoSunat: r.estado, codigoRespuesta: r.codigo,
+    mensajeRespuesta: [r.mensaje, ...r.notas].join(" | "), proximoIntentoEn: null,
+  });
+  await registrarAuditoria(ctx.db, { accion: "factura_aceptada", entidad: "factura", entidadId: id });
+
   if (r.cdrZip) {
     try {
-      rutaCdr = await ctx.almacen.guardar(`facturas/R-${nombre}.zip`, r.cdrZip);
+      const rutaCdr = await ctx.almacen.guardar(`facturas/R-${nombre}.zip`, r.cdrZip);
+      await actualizar(ctx, id, { rutaCdr });
     } catch (error) {
       await registrarAuditoria(ctx.db, { accion: "factura_cdr_no_guardado", entidad: "factura", entidadId: id, detalle: { error: (error as Error).message } });
     }
   }
-  await actualizar(ctx, id, {
-    estadoSunat: r.estado, codigoRespuesta: r.codigo,
-    mensajeRespuesta: [r.mensaje, ...r.notas].join(" | "), rutaCdr, proximoIntentoEn: null, intentos: 0,
-  });
-  await registrarAuditoria(ctx.db, { accion: "factura_aceptada", entidad: "factura", entidadId: id });
 }
 
 /**
@@ -145,7 +156,7 @@ async function generarPdfFacturaSiFalta(ctx: Contexto, id: number): Promise<void
       detraccion: f.detraccionMonto > 0 ? { porcentaje: `${f.detraccionPorcentaje}%`, monto: formatearSoles(f.detraccionMonto), cuenta: d.empresa.cuentaDetraccionBn ?? "" } : null,
       guiasRelacionadas: d.guias,
       textoQr,
-      simulado: ctx.simulado,
+      simulado: ctx.facturaSimulada,
     });
     const rutaPdf = await ctx.almacen.guardar(`facturas/${nombre}.pdf`, pdf);
     await actualizar(ctx, id, { rutaPdf });
@@ -186,7 +197,10 @@ export async function emitirFactura(ctx: Contexto, facturaId: number): Promise<R
       cambios.intentos = 0;
     }
     await tx.update(factura).set(cambios).where(eq(factura.id, facturaId));
-    return { tipo: "reservada", intentosPrevios: fechaNueva ? 0 : f.intentos } as const;
+    return {
+      tipo: "reservada", intentosPrevios: fechaNueva ? 0 : f.intentos,
+      fechaNueva, serie: f.serie, numero, rutaXmlPrevia: f.rutaXml,
+    } as const;
   });
   if (reserva.tipo === "ocupada") return resultadoFactura(ctx, facturaId);
 
@@ -194,37 +208,52 @@ export async function emitirFactura(ctx: Contexto, facturaId: number): Promise<R
   let xml!: string;
   let rutaXml!: string;
   try {
-    const d = await cargarFactura(ctx, facturaId);
-    const f = d.factura;
-    nombre = nombreArchivo(d.empresa.ruc, "01", f.serie, f.numero!);
-    xml = firmarXml(
-      construirXmlFactura({
-        emisor: {
-          ruc: d.empresa.ruc, razonSocial: d.empresa.razonSocial, ubigeo: d.empresa.ubigeo, direccion: d.empresa.direccion,
-          ...(d.empresa.nombreComercial ? { nombreComercial: d.empresa.nombreComercial } : {}),
-          ...(d.empresa.cuentaDetraccionBn ? { cuentaDetraccion: d.empresa.cuentaDetraccionBn } : {}),
-        },
-        serie: f.serie,
-        numero: f.numero!,
-        fechaEmision: f.fechaEmision!,
-        horaEmision: f.horaEmision!,
-        cliente: {
-          tipoDoc: d.cliente.tipoDoc as TipoDocIdentidadSunat, numeroDoc: d.cliente.numeroDoc, razonSocial: d.cliente.razonSocial,
-          ...(d.cliente.direccion ? { direccion: d.cliente.direccion } : {}),
-        },
-        descripcion: f.descripcion,
-        montos: { subtotal: f.subtotal, igv: f.igv, total: f.total, detraccionPorcentaje: f.detraccionPorcentaje, detraccionMonto: f.detraccionMonto },
-        formaPago: f.formaPago === "credito" ? { tipo: "credito", fechaVencimiento: f.fechaVencimiento! } : { tipo: "contado" },
-        guiasRelacionadas: d.guias,
-      }),
-      ctx.certificado,
-    );
-    const xsd = await validarXsd(xml, "Invoice");
-    if (!xsd.valido) {
-      await actualizar(ctx, facturaId, { estadoSunat: "rechazada", codigoRespuesta: "XSD", mensajeRespuesta: xsd.errores.slice(0, 5).join(" | ") });
-      return resultadoFactura(ctx, facturaId);
+    // Reintento sobre una factura que ya se firmó antes (pendiente_envio con XML almacenado): se
+    // reenvía exactamente ese XML en vez de reconstruirlo y volver a firmar — los datos del
+    // cliente pueden haber cambiado desde el primer intento (p. ej. otra guía/factura corrigió la
+    // razón social del mismo RUC), y no deben alterar un documento que SUNAT podría terminar
+    // recibiendo dos veces con contenidos distintos. Solo se reconstruye si no hay XML almacenado
+    // (primer intento) o al reemitir desde "rechazada" (fechaNueva: hay que firmar con fechas nuevas).
+    const xmlPrevio = !reserva.fechaNueva && reserva.rutaXmlPrevia ? await leerSiExiste(ctx, reserva.rutaXmlPrevia) : null;
+    if (xmlPrevio !== null) {
+      const [emp] = await ctx.db.select({ ruc: empresa.ruc }).from(empresa).limit(1);
+      if (!emp) throw new Error("Falta configurar la empresa");
+      nombre = nombreArchivo(emp.ruc, "01", reserva.serie, reserva.numero);
+      xml = xmlPrevio;
+      rutaXml = reserva.rutaXmlPrevia!;
+    } else {
+      const d = await cargarFactura(ctx, facturaId);
+      const f = d.factura;
+      nombre = nombreArchivo(d.empresa.ruc, "01", f.serie, f.numero!);
+      xml = firmarXml(
+        construirXmlFactura({
+          emisor: {
+            ruc: d.empresa.ruc, razonSocial: d.empresa.razonSocial, ubigeo: d.empresa.ubigeo, direccion: d.empresa.direccion,
+            ...(d.empresa.nombreComercial ? { nombreComercial: d.empresa.nombreComercial } : {}),
+            ...(d.empresa.cuentaDetraccionBn ? { cuentaDetraccion: d.empresa.cuentaDetraccionBn } : {}),
+          },
+          serie: f.serie,
+          numero: f.numero!,
+          fechaEmision: f.fechaEmision!,
+          horaEmision: f.horaEmision!,
+          cliente: {
+            tipoDoc: d.cliente.tipoDoc as TipoDocIdentidadSunat, numeroDoc: d.cliente.numeroDoc, razonSocial: d.cliente.razonSocial,
+            ...(d.cliente.direccion ? { direccion: d.cliente.direccion } : {}),
+          },
+          descripcion: f.descripcion,
+          montos: { subtotal: f.subtotal, igv: f.igv, total: f.total, detraccionPorcentaje: f.detraccionPorcentaje, detraccionMonto: f.detraccionMonto },
+          formaPago: f.formaPago === "credito" ? { tipo: "credito", fechaVencimiento: f.fechaVencimiento! } : { tipo: "contado" },
+          guiasRelacionadas: d.guias,
+        }),
+        ctx.certificado,
+      );
+      const xsd = await validarXsd(xml, "Invoice");
+      if (!xsd.valido) {
+        await actualizar(ctx, facturaId, { estadoSunat: "rechazada", codigoRespuesta: "XSD", mensajeRespuesta: xsd.errores.slice(0, 5).join(" | ") });
+        return resultadoFactura(ctx, facturaId);
+      }
+      rutaXml = await ctx.almacen.guardar(`facturas/${nombre}.xml`, xml);
     }
-    rutaXml = await ctx.almacen.guardar(`facturas/${nombre}.xml`, xml);
   } catch (error) {
     // Fallo al preparar el envío (datos incompletos, firma, almacenamiento...): no es una
     // respuesta de SUNAT, así que se trata como reintento, no como rechazo.
@@ -245,11 +274,11 @@ export async function emitirFactura(ctx: Contexto, facturaId: number): Promise<R
     return resultadoFactura(ctx, facturaId);
   }
 
-  // El envío llegó a SUNAT: se persiste su resultado de inmediato (aplicarRespuestaSunat), antes
-  // de cualquier paso adicional — desde aquí la factura ya no se reenvía nunca. El PDF es un
-  // paso separado y reintentable que no debe poder revertir ni bloquear ese resultado.
-  await actualizar(ctx, facturaId, { rutaXml, intentos: 0 });
-  await aplicarRespuestaSunat(ctx, facturaId, r, nombre);
+  // El envío llegó a SUNAT: se persiste su resultado de inmediato (aplicarRespuestaSunat, en un
+  // único update junto con rutaXml/intentos), antes de cualquier paso adicional — desde aquí la
+  // factura ya no se reenvía nunca. El PDF es un paso separado y reintentable que no debe poder
+  // revertir ni bloquear ese resultado.
+  await aplicarRespuestaSunat(ctx, facturaId, r, nombre, rutaXml);
   await generarPdfFacturaSiFalta(ctx, facturaId);
   return resultadoFactura(ctx, facturaId);
 }

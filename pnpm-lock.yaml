@@ -35,6 +35,10 @@ importers:
       zod:
         specifier: ^4.6.4
         version: 4.6.4
+    devDependencies:
+      unpdf:
+        specifier: ^1.8.1
+        version: 1.8.1
 
   packages/db:
     dependencies:

@@ -4,3 +4,8 @@ export * from "./dominio/validaciones";
 export * from "./dominio/ubigeos";
 export * from "./dominio/fechas";
 export * from "./dominio/serie-numero";
+export * from "./infra/config";
+export * from "./infra/almacen";
+export * from "./infra/auditoria";
+export * from "./infra/sembrar";
+export * from "./infra/contexto";

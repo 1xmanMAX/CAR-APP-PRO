@@ -21,7 +21,20 @@ importers:
         specifier: ^5.0.0
         version: 5.0.0(@types/node@26.5.1)(vite@8.3.0(@types/node@26.5.1)(esbuild@0.28.2)(tsx@4.23.13))
 
-  packages/core: {}
+  packages/core:
+    dependencies:
+      '@sunatapp/db':
+        specifier: workspace:*
+        version: link:../db
+      '@sunatapp/pdf':
+        specifier: workspace:*
+        version: link:../pdf
+      '@sunatapp/sunat':
+        specifier: workspace:*
+        version: link:../sunat
+      zod:
+        specifier: ^4.6.4
+        version: 4.6.4
 
   packages/db:
     dependencies:
@@ -1524,6 +1537,9 @@ packages:
   yazl@3.3.1:
     resolution: {integrity: sha512-BbETDVWG+VcMUle37k5Fqp//7SDOK2/1+T7X8TD96M3D9G8jK5VLUdQVdVjGi8im7FGkazX7kk5hkU8X4L5Bng==}
 
+  zod@4.6.4:
+    resolution: {integrity: sha512-AXSD6hvGdvRjajG/l1cC+d6IrhH+sjmPKtYeQdJIK8MFJl3LyClzS+o/YsVC+zQZPupAaeH5skwwm8YqYH7BqA==}
+
 snapshots:
 
   '@drizzle-team/brocli@0.10.2': {}
@@ -2523,3 +2539,5 @@ snapshots:
   yazl@3.3.1:
     dependencies:
       buffer-crc32: 1.0.0
+
+  zod@4.6.4: {}

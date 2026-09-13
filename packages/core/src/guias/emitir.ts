@@ -122,6 +122,10 @@ export async function emitirGuia(ctx: Contexto, guiaId: number, o: { esperarResp
       return { tipo: "ocupada" } as const;
     }
     const numeroNuevo = g.numero === null;
+    // Una emisión "nueva" (primera vez, o reintento explícito de una guía rechazada) reinicia
+    // el contador de intentos: de lo contrario, una guía que agotó MAX_INTENTOS (SIN_ENVIO) o
+    // que fue rechazada por SUNAT tras muchos reintentos quedaría "atascada" — el primer fallo
+    // al reemitirla volvería a superar MAX_INTENTOS de inmediato.
     const fechaNueva = numeroNuevo || g.estado === "rechazada";
     const numero = g.numero ?? (await siguienteCorrelativo(tx, "31", g.serie));
     const cambios: CambiosGuia = {
@@ -134,9 +138,10 @@ export async function emitirGuia(ctx: Contexto, guiaId: number, o: { esperarResp
       const { fecha, hora } = fechaHoraLima(ahora);
       cambios.fechaEmision = fecha;
       cambios.horaEmision = hora;
+      cambios.intentos = 0;
     }
     await tx.update(guiaTransportista).set(cambios).where(eq(guiaTransportista.id, guiaId));
-    return { tipo: "reservada", intentosPrevios: g.intentos } as const;
+    return { tipo: "reservada", intentosPrevios: fechaNueva ? 0 : g.intentos } as const;
   });
   if (reserva.tipo === "ocupada") return resultadoGuia(ctx, guiaId);
 
@@ -175,8 +180,10 @@ export async function emitirGuia(ctx: Contexto, guiaId: number, o: { esperarResp
     return resultadoGuia(ctx, guiaId);
   }
 
-  const intentos = reserva.intentosPrevios + 1;
-  await actualizar(ctx, guiaId, { rutaXml, intentos, ticket, estado: "enviada", proximoIntentoEn: null, codigoRespuesta: null, mensajeRespuesta: null });
+  // Al pasar a "enviada" se reinicia el contador de intentos: de aquí en más solo cuenta los
+  // fallos de sondeo/aplicación del ticket (evita que una guía que tardó muchos intentos en
+  // enviarse quede excluida del sondeo en segundo plano por superar MAX_INTENTOS de arranque).
+  await actualizar(ctx, guiaId, { rutaXml, intentos: 0, ticket, estado: "enviada", proximoIntentoEn: null, codigoRespuesta: null, mensajeRespuesta: null });
   await registrarAuditoria(ctx.db, { accion: "guia_enviada", entidad: "guia_transportista", entidadId: guiaId, detalle: { ticket } });
 
   if (o.esperarRespuesta !== false) {
@@ -235,24 +242,30 @@ export async function procesarPendientesGuias(ctx: Contexto): Promise<ResultadoE
         ticketAConsultar = actual?.ticket ?? null;
       }
       if (!ticketAConsultar) continue;
+      const r = await ctx.gateway.consultarTicket(ticketAConsultar);
+      if (r.estado === "en_proceso") continue;
+      const aplicado = await aplicarRespuestaGuia(ctx, g.id, r, ticketAConsultar);
+      if (aplicado) cambios.push(await resultadoGuia(ctx, g.id));
+    } catch (error) {
+      // Ninguna guía debe bloquear el procesamiento de las demás: cualquier falla al
+      // reservar/preparar, sondear el ticket o aplicar la respuesta (consulta de red, PDF,
+      // almacenamiento, error inesperado...) se aísla aquí.
+      if (error instanceof SunatNoDisponibleError) continue; // SUNAT sigue caída: se reintenta en la próxima pasada
       try {
-        const r = await ctx.gateway.consultarTicket(ticketAConsultar);
-        if (r.estado !== "en_proceso") {
-          const aplicado = await aplicarRespuestaGuia(ctx, g.id, r, ticketAConsultar);
-          if (aplicado) cambios.push(await resultadoGuia(ctx, g.id));
+        // Si la guía sigue activa, la falla cuenta como un intento fallido de sondeo/aplicación;
+        // al agotar MAX_INTENTOS deja de sondearse (sin cambiar de estado) con un mensaje manual.
+        const [fila] = await ctx.db
+          .select({ estado: guiaTransportista.estado, intentos: guiaTransportista.intentos })
+          .from(guiaTransportista)
+          .where(eq(guiaTransportista.id, g.id));
+        if (fila && (fila.estado === "enviada" || fila.estado === "pendiente_envio")) {
+          const intentos = fila.intentos + 1;
+          const mensaje = intentos >= MAX_INTENTOS ? MENSAJE_SIN_RESPUESTA_TICKET : `Error al procesar la guía: ${(error as Error).message}`;
+          await actualizar(ctx, g.id, { intentos, mensajeRespuesta: mensaje });
         }
-      } catch (error) {
-        if (error instanceof SunatNoDisponibleError) continue;
-        // Falla no relacionada con disponibilidad al consultar el ticket: cuenta como
-        // intento y deja de sondearse (sin cambiar de estado) al agotar MAX_INTENTOS.
-        const [fila] = await ctx.db.select({ intentos: guiaTransportista.intentos }).from(guiaTransportista).where(eq(guiaTransportista.id, g.id));
-        const intentos = (fila?.intentos ?? g.intentos) + 1;
-        const mensaje = intentos >= MAX_INTENTOS ? MENSAJE_SIN_RESPUESTA_TICKET : `Error al consultar el ticket: ${(error as Error).message}`;
-        await actualizar(ctx, g.id, { intentos, mensajeRespuesta: mensaje });
+      } catch {
+        // Si ni siquiera se pudo registrar el fallo, se continúa con las demás guías.
       }
-    } catch {
-      // Ninguna guía debe bloquear el procesamiento de las demás.
-      continue;
     }
   }
   return cambios;

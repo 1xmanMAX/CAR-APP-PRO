@@ -245,4 +245,73 @@ describe("emitirGuia", () => {
     const [g] = await ctx.db.select().from(guiaTransportista).where(eq(guiaTransportista.id, id));
     expect(g).toMatchObject({ intentos: MAX_INTENTOS, mensajeRespuesta: "No se pudo enviar a SUNAT durante 24 horas. Revisa la conexión y vuelve a emitir." });
   });
+
+  it("una guía agotada (SIN_ENVIO) reemitida reinicia el contador de intentos", async () => {
+    const gw = new GatewayControlado(new SunatSimulado({ demoraMs: 0 })); // caido=true por defecto
+    const ctx = await contexto({ gateway: gw });
+    const id = await registrarGuiaBorrador(ctx, entradaGuia());
+    await ctx.db
+      .update(guiaTransportista)
+      .set({
+        estado: "rechazada",
+        numero: 1,
+        fechaEmision: "2026-09-01",
+        horaEmision: "08:00:00",
+        intentos: MAX_INTENTOS,
+        codigoRespuesta: "SIN_ENVIO",
+        mensajeRespuesta: "No se pudo enviar a SUNAT durante 24 horas. Revisa la conexión y vuelve a emitir.",
+      })
+      .where(eq(guiaTransportista.id, id));
+
+    const r = await emitirGuia(ctx, id); // reintenta desde "rechazada": debe reiniciar intentos a 0
+    expect(r.estado).toBe("pendiente_envio"); // sin la corrección, volvería directo a rechazada/SIN_ENVIO
+    const [g] = await ctx.db.select().from(guiaTransportista).where(eq(guiaTransportista.id, id));
+    expect(g).toMatchObject({ estado: "pendiente_envio", intentos: 1, codigoRespuesta: null });
+    expect(g!.mensajeRespuesta).toBe("SUNAT no disponible; se reintentará automáticamente");
+  });
+
+  it("una guía enviada con intentos cercanos al máximo sigue siendo sondeada hasta aceptada", async () => {
+    let ahora = new Date("2026-09-13T15:00:00Z");
+    const gw = new GatewayControlado(new SunatSimulado({ demoraMs: 0 })); // caido=true por defecto
+    const ctx = await contexto({ gateway: gw, reloj: () => ahora });
+    const id = await registrarGuiaBorrador(ctx, entradaGuia());
+    await emitirGuia(ctx, id); // falla (SUNAT caído): pendiente_envio, numero=1, intentos=1
+
+    await ctx.db
+      .update(guiaTransportista)
+      .set({ intentos: MAX_INTENTOS - 1, proximoIntentoEn: new Date(ahora.getTime() - 1000) })
+      .where(eq(guiaTransportista.id, id));
+    gw.caido = false;
+    ahora = new Date(ahora.getTime() + 1000);
+    const r = await emitirGuia(ctx, id, { esperarRespuesta: false }); // esta vez el envío tiene éxito
+    expect(r.estado).toBe("enviada");
+    const [trasEmision] = await ctx.db.select().from(guiaTransportista).where(eq(guiaTransportista.id, id));
+    expect(trasEmision!.intentos).toBe(0); // sin la corrección, quedaría en MAX_INTENTOS y nunca se sondearía
+
+    ahora = new Date(ahora.getTime() + 200_000); // deja pasar el reposo de la rama "enviada"
+    const cambios = await procesarPendientesGuias(ctx);
+    expect(cambios).toEqual([expect.objectContaining({ id, estado: "aceptada" })]);
+  });
+
+  it("una falla inesperada al aplicar la respuesta de una guía no bloquea a las demás", async () => {
+    let ahora = new Date("2026-09-13T15:00:00Z");
+    const ctx = await contexto({ gateway: new SunatSimulado({ demoraMs: 0 }), reloj: () => ahora });
+    const idA = await registrarGuiaBorrador(ctx, entradaGuia());
+    const idB = await registrarGuiaBorrador(ctx, entradaGuia());
+    await emitirGuia(ctx, idA, { esperarRespuesta: false }); // queda "enviada"
+    await emitirGuia(ctx, idB, { esperarRespuesta: false }); // queda "enviada"
+
+    // Fuerza un fallo real (no relacionado con SUNAT) dentro de aplicarRespuestaGuia para A,
+    // sin usar un gateway de prueba: apunta rutaXml a un archivo inexistente, así
+    // ctx.almacen.leerTexto lanza al intentar generar el texto del QR / CDR.
+    await ctx.db.update(guiaTransportista).set({ rutaXml: "guias/no-existe.xml" }).where(eq(guiaTransportista.id, idA));
+
+    ahora = new Date(ahora.getTime() + 200_000); // deja pasar el reposo de la rama "enviada"
+    const cambios = await procesarPendientesGuias(ctx);
+
+    expect(cambios).toEqual([expect.objectContaining({ id: idB, estado: "aceptada" })]);
+    const [a] = await ctx.db.select().from(guiaTransportista).where(eq(guiaTransportista.id, idA));
+    expect(a).toMatchObject({ estado: "enviada", intentos: 1 });
+    expect(a!.mensajeRespuesta).toMatch(/^Error al procesar la guía:/);
+  });
 });

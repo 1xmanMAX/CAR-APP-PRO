@@ -55,4 +55,12 @@ describe("construirXmlFactura", () => {
     const resultado = await validarXsd(firmarXml(construirXmlFactura(d), cert), "Invoice");
     expect(resultado.errores).toEqual([]);
   });
+
+  it.each(["contado", "credito"] as const)("firmada sin detracción cumple el XSD UBL Invoice 2.1 (%s)", async (tipo) => {
+    const d = datosFacturaPrueba();
+    d.montos = { subtotal: 8475, igv: 1525, total: 10000, detraccionPorcentaje: null, detraccionMonto: 0 };
+    d.formaPago = tipo === "contado" ? { tipo } : { tipo, fechaVencimiento: "2026-10-13" };
+    const resultado = await validarXsd(firmarXml(construirXmlFactura(d), cert), "Invoice");
+    expect(resultado.errores).toEqual([]);
+  });
 });

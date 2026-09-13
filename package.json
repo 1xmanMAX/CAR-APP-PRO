@@ -8,7 +8,10 @@
   },
   "scripts": {
     "test": "vitest run",
-    "typecheck": "pnpm -r exec tsc --noEmit"
+    "typecheck": "pnpm -r exec tsc --noEmit",
+    "sembrar": "tsx packages/core/scripts/sembrar.ts",
+    "demo": "tsx packages/core/scripts/demo.ts",
+    "ubigeos": "tsx packages/core/scripts/generar-ubigeos.ts"
   },
   "devDependencies": {
     "@types/node": "^26.5.1",

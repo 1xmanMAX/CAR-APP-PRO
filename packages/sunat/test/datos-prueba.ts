@@ -1,4 +1,5 @@
 import type { DatosGreTransportista } from "../src/ubl/gre-transportista";
+import type { DatosFactura } from "../src/ubl/factura";
 
 export function datosGrePrueba(): DatosGreTransportista {
   return {
@@ -21,5 +22,20 @@ export function datosGrePrueba(): DatosGreTransportista {
       { descripcion: "CAJAS DE CERÁMICA", cantidad: "120", unidadMedida: "BX" },
       { descripcion: "BOLSAS DE CEMENTO", cantidad: "40", unidadMedida: "NIU" },
     ],
+  };
+}
+
+export function datosFacturaPrueba(): DatosFactura {
+  return {
+    emisor: { ruc: "20606433094", razonSocial: "TRANSPORTES DEMO SAC", ubigeo: "150115", direccion: "AV. DEMO 123", cuentaDetraccion: "00-045-091619" },
+    serie: "F001",
+    numero: 1,
+    fechaEmision: "2026-09-13",
+    horaEmision: "11:00:00",
+    cliente: { tipoDoc: "6", numeroDoc: "20131312955", razonSocial: "DISTRIBUIDORA & CIA S.A.C.", direccion: "AV. LIMA 456" },
+    descripcion: "SERVICIO DE TRANSPORTE DE CARGA SEGUN GRE V001-1",
+    montos: { subtotal: 100000, igv: 18000, total: 118000, detraccionPorcentaje: 4, detraccionMonto: 4700 },
+    formaPago: { tipo: "contado" },
+    guiasRelacionadas: ["V001-1"],
   };
 }

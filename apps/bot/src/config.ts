@@ -22,9 +22,9 @@ export function cargarConfigBot(env: Record<string, string | undefined> = proces
   if (extractor !== "reglas" && extractor !== "ia") {
     throw new Error('EXTRACTOR debe ser "reglas" o "ia"');
   }
-  const horaAviso = limpiar(env.HORA_AVISO) ?? "08:00";
+  const horaAviso = limpiar(env.BOT_HORA_AVISO) ?? "08:00";
   if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(horaAviso)) {
-    throw new Error("HORA_AVISO debe tener el formato HH:MM");
+    throw new Error("BOT_HORA_AVISO debe tener el formato HH:MM");
   }
   return { token, extractor, horaAviso, logDir: limpiar(env.LOG_DIR) ?? "./logs" };
 }

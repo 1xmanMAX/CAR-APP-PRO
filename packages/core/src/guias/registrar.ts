@@ -113,3 +113,45 @@ export async function registrarGuiaBorrador(ctx: Contexto, e: EntradaGuia, usuar
     throw error;
   }
 }
+
+/**
+ * Corrige una guía ya registrada sin cambiar su identidad: reemplaza datos e ítems solo si sigue
+ * en "borrador" o quedó "rechazada" por SUNAT. Una guía aceptada (o en vuelo) no se toca: su XML
+ * ya está en SUNAT y cambiarle los datos dejaría el PDF y la base contando cosas distintas.
+ */
+export async function actualizarGuiaBorrador(ctx: Contexto, guiaId: number, e: EntradaGuia, usuarioId?: number): Promise<void> {
+  const errores = validarEntradaGuia(e);
+  if (errores.length) throw new ErrorValidacion(errores);
+  await ctx.db.transaction(async (tx) => {
+    const [g] = await tx.select().from(guiaTransportista).where(eq(guiaTransportista.id, guiaId)).for("update");
+    if (!g) throw new ErrorNegocio(`La guía ${guiaId} no existe`);
+    if (g.estado !== "borrador" && g.estado !== "rechazada") {
+      throw new ErrorNegocio("Solo se pueden corregir guías en borrador o rechazadas");
+    }
+    const [emp] = await tx.select().from(empresa).limit(1);
+    if (!emp) throw new ErrorNegocio("Falta configurar empresa, vehículo o conductor");
+    const transporte = await resolverTransporte(tx, emp, e.transporte);
+    await tx
+      .update(guiaTransportista)
+      .set({
+        fechaTraslado: e.fechaTraslado,
+        remitenteId: await asegurarContraparte(tx, e.remitente),
+        destinatarioId: await asegurarContraparte(tx, e.destinatario),
+        partidaDireccion: e.partida.direccion.trim(),
+        partidaUbigeo: e.partida.ubigeo,
+        llegadaDireccion: e.llegada.direccion.trim(),
+        llegadaUbigeo: e.llegada.ubigeo,
+        pesoBruto: e.pesoBruto,
+        unidadPeso: e.unidadPeso,
+        vehiculoId: transporte.vehiculoId,
+        vehiculoSecundarioId: transporte.vehiculoSecundarioId,
+        conductorId: transporte.conductorId,
+        greRemitenteRef: e.greRemitenteRef,
+        actualizadoEn: ctx.reloj(),
+      })
+      .where(eq(guiaTransportista.id, guiaId));
+    await tx.delete(guiaItem).where(eq(guiaItem.guiaId, guiaId));
+    await tx.insert(guiaItem).values(e.items.map((it) => ({ guiaId, ...it })));
+    await registrarAuditoria(tx, { usuarioId, accion: "guia_corregida", entidad: "guia_transportista", entidadId: guiaId });
+  });
+}

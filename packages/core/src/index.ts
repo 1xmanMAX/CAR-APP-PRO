@@ -11,6 +11,7 @@ export * from "./infra/sembrar";
 export * from "./infra/contexto";
 export * from "./documentos/recibidos";
 export * from "./guias/validar";
+export * from "./guias/desde-extraccion";
 export * from "./guias/registrar";
 export * from "./guias/cargar";
 export * from "./guias/emitir";

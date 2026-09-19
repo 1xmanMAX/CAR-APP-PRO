@@ -120,6 +120,10 @@ export async function crearArnes(
     async esperarTareas() {
       while (tareas.length) await tareas.shift();
     },
+    ultimoTexto(): string {
+      const enviados = this.textosEnviados();
+      return enviados[enviados.length - 1] ?? "";
+    },
     textosEnviados: () =>
       llamadas
         .filter(

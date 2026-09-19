@@ -8,6 +8,9 @@ import type { Contexto } from "../src/infra/contexto";
 import { sembrarDatosIniciales, type DatosIniciales } from "../src/infra/sembrar";
 import type { EntradaGuia } from "../src/guias/validar";
 
+/** Reexportado para que apps/bot pueda simular SUNAT sin depender de @sunatapp/sunat. */
+export { SunatSimulado } from "@sunatapp/sunat";
+
 let certificado: Certificado | undefined;
 
 export const DATOS_INICIALES: DatosIniciales = {

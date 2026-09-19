@@ -22,7 +22,10 @@ const RE_LICENCIA_SOLA = /^[A-Z]\d{8}$/;
 const RE_UBIGEO = /^(.*?)(?:\s*-)?\s*(\d{6})$/;
 const RE_FECHA = /(\d{1,2})\/(\d{2})\/(\d{4})/g;
 const RE_ITEM = new RegExp(`^(.+?)\\s+(${UNIDADES.join("|")})\\s+(\\d+\\.\\d{4})\\S*$`);
+const RE_CANTIDAD_SUELTA = /\d+\.\d{4}/;
 const RE_FACTURA = /FACTURA\s+([A-Z0-9]{4}-\d+)/g;
+const RE_ETIQUETA_PARTIDA = /PUNTO DE PARTIDA/;
+const RE_ETIQUETA_LLEGADA = /PUNTO DE LLEGADA/;
 const RE_LETRA = /[A-Za-zÑñÁÉÍÓÚáéíóú]/;
 
 function dudoso<T>(): Campo<T> {
@@ -47,14 +50,25 @@ function esTexto(linea: string): boolean {
   return RE_LETRA.test(linea);
 }
 
+/** Descarta ubigeos, correlativos y códigos internos de 6 dígitos que la forma general deja pasar. */
+function esFormaDePlaca(token: string): boolean {
+  return /^[A-Z]/.test(token) && /\d/.test(token);
+}
+
 export function leerGuiaDeTexto(texto: string, v: Validadores): GuiaExtraida {
   const lineas = texto.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
 
   // --- Ítems (se necesitan antes del peso: su suma identifica el número de bultos) ---
   const items: Array<{ descripcion: string; cantidad: string; unidadMedida: string }> = [];
+  let itemsSinLeer = 0;
   for (const linea of lineas) {
     const m = RE_ITEM.exec(linea);
-    if (!m) continue;
+    if (!m) {
+      // Una línea con cantidad de 4 decimales pero que no encaja es un ítem que no supimos leer:
+      // la lista quedaría truncada en silencio, así que se marca dudosa.
+      if (RE_CANTIDAD_SUELTA.test(linea)) itemsSinLeer += 1;
+      continue;
+    }
     const unidad = m[2]!;
     items.push({
       descripcion: m[1]!.trim(),
@@ -62,6 +76,7 @@ export function leerGuiaDeTexto(texto: string, v: Validadores): GuiaExtraida {
       unidadMedida: unidad === "UND" ? "NIU" : unidad,
     });
   }
+  const itemsCompletos = itemsSinLeer === 0;
 
   // --- Serie y número ---
   const seriesCandidatas = lineas.flatMap((l) => {
@@ -97,7 +112,7 @@ export function leerGuiaDeTexto(texto: string, v: Validadores): GuiaExtraida {
 
   // --- Destinatario: línea de texto seguida de una línea con solo el RUC ---
   let destinatario: { numeroDoc: string; razonSocial: string } | null = null;
-  for (let i = Math.max(iTransportista, 0); i < lineas.length - 1; i += 1) {
+  for (let i = iTransportista + 1; i < lineas.length - 1; i += 1) {
     const razonSocial = lineas[i]!;
     const siguiente = lineas[i + 1]!;
     if (!esTexto(razonSocial)) continue;
@@ -126,24 +141,25 @@ export function leerGuiaDeTexto(texto: string, v: Validadores): GuiaExtraida {
   );
 
   // --- Placas ---
-  let placas: { principal: string; secundarias: string[] } | null = null;
-  let iPlacas = -1;
-  for (let i = 0; i < lineas.length; i += 1) {
-    const m = RE_PLACAS.exec(lineas[i]!);
-    if (!m) continue;
-    const secundarias = m[2]!.match(/[A-Z0-9]{3}-?[A-Z0-9]{3}/g) ?? [];
-    placas = { principal: m[1]!, secundarias };
-    iPlacas = i;
-    break;
-  }
+  // Una línea de 6 alfanuméricos sueltos también puede ser un ubigeo o un código interno: se exige
+  // forma de placa (empieza por letra y lleva algún dígito) y que haya una sola línea candidata.
+  const candidatasPlacas = lineas.flatMap((linea, i) => {
+    const m = RE_PLACAS.exec(linea);
+    if (!m || !esFormaDePlaca(m[1]!)) return [];
+    const secundarias = (m[2]!.match(/[A-Z0-9]{3}-?[A-Z0-9]{3}/g) ?? []).filter((p) => esFormaDePlaca(p));
+    return [{ i, placas: { principal: m[1]!, secundarias } }];
+  });
+  const unicaPlaca = candidatasPlacas.length === 1 ? candidatasPlacas[0]! : null;
+  const iPlacas = unicaPlaca ? unicaPlaca.i : -1;
 
   // --- Peso bruto: de los dos números que siguen a las placas, el que no es la suma de bultos ---
+  // Con un solo número no se puede distinguir el peso del número de bultos: queda dudoso.
   let pesoBruto: Campo<string> = dudoso<string>();
   if (iPlacas >= 0) {
     const numeros = lineas.slice(iPlacas + 1).filter((l) => RE_NUMERO.test(l)).slice(0, 2);
     const sumaItems = items.reduce((total, it) => total + Number(it.cantidad), 0);
-    const candidatos = items.length > 0 ? numeros.filter((n) => Number(n) !== sumaItems) : numeros;
-    pesoBruto = campo(candidatos.length === 1 ? candidatos[0]! : null, true);
+    const candidatos = itemsCompletos && items.length > 0 ? numeros.filter((n) => Number(n) !== sumaItems) : numeros;
+    pesoBruto = campo(numeros.length === 2 && candidatos.length === 1 ? candidatos[0]! : null, true);
   }
 
   // --- Conductor ---
@@ -172,9 +188,15 @@ export function leerGuiaDeTexto(texto: string, v: Validadores): GuiaExtraida {
     if (!direccion || !v.obtenerUbigeo(codigo)) return [];
     return [{ direccion, ubigeo: codigo }];
   });
+  // El orden partida→llegada solo se da por bueno si las etiquetas lo confirman; si faltan o están
+  // al revés (hay formatos a dos columnas donde salen invertidas) se devuelven los valores dudosos
+  // antes que arriesgar un origen y un destino intercambiados.
+  const iEtiquetaPartida = lineas.findIndex((l) => RE_ETIQUETA_PARTIDA.test(l) && !RE_ETIQUETA_LLEGADA.test(l));
+  const iEtiquetaLlegada = lineas.findIndex((l) => RE_ETIQUETA_LLEGADA.test(l) && !RE_ETIQUETA_PARTIDA.test(l));
+  const ordenConfirmado = iEtiquetaPartida >= 0 && iEtiquetaLlegada >= 0 && iEtiquetaPartida < iEtiquetaLlegada;
   const dosUbigeos = ubigeos.length === 2;
-  const partida = campo(dosUbigeos ? ubigeos[0]! : null, true);
-  const llegada = campo(dosUbigeos ? ubigeos[1]! : null, true);
+  const partida = campo(dosUbigeos ? ubigeos[0]! : null, ordenConfirmado);
+  const llegada = campo(dosUbigeos ? ubigeos[1]! : null, ordenConfirmado);
 
   // --- Fecha de traslado ---
   const fechas = [...texto.matchAll(RE_FECHA)].map((m) => `${m[3]}-${m[2]}-${m[1]!.padStart(2, "0")}`);
@@ -196,9 +218,9 @@ export function leerGuiaDeTexto(texto: string, v: Validadores): GuiaExtraida {
     fechaTraslado,
     pesoBruto,
     unidadPeso,
-    placas: campo(placas, true),
+    placas: campo(unicaPlaca ? unicaPlaca.placas : null, true),
     conductor: campo(conductor, conductorSeguro),
-    items: campo(items.length > 0 ? items : null, true),
+    items: campo(items.length > 0 ? items : null, itemsCompletos),
     documentosRelacionados,
   };
 }

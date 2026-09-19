@@ -68,8 +68,11 @@ export async function registrarConductor(ctx: Contexto, d: DatosConductor): Prom
   const [fila] = await ctx.db
     .insert(conductor)
     .values({ numeroDoc: d.numeroDoc, nombres: d.nombres, apellidos: d.apellidos, licencia: d.licencia })
+    .onConflictDoNothing({ target: conductor.numeroDoc })
     .returning({ id: conductor.id });
-  return fila!.id;
+  if (fila) return fila.id;
+  const ganador = await buscarConductorPorDni(ctx, d.numeroDoc);
+  return ganador!.id;
 }
 
 export async function transporteHabitual(ctx: Contexto): Promise<TransporteGuia> {

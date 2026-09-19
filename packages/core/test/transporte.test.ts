@@ -1,3 +1,4 @@
+import { conductor, eq } from "@sunatapp/db";
 import { afterEach, describe, expect, it } from "vitest";
 import { cargarGuiaCompleta } from "../src/guias/cargar";
 import { registrarGuiaBorrador } from "../src/guias/registrar";
@@ -34,6 +35,15 @@ describe("transporte", () => {
     const d = { numeroDoc: "01320429", nombres: "MARIO", apellidos: "MAMANI MAMANI", licencia: "U01320429" };
     const c = await registrarConductor(ctx, d);
     expect(await registrarConductor(ctx, d)).toBe(c);
+  });
+
+  it("dos registrarConductor concurrentes para el mismo DNI devuelven el mismo id y dejan una sola fila", async () => {
+    const ctx = await contexto();
+    const d = { numeroDoc: "01320429", nombres: "MARIO", apellidos: "MAMANI MAMANI", licencia: "U01320429" };
+    const [a, b] = await Promise.all([registrarConductor(ctx, d), registrarConductor(ctx, d)]);
+    expect(a).toBe(b);
+    const filas = await ctx.db.select().from(conductor).where(eq(conductor.numeroDoc, d.numeroDoc));
+    expect(filas).toHaveLength(1);
   });
 
   it("registrarGuiaBorrador usa las placas y el conductor de la entrada", async () => {

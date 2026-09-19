@@ -42,7 +42,7 @@ export const vehiculo = pgTable("vehiculo", {
 export const conductor = pgTable("conductor", {
   id: serial("id").primaryKey(),
   tipoDoc: text("tipo_doc").notNull().default("1"),
-  numeroDoc: text("numero_doc").notNull(),
+  numeroDoc: text("numero_doc").notNull().unique(),
   nombres: text("nombres").notNull(),
   apellidos: text("apellidos").notNull(),
   licencia: text("licencia").notNull(),

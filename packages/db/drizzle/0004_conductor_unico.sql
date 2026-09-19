@@ -1,0 +1,1 @@
+ALTER TABLE "conductor" ADD CONSTRAINT "conductor_numero_doc_unique" UNIQUE("numero_doc");

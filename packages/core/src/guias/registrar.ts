@@ -25,35 +25,55 @@ async function asegurarContraparte(tx: Tx, p: { numeroDoc: string; razonSocial: 
   return ganador!.id;
 }
 
+async function guiaDeDocumento(ctx: Contexto, documentoRecibidoId: number): Promise<number | null> {
+  const [g] = await ctx.db.select({ id: guiaTransportista.id }).from(guiaTransportista).where(eq(guiaTransportista.documentoRecibidoId, documentoRecibidoId));
+  return g?.id ?? null;
+}
+
 export async function registrarGuiaBorrador(ctx: Contexto, e: EntradaGuia, usuarioId?: number): Promise<number> {
   const errores = validarEntradaGuia(e);
   if (errores.length) throw new ErrorValidacion(errores);
-  return ctx.db.transaction(async (tx) => {
-    const [emp] = await tx.select().from(empresa).limit(1);
-    const [veh] = await tx.select().from(vehiculo).where(eq(vehiculo.activo, true)).limit(1);
-    const [cond] = await tx.select().from(conductor).where(eq(conductor.activo, true)).limit(1);
-    if (!emp || !veh || !cond) throw new ErrorNegocio("Falta configurar empresa, vehículo o conductor");
-    const [guia] = await tx
-      .insert(guiaTransportista)
-      .values({
-        serie: emp.serieGre,
-        fechaTraslado: e.fechaTraslado,
-        remitenteId: await asegurarContraparte(tx, e.remitente),
-        destinatarioId: await asegurarContraparte(tx, e.destinatario),
-        partidaDireccion: e.partida.direccion.trim(),
-        partidaUbigeo: e.partida.ubigeo,
-        llegadaDireccion: e.llegada.direccion.trim(),
-        llegadaUbigeo: e.llegada.ubigeo,
-        pesoBruto: e.pesoBruto,
-        unidadPeso: e.unidadPeso,
-        vehiculoId: veh.id,
-        conductorId: cond.id,
-        greRemitenteRef: e.greRemitenteRef,
-        documentoRecibidoId: e.documentoRecibidoId ?? null,
-      })
-      .returning({ id: guiaTransportista.id });
-    await tx.insert(guiaItem).values(e.items.map((it) => ({ guiaId: guia!.id, ...it })));
-    await registrarAuditoria(tx, { usuarioId, accion: "guia_registrada", entidad: "guia_transportista", entidadId: guia!.id });
-    return guia!.id;
-  });
+  if (e.documentoRecibidoId !== undefined) {
+    const existente = await guiaDeDocumento(ctx, e.documentoRecibidoId);
+    if (existente !== null) return existente;
+  }
+  try {
+    return await ctx.db.transaction(async (tx) => {
+      const [emp] = await tx.select().from(empresa).limit(1);
+      const [veh] = await tx.select().from(vehiculo).where(eq(vehiculo.activo, true)).limit(1);
+      const [cond] = await tx.select().from(conductor).where(eq(conductor.activo, true)).limit(1);
+      if (!emp || !veh || !cond) throw new ErrorNegocio("Falta configurar empresa, vehículo o conductor");
+      const [guia] = await tx
+        .insert(guiaTransportista)
+        .values({
+          serie: emp.serieGre,
+          fechaTraslado: e.fechaTraslado,
+          remitenteId: await asegurarContraparte(tx, e.remitente),
+          destinatarioId: await asegurarContraparte(tx, e.destinatario),
+          partidaDireccion: e.partida.direccion.trim(),
+          partidaUbigeo: e.partida.ubigeo,
+          llegadaDireccion: e.llegada.direccion.trim(),
+          llegadaUbigeo: e.llegada.ubigeo,
+          pesoBruto: e.pesoBruto,
+          unidadPeso: e.unidadPeso,
+          vehiculoId: veh.id,
+          conductorId: cond.id,
+          greRemitenteRef: e.greRemitenteRef,
+          documentoRecibidoId: e.documentoRecibidoId ?? null,
+        })
+        .returning({ id: guiaTransportista.id });
+      await tx.insert(guiaItem).values(e.items.map((it) => ({ guiaId: guia!.id, ...it })));
+      await registrarAuditoria(tx, { usuarioId, accion: "guia_registrada", entidad: "guia_transportista", entidadId: guia!.id });
+      return guia!.id;
+    });
+  } catch (error) {
+    // Carrera: otra llamada registró primero una guía para el mismo documentoRecibidoId
+    // (violación de la restricción única "guia_documento_recibido").
+    const codigo = (error as { cause?: { code?: string }; code?: string }).cause?.code ?? (error as { code?: string }).code;
+    if (e.documentoRecibidoId !== undefined && codigo === "23505") {
+      const existente = await guiaDeDocumento(ctx, e.documentoRecibidoId);
+      if (existente !== null) return existente;
+    }
+    throw error;
+  }
 }

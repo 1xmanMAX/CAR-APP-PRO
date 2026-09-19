@@ -75,6 +75,7 @@ export const documentoRecibido = pgTable("documento_recibido", {
   mime: text("mime").notNull(),
   datosExtraidos: jsonb("datos_extraidos"),
   confianza: jsonb("confianza"),
+  hashSha256: text("hash_sha256").unique(),
   creadoEn: creadoEn(),
 });
 
@@ -110,7 +111,10 @@ export const guiaTransportista = pgTable("guia_transportista", {
   proximoIntentoEn: timestamp("proximo_intento_en", { withTimezone: true }),
   creadoEn: creadoEn(),
   actualizadoEn: actualizadoEn(),
-}, (t) => [unique("guia_serie_numero").on(t.serie, t.numero)]);
+}, (t) => [
+  unique("guia_serie_numero").on(t.serie, t.numero),
+  unique("guia_documento_recibido").on(t.documentoRecibidoId),
+]);
 
 export const guiaItem = pgTable("guia_item", {
   id: serial("id").primaryKey(),

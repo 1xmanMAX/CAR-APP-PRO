@@ -324,7 +324,9 @@ describe("emitirGuia", () => {
 
     // Fuerza un fallo real (no relacionado con SUNAT) al generar el PDF de A, sin usar un
     // gateway de prueba: apunta rutaXml a un archivo inexistente, así ctx.almacen.leerTexto
-    // lanza al intentar generar el texto del QR.
+    // lanza al intentar generar el texto del QR. Nota: con la separación del guardado de
+    // CDR/urlQr (independiente de rutaXml) y la generación del PDF, el CDR sí se guarda
+    // correctamente — solo el PDF queda pendiente.
     await ctx.db.update(guiaTransportista).set({ rutaXml: "guias/no-existe.xml" }).where(eq(guiaTransportista.id, idA));
 
     ahora = new Date(ahora.getTime() + 200_000); // deja pasar el reposo de la rama "enviada"
@@ -335,7 +337,8 @@ describe("emitirGuia", () => {
       expect.objectContaining({ id: idB, estado: "aceptada" }),
     ]));
     const [a] = await ctx.db.select().from(guiaTransportista).where(eq(guiaTransportista.id, idA));
-    expect(a).toMatchObject({ estado: "aceptada", rutaPdf: null, rutaCdr: null, ticket: null });
+    expect(a).toMatchObject({ estado: "aceptada", rutaPdf: null, ticket: null });
+    expect(a!.rutaCdr).not.toBeNull();
   });
 
   it("un reintento reenvía el mismo XML firmado (byte a byte) aunque cambie la razón social de la contraparte", async () => {
@@ -418,5 +421,67 @@ describe("emitirGuia", () => {
     const [gFinal] = await ctx.db.select().from(guiaTransportista).where(eq(guiaTransportista.id, id));
     expect(gFinal).toMatchObject({ estado: "aceptada", ticket: null });
     expect(gFinal!.rutaPdf).not.toBeNull();
+  });
+
+  it("si el PDF falla tras la aceptación, conserva CDR y urlQr y el barrido regenera el PDF", async () => {
+    const ctx = await contexto();
+    const id = await registrarGuiaBorrador(ctx, entradaGuia());
+    const guardarOriginal = ctx.almacen.guardar;
+    ctx.almacen.guardar = async (ruta, c) => {
+      if (ruta.endsWith(".pdf")) throw new Error("disco lleno");
+      return guardarOriginal(ruta, c);
+    };
+    const r = await emitirGuia(ctx, id);
+    expect(r.estado).toBe("aceptada");
+    const [g1] = await ctx.db.select().from(guiaTransportista).where(eq(guiaTransportista.id, id));
+    expect(g1!.rutaPdf).toBeNull();
+    expect(g1!.rutaCdr).not.toBeNull();
+    expect(g1!.urlQr).not.toBeNull();
+    ctx.almacen.guardar = guardarOriginal;
+    const cambios = await procesarPendientesGuias(ctx);
+    expect(cambios.map((c) => c.id)).toContain(id);
+    const [g2] = await ctx.db.select().from(guiaTransportista).where(eq(guiaTransportista.id, id));
+    expect(g2!.rutaPdf).toMatch(/\.pdf$/);
+  });
+
+  it("al reemitir desde rechazada, si la preparación falla no reenvía el XML rechazado", async () => {
+    let ahora = new Date("2026-09-13T15:00:00Z");
+    let acepta = false;
+    const rechazar = new SunatSimulado({ rechazo: { codigo: "2800", mensaje: "dato inválido" }, demoraMs: 0 });
+    const aceptar = new SunatSimulado({ demoraMs: 0 });
+    const gw: SunatGateway = {
+      enviarGuia: (d: DocumentoFirmado) => (acepta ? aceptar : rechazar).enviarGuia(d),
+      consultarTicket: (t: string) => (acepta ? aceptar : rechazar).consultarTicket(t),
+      enviarFactura: (d: DocumentoFirmado) => (acepta ? aceptar : rechazar).enviarFactura(d),
+    };
+    const ctx = await contexto({ gateway: gw, reloj: () => ahora });
+    const id = await registrarGuiaBorrador(ctx, entradaGuia());
+
+    expect((await emitirGuia(ctx, id)).estado).toBe("rechazada");
+    const [g1] = await ctx.db.select().from(guiaTransportista).where(eq(guiaTransportista.id, id));
+    const xmlA = await ctx.almacen.leerTexto(g1!.rutaXml!);
+
+    ahora = new Date(ahora.getTime() + 10 * 60_000);
+    const almacenOriginal = ctx.almacen;
+    ctx.almacen = {
+      ...almacenOriginal,
+      guardar: async (ruta: string, contenido: Buffer | string) => {
+        if (ruta.endsWith(".xml")) throw new Error("disco lleno");
+        return almacenOriginal.guardar(ruta, contenido);
+      },
+    };
+    expect((await emitirGuia(ctx, id)).estado).toBe("pendiente_envio");
+    const [g2] = await ctx.db.select().from(guiaTransportista).where(eq(guiaTransportista.id, id));
+    expect(g2!.rutaXml).toBeNull();
+
+    ctx.almacen = almacenOriginal;
+    acepta = true;
+    ahora = new Date(ahora.getTime() + 10 * 60_000);
+    const cambios = await procesarPendientesGuias(ctx);
+    expect(cambios).toEqual(expect.arrayContaining([expect.objectContaining({ id, estado: "aceptada" })]));
+
+    const [g3] = await ctx.db.select().from(guiaTransportista).where(eq(guiaTransportista.id, id));
+    const xmlB = await ctx.almacen.leerTexto(g3!.rutaXml!);
+    expect(xmlB).not.toBe(xmlA);
   });
 });

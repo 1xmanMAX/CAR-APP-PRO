@@ -357,6 +357,46 @@ describe("emitirFactura", () => {
     const restante = await ctx.db.select().from(factura).where(eq(factura.id, facturaId1));
     expect(restante).toHaveLength(0); // la factura 1 desapareció, pero no bloqueó a la 2
   });
+
+  it("al reemitir una factura desde rechazada, si la preparación falla no reenvía el XML rechazado", async () => {
+    let acepta = false;
+    const rechazar = new SunatSimulado({ rechazo: { codigo: "2800", mensaje: "dato inválido" }, demoraMs: 0 });
+    const aceptar = new SunatSimulado({ demoraMs: 0 });
+    const gw: SunatGateway = {
+      enviarGuia: (d: DocumentoFirmado) => aceptar.enviarGuia(d),
+      consultarTicket: (t: string) => aceptar.consultarTicket(t),
+      enviarFactura: (d: DocumentoFirmado) => (acepta ? aceptar : rechazar).enviarFactura(d),
+    };
+    const { ctx, guiaId } = await contextoConGuia(gw);
+    const { facturaId } = await prepararFactura(ctx, { guiaId, montoCentimos: 50000, incluyeIgv: true, formaPago: "contado" });
+
+    expect((await emitirFactura(ctx, facturaId)).estado).toBe("rechazada");
+    const [f1] = await ctx.db.select().from(factura).where(eq(factura.id, facturaId));
+    const xmlA = await ctx.almacen.leerTexto(f1!.rutaXml!);
+
+    ahora = new Date(ahora.getTime() + 10 * 60_000);
+    const almacenOriginal = ctx.almacen;
+    ctx.almacen = {
+      ...almacenOriginal,
+      guardar: async (ruta: string, contenido: Buffer | string) => {
+        if (ruta.endsWith(".xml")) throw new Error("disco lleno");
+        return almacenOriginal.guardar(ruta, contenido);
+      },
+    };
+    expect((await emitirFactura(ctx, facturaId)).estado).toBe("pendiente_envio");
+    const [f2] = await ctx.db.select().from(factura).where(eq(factura.id, facturaId));
+    expect(f2!.rutaXml).toBeNull();
+
+    ctx.almacen = almacenOriginal;
+    acepta = true;
+    ahora = new Date(ahora.getTime() + 10 * 60_000);
+    const cambios = await procesarPendientesFacturas(ctx);
+    expect(cambios).toEqual(expect.arrayContaining([expect.objectContaining({ id: facturaId, estado: "aceptada" })]));
+
+    const [f3] = await ctx.db.select().from(factura).where(eq(factura.id, facturaId));
+    const xmlB = await ctx.almacen.leerTexto(f3!.rutaXml!);
+    expect(xmlB).not.toBe(xmlA);
+  });
 });
 
 describe("cobros", () => {

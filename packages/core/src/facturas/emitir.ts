@@ -195,6 +195,10 @@ export async function emitirFactura(ctx: Contexto, facturaId: number): Promise<R
       cambios.horaEmision = hora;
       cambios.fechaVencimiento = f.formaPago === "credito" ? sumarDias(fecha, f.diasCredito!) : fecha;
       cambios.intentos = 0;
+      // Al reemitir desde "rechazada" (o SIN_ENVIO) se limpia el XML anterior: si la
+      // preparación de este intento falla antes de firmar/guardar uno nuevo, el siguiente
+      // reintento no debe reenviar el XML rechazado que SUNAT ya conoce.
+      cambios.rutaXml = null;
     }
     await tx.update(factura).set(cambios).where(eq(factura.id, facturaId));
     return {

@@ -105,6 +105,7 @@ export const guiaTransportista = pgTable("guia_transportista", {
   rutaXml: text("ruta_xml"),
   rutaCdr: text("ruta_cdr"),
   rutaPdf: text("ruta_pdf"),
+  urlQr: text("url_qr"),
   intentos: integer("intentos").notNull().default(0),
   proximoIntentoEn: timestamp("proximo_intento_en", { withTimezone: true }),
   creadoEn: creadoEn(),

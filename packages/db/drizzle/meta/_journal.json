@@ -15,6 +15,13 @@
       "when": 1789852820454,
       "tag": "0001_vehiculo_secundario",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1789853699723,
+      "tag": "0002_url_qr_guia",
+      "breakpoints": true
     }
   ]
 }

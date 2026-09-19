@@ -9,6 +9,7 @@
   "scripts": {
     "test": "vitest run",
     "typecheck": "pnpm -r exec tsc --noEmit",
+    "bot": "pnpm --filter @sunatapp/bot start",
     "sembrar": "tsx packages/core/scripts/sembrar.ts",
     "demo": "tsx packages/core/scripts/demo.ts",
     "ubigeos": "tsx packages/core/scripts/generar-ubigeos.ts"

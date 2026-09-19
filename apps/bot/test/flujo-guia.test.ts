@@ -27,6 +27,33 @@ async function arnes(lineas: string[] = lineasFixture(puntosEnOrden), o: Opcione
 
 const sinFecha = () => lineasFixture((l) => puntosEnOrden(l).filter((x) => !x.includes("14/09/2026")));
 
+/** Guía con un conductor que no es el habitual de la empresa (DNI y licencia distintos). */
+const otroConductor = () =>
+  lineasFixture((l) =>
+    puntosEnOrden(l).map((x) =>
+      x
+        .replace("JHON LARRY VELEZMORO SOZA45288569", "PEDRO RAUL QUISPE MAMANI10203040")
+        .replace("Q45288569LICENCIA", "A10203040LICENCIA"),
+    ),
+  );
+
+/** SUNAT rechaza el primer envío y acepta el siguiente: sirve para cerrar "corregir y reenviar". */
+class SunatRechazaUnaVez {
+  private envios = 0;
+  private readonly rechaza = new SunatSimulado({ demoraMs: 0, rechazo: { codigo: "2800", mensaje: "dato inválido" } });
+  private readonly acepta = new SunatSimulado({ demoraMs: 0 });
+  enviarGuia(doc: Parameters<SunatSimulado["enviarGuia"]>[0]) {
+    this.envios += 1;
+    return this.acepta.enviarGuia(doc);
+  }
+  consultarTicket(ticket: string) {
+    return (this.envios <= 1 ? this.rechaza : this.acepta).consultarTicket(ticket);
+  }
+  enviarFactura(doc: Parameters<SunatSimulado["enviarFactura"]>[0]) {
+    return this.acepta.enviarFactura(doc);
+  }
+}
+
 describe("flujo de guía: camino feliz", () => {
   it("lee el PDF, muestra el resumen y emite la guía", async () => {
     const a = await arnes();
@@ -171,6 +198,29 @@ describe("flujo de guía: transporte", () => {
     await a.boton("g:placa:hab:XYZ-987");
     expect(a.ultimoTexto()).toContain("Vehículo: ABC-123 / QQQ-111");
   });
+
+  it("ofrece registrar un conductor nuevo y lo usa en la guía", async () => {
+    const a = await arnes(otroConductor());
+    await registrarVehiculo(a.ctx, "XYZ-987");
+    await a.documento("pdf1");
+    expect(a.ultimoTexto()).toBe("El conductor PEDRO RAUL QUISPE MAMANI (DNI 10203040) no está registrado.");
+    expect(a.botones()).toEqual([
+      { text: "Registrar conductor", callback_data: "g:cond:reg" },
+      { text: "Usar conductor habitual", callback_data: "g:cond:hab" },
+    ]);
+
+    await a.boton("g:cond:reg");
+    expect(a.ultimoTexto()).toContain("Conductor: PEDRO RAUL QUISPE MAMANI");
+  });
+
+  it("deja usar el conductor habitual en vez del que dice la guía", async () => {
+    const a = await arnes(otroConductor());
+    await registrarVehiculo(a.ctx, "XYZ-987");
+    await a.documento("pdf1");
+
+    await a.boton("g:cond:hab");
+    expect(a.ultimoTexto()).toContain("Conductor: JHON LARRY VELEZMORO SOZA");
+  });
 });
 
 describe("flujo de guía: envío a SUNAT", () => {
@@ -191,6 +241,28 @@ describe("flujo de guía: envío a SUNAT", () => {
     expect(a.ultimoTexto()).toContain("🧾 Guía de transportista (borrador)");
   });
 
+  it("corrige la guía rechazada y la reenvía sobre la misma guía", async () => {
+    const a = await arnes(lineasFixture(puntosEnOrden), { gateway: new SunatRechazaUnaVez() as never });
+    await registrarVehiculo(a.ctx, "XYZ-987");
+    await a.documento("pdf1");
+    await a.boton("g:emitir");
+    await a.esperarTareas();
+    expect(a.ultimoTexto()).toBe("❌ SUNAT rechazó la guía V001-1: dato inválido");
+
+    await a.boton(a.botones()[0]!.callback_data);
+    await a.boton("g:corregir");
+    await a.boton("g:campo:pesoBruto");
+    await a.texto("2000");
+    expect(a.ultimoTexto()).toContain("Peso: 2000 KGM");
+
+    await a.boton("g:emitir");
+    await a.esperarTareas();
+    const guias = await listarGuias(a.ctx);
+    expect(guias).toHaveLength(1);
+    expect(guias[0]!.estado).toBe("aceptada");
+    expect(a.documentosEnviados()).toHaveLength(1);
+  });
+
   it("no emite dos veces con doble clic", async () => {
     const a = await arnes();
     await registrarVehiculo(a.ctx, "XYZ-987");
@@ -201,6 +273,37 @@ describe("flujo de guía: envío a SUNAT", () => {
     expect(a.ultimoTexto()).toBe("Ya la estoy enviando.");
     await a.esperarTareas();
     expect(await listarGuias(a.ctx)).toHaveLength(1);
+
+    // Resuelta la guía, el flujo caduca: los botones vuelven a atenderse (la Task 10 manda los
+    // suyos desde el proceso de fondo, justo cuando el flujo sigue en "emitiendo").
+    await a.boton("g:corregir");
+    expect(a.ultimoTexto()).toBe("Envíame el PDF de la guía del remitente o escribe /ayuda.");
+  });
+
+  it("no emite el resumen anterior si mientras tanto llegó otro PDF", async () => {
+    const a = await crearArnes({
+      archivos: {
+        pdf1: await pdfConLineas(lineasFixture(puntosEnOrden)),
+        pdf2: await pdfConLineas(
+          lineasFixture((l) =>
+            puntosEnOrden(l).map((x) => x.replace("EG07 - 5531", "EG07 - 5532").replace("ABC-123 - XYZ-987", "ABC-123 - RRR-555")),
+          ),
+        ),
+      },
+    });
+    cerrables.push(a.cerrar);
+    await registrarVehiculo(a.ctx, "XYZ-987");
+    await a.documento("pdf1");
+    expect(a.ultimoTexto()).toContain("GRE remitente: EG07-5531");
+
+    // El segundo PDF trae una placa sin registrar: el flujo se queda esperando esa respuesta.
+    await a.documento("pdf2");
+    expect(a.ultimoTexto()).toBe("La placa RRR-555 no está registrada.");
+
+    // El botón "Emitir" del resumen anterior sigue visible: no debe emitir nada.
+    await a.boton("g:emitir");
+    expect(a.ultimoTexto()).toBe("La placa RRR-555 no está registrada.");
+    expect(await listarGuias(a.ctx)).toHaveLength(0);
   });
 });
 

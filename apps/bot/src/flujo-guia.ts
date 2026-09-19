@@ -156,16 +156,19 @@ export async function manejarDocumento(c: CtxDocumento, deps: Dependencias): Pro
     await c.reply(textos.transportistaAjeno(transporte.rucTransportista));
     return;
   }
-  const hayPlacasNuevas =
-    comparacion.placaPrincipal === "nueva" || comparacion.placasSecundarias.some((s) => s.estado === "nueva");
-  const habitual = hayPlacasNuevas ? await transporteHabitual(deps.ctx) : null;
+  const placasNuevas = [
+    ...(comparacion.placaPrincipal === "nueva" ? [{ placa: transporte.placaPrincipal, principal: true }] : []),
+    ...comparacion.placasSecundarias.filter((s) => s.estado === "nueva").map((s) => ({ placa: s.placa, principal: false })),
+  ];
   const pendientes: PendienteTransporte[] = [];
-  if (comparacion.placaPrincipal === "nueva") {
-    pendientes.push({ tipo: "placa", placa: transporte.placaPrincipal, habitual: habitual!.placaPrincipal });
-  }
-  for (const s of comparacion.placasSecundarias) {
-    // La habitual de una carreta es el 2.º vehículo activo; si no hay, solo queda registrarla.
-    if (s.estado === "nueva") pendientes.push({ tipo: "placa", placa: s.placa, habitual: habitual!.placasSecundarias[0] ?? null });
+  if (placasNuevas.length > 0) {
+    // Solo se consulta el transporte habitual si hay algo que ofrecer con él.
+    const habitual = await transporteHabitual(deps.ctx);
+    for (const { placa, principal } of placasNuevas) {
+      // La habitual de una carreta es el 2.º vehículo activo; si no hay, solo queda registrarla.
+      const alternativa = principal ? habitual.placaPrincipal : (habitual.placasSecundarias[0] ?? null);
+      pendientes.push({ tipo: "placa", placa, habitual: alternativa });
+    }
   }
   if (comparacion.conductor === "nuevo") pendientes.push({ tipo: "conductor", datos: transporte.conductor });
 
@@ -375,17 +378,28 @@ export async function manejarBoton(c: CtxBoton, deps: Dependencias): Promise<voi
   // Telegram deja el botón "cargando" hasta que se le responde: siempre, pase lo que pase después.
   await c.answerCallbackQuery().catch(() => {});
   const data = c.callbackQuery.data;
+  let f = flujoGuia(c.session);
+  // Mientras el envío sigue en curso no se atiende ningún botón; en cuanto SUNAT responde, el
+  // flujo caduca y deja de tragarse los botones (incluidos los que manda el proceso de fondo).
+  if (f?.paso === "emitiendo") {
+    if (await siguePendiente(deps, f.guiaId)) {
+      await c.reply(textos.yaEnviando);
+      return;
+    }
+    delete c.session.flujo;
+    f = undefined;
+  }
   if (data.startsWith("g:reenviar:")) {
-    await retomarGuia(c, deps, Number(data.slice("g:reenviar:".length)));
+    const guiaId = Number(data.slice("g:reenviar:".length));
+    if (!Number.isInteger(guiaId) || guiaId <= 0) {
+      await c.reply(textos.sinFlujo);
+      return;
+    }
+    await retomarGuia(c, deps, guiaId);
     return;
   }
-  const f = flujoGuia(c.session);
   if (!f) {
     await c.reply(textos.sinFlujo);
-    return;
-  }
-  if (f.paso === "emitiendo") {
-    await c.reply(textos.yaEnviando);
     return;
   }
   if (data === "g:cancelar") {
@@ -394,6 +408,12 @@ export async function manejarBoton(c: CtxBoton, deps: Dependencias): Promise<voi
     return;
   }
   if (data === "g:emitir") {
+    // El botón sigue visible en mensajes anteriores: solo vale sobre el resumen del flujo actual.
+    // Si mientras tanto llegó otro PDF (o falta resolver el transporte), se retoma donde toca.
+    if (f.paso !== "resumen" || f.pendientesTransporte.length > 0) {
+      await avanzar(c, deps, f);
+      return;
+    }
     await emitir(c, deps, f);
     return;
   }
@@ -440,8 +460,17 @@ export async function manejarBoton(c: CtxBoton, deps: Dependencias): Promise<voi
       await avanzar(c, deps, f);
       return;
     }
-    if (accion === "hab" && pendiente.habitual) reemplazarPlaca(f.transporte, placa, pendiente.habitual);
-    else await registrarVehiculo(deps.ctx, placa);
+    if (accion === "hab") {
+      // "Usar la habitual" sin habitual que usar no puede acabar registrando la placa nueva a
+      // espaldas del dueño: se vuelve a preguntar.
+      if (!pendiente.habitual) {
+        await avanzar(c, deps, f);
+        return;
+      }
+      reemplazarPlaca(f.transporte, placa, pendiente.habitual);
+    } else {
+      await registrarVehiculo(deps.ctx, placa);
+    }
     f.pendientesTransporte.shift();
     await avanzar(c, deps, f);
     return;

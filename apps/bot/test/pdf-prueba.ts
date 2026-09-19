@@ -24,5 +24,7 @@ export function lineasFixture(cambios: (l: string[]) => string[] = (l) => l): st
     new URL("../../../packages/extractor/test/fixtures/guia-desordenada.txt", import.meta.url),
     "utf8",
   );
+  // Las líneas vacías se descartan porque `doc.text("")` de pdfkit no deja rastro en el PDF: si se
+  // conservaran, el texto que devuelve unpdf no coincidiría línea a línea con el fixture.
   return cambios(texto.split(/\r?\n/).filter((l) => l.trim() !== ""));
 }

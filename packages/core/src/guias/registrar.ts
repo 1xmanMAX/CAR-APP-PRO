@@ -1,4 +1,5 @@
-import { conductor, contraparte, empresa, eq, guiaItem, guiaTransportista, vehiculo, type Tx } from "@sunatapp/db";
+import { conductor, contraparte, empresa, eq, guiaItem, guiaTransportista, sql, vehiculo, type Tx } from "@sunatapp/db";
+import { normalizarPlaca } from "@sunatapp/sunat";
 import { tipoDocumentoDe } from "../dominio/validaciones";
 import { ErrorNegocio, ErrorValidacion } from "../errores";
 import { registrarAuditoria } from "../infra/auditoria";
@@ -30,6 +31,41 @@ async function guiaDeDocumento(ctx: Contexto, documentoRecibidoId: number): Prom
   return g?.id ?? null;
 }
 
+async function vehiculoPorPlaca(tx: Tx, placa: string): Promise<{ id: number } | undefined> {
+  const placaSql = sql`upper(regexp_replace(${vehiculo.placa}, '[^A-Za-z0-9]', '', 'g'))`;
+  const [v] = await tx.select({ id: vehiculo.id }).from(vehiculo).where(sql`${placaSql} = ${normalizarPlaca(placa)}`);
+  return v;
+}
+
+interface TransporteResuelto {
+  vehiculoId: number;
+  vehiculoSecundarioId: number | null;
+  conductorId: number;
+}
+
+async function resolverTransporte(tx: Tx, emp: { ruc: string }, transporte: EntradaGuia["transporte"]): Promise<TransporteResuelto> {
+  if (!transporte) {
+    const [veh] = await tx.select().from(vehiculo).where(eq(vehiculo.activo, true)).limit(1);
+    const [cond] = await tx.select().from(conductor).where(eq(conductor.activo, true)).limit(1);
+    if (!veh || !cond) throw new ErrorNegocio("Falta configurar empresa, vehículo o conductor");
+    return { vehiculoId: veh.id, vehiculoSecundarioId: null, conductorId: cond.id };
+  }
+  if (transporte.rucTransportista !== emp.ruc) throw new ErrorNegocio("El transportista de la guía no es la empresa");
+  if (transporte.placasSecundarias.length > 1) throw new ErrorNegocio("Solo se admite una carreta por guía");
+  const vehPrincipal = await vehiculoPorPlaca(tx, transporte.placaPrincipal);
+  if (!vehPrincipal) throw new ErrorNegocio(`La placa ${transporte.placaPrincipal} no está registrada`);
+  let vehiculoSecundarioId: number | null = null;
+  const placaSecundaria = transporte.placasSecundarias[0];
+  if (placaSecundaria) {
+    const vehSecundario = await vehiculoPorPlaca(tx, placaSecundaria);
+    if (!vehSecundario) throw new ErrorNegocio(`La placa ${placaSecundaria} no está registrada`);
+    vehiculoSecundarioId = vehSecundario.id;
+  }
+  const [cond] = await tx.select({ id: conductor.id }).from(conductor).where(eq(conductor.numeroDoc, transporte.conductor.numeroDoc));
+  if (!cond) throw new ErrorNegocio(`El conductor con DNI ${transporte.conductor.numeroDoc} no está registrado`);
+  return { vehiculoId: vehPrincipal.id, vehiculoSecundarioId, conductorId: cond.id };
+}
+
 export async function registrarGuiaBorrador(ctx: Contexto, e: EntradaGuia, usuarioId?: number): Promise<number> {
   const errores = validarEntradaGuia(e);
   if (errores.length) throw new ErrorValidacion(errores);
@@ -40,9 +76,8 @@ export async function registrarGuiaBorrador(ctx: Contexto, e: EntradaGuia, usuar
   try {
     return await ctx.db.transaction(async (tx) => {
       const [emp] = await tx.select().from(empresa).limit(1);
-      const [veh] = await tx.select().from(vehiculo).where(eq(vehiculo.activo, true)).limit(1);
-      const [cond] = await tx.select().from(conductor).where(eq(conductor.activo, true)).limit(1);
-      if (!emp || !veh || !cond) throw new ErrorNegocio("Falta configurar empresa, vehículo o conductor");
+      if (!emp) throw new ErrorNegocio("Falta configurar empresa, vehículo o conductor");
+      const transporte = await resolverTransporte(tx, emp, e.transporte);
       const [guia] = await tx
         .insert(guiaTransportista)
         .values({
@@ -56,8 +91,9 @@ export async function registrarGuiaBorrador(ctx: Contexto, e: EntradaGuia, usuar
           llegadaUbigeo: e.llegada.ubigeo,
           pesoBruto: e.pesoBruto,
           unidadPeso: e.unidadPeso,
-          vehiculoId: veh.id,
-          conductorId: cond.id,
+          vehiculoId: transporte.vehiculoId,
+          vehiculoSecundarioId: transporte.vehiculoSecundarioId,
+          conductorId: transporte.conductorId,
           greRemitenteRef: e.greRemitenteRef,
           documentoRecibidoId: e.documentoRecibidoId ?? null,
         })

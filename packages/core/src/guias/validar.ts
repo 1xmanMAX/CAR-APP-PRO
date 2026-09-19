@@ -1,5 +1,7 @@
+import { normalizarPlaca } from "@sunatapp/sunat";
 import { existeUbigeo } from "../dominio/ubigeos";
-import { tipoDocumentoDe } from "../dominio/validaciones";
+import { tipoDocumentoDe, validarDni, validarRuc } from "../dominio/validaciones";
+import type { TransporteGuia } from "../transporte/transporte";
 
 export interface EntradaGuia {
   fechaTraslado: string;
@@ -12,6 +14,7 @@ export interface EntradaGuia {
   greRemitenteRef: string | null;
   items: Array<{ descripcion: string; cantidad: string; unidadMedida: string }>;
   documentoRecibidoId?: number;
+  transporte?: TransporteGuia;
 }
 
 export function validarEntradaGuia(e: EntradaGuia): string[] {
@@ -33,5 +36,13 @@ export function validarEntradaGuia(e: EntradaGuia): string[] {
     if (!it.descripcion.trim()) errores.push(`El bien ${i + 1} no tiene descripción`);
     if (!(Number(it.cantidad) > 0)) errores.push(`La cantidad del bien ${i + 1} debe ser mayor a cero`);
   });
+  if (e.transporte) {
+    const t = e.transporte;
+    if (!validarRuc(t.rucTransportista)) errores.push("RUC del transportista inválido");
+    if (normalizarPlaca(t.placaPrincipal).length < 5) errores.push("Placa inválida");
+    if (!validarDni(t.conductor.numeroDoc)) errores.push("DNI del conductor inválido");
+    if (!t.conductor.licencia.trim()) errores.push("Falta la licencia del conductor");
+    if (!t.conductor.nombres.trim() || !t.conductor.apellidos.trim()) errores.push("Faltan los nombres del conductor");
+  }
   return errores;
 }

@@ -94,6 +94,7 @@ export const guiaTransportista = pgTable("guia_transportista", {
   pesoBruto: numeric("peso_bruto", { precision: 12, scale: 3 }).notNull(),
   unidadPeso: text("unidad_peso").notNull().default("KGM"),
   vehiculoId: integer("vehiculo_id").notNull().references(() => vehiculo.id),
+  vehiculoSecundarioId: integer("vehiculo_secundario_id").references(() => vehiculo.id),
   conductorId: integer("conductor_id").notNull().references(() => conductor.id),
   greRemitenteRef: text("gre_remitente_ref"),
   documentoRecibidoId: integer("documento_recibido_id").references(() => documentoRecibido.id),

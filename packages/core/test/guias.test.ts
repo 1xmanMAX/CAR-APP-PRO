@@ -1,4 +1,4 @@
-import { and, auditoria, contraparte, correlativo, eq, guiaTransportista } from "@sunatapp/db";
+import { and, auditoria, contraparte, correlativo, eq, guiaTransportista, vehiculo } from "@sunatapp/db";
 import { SunatNoDisponibleError, SunatSimulado, type DocumentoFirmado, type SunatGateway } from "@sunatapp/sunat";
 import { afterEach, describe, expect, it } from "vitest";
 import { ErrorValidacion } from "../src/errores";
@@ -370,6 +370,17 @@ describe("emitirGuia", () => {
     expect(xmlsEnviados).toHaveLength(2);
     expect(xmlsEnviados[1]).toBe(xmlsEnviados[0]); // byte-idéntico: se reenvía el XML ya firmado
     expect(xmlsEnviados[1]).toContain("DISTRIBUIDORA SAC"); // no se reconstruyó con la razón social nueva
+  });
+
+  it("incluye la carreta (vehículo secundario) en el XML emitido", async () => {
+    const ctx = await contexto();
+    const [carreta] = await ctx.db.insert(vehiculo).values({ placa: "XYZ-987" }).returning();
+    const id = await registrarGuiaBorrador(ctx, entradaGuia());
+    await ctx.db.update(guiaTransportista).set({ vehiculoSecundarioId: carreta!.id }).where(eq(guiaTransportista.id, id));
+
+    await emitirGuia(ctx, id);
+    const [g] = await ctx.db.select().from(guiaTransportista).where(eq(guiaTransportista.id, id));
+    expect(await ctx.almacen.leerTexto(g!.rutaXml!)).toContain("XYZ987");
   });
 
   it("dos llamadas concurrentes a aplicarRespuestaGuia para el mismo ticket aplican el resultado una sola vez", async () => {

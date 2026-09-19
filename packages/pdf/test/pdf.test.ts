@@ -18,7 +18,7 @@ const guia: PdfGuia = {
   destinatario: { numeroDoc: "20602712592", razonSocial: "CHOCANO CARGO SAC" },
   partida: "AV. 28 DE JULIO 1275 - LIMA / LIMA / LA VICTORIA",
   llegada: "CARRETERA FEDERICO BASADRE KM 86 - UCAYALI / CORONEL PORTILLO / CALLERIA",
-  vehiculoPlaca: "ABC123",
+  placas: ["ABC123"],
   conductor: { nombre: "JHON LARRY VELEZMORO SOZA", numeroDoc: "45288569", licencia: "Q45288569" },
   pesoBruto: "1500.500",
   unidadPeso: "KGM",
@@ -54,6 +54,11 @@ describe("PDF", () => {
     for (const esperado of ["GUÍA DE REMISIÓN ELECTRÓNICA TRANSPORTISTA", "V001-1", "ABC123", "Q45288569", "1500.500", "CAJAS DE CERAMICA", "SIMULADO"]) {
       expect(t).toContain(esperado);
     }
+  });
+
+  it("muestra tracto y carreta separados por barra", async () => {
+    const t = await texto(await generarPdfGuia({ ...guia, placas: ["F2F-848", "V1X-971"] }, { comprimir: false }));
+    expect(t).toContain("F2F-848 / V1X-971");
   });
 
   it("factura: PDF válido con totales, detracción y letras", async () => {

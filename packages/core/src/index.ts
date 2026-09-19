@@ -18,4 +18,7 @@ export * from "./facturas/preparar";
 export * from "./facturas/emitir";
 export * from "./cobros/cobros";
 export * from "./transporte/transporte";
+export * from "./consultas/consultas";
+export * from "./usuarios/usuarios";
 export { normalizarPlaca } from "@sunatapp/sunat";
+export type { EstadoGuia } from "@sunatapp/db";

@@ -161,6 +161,7 @@ async function generarPdfFacturaSiFalta(ctx: Contexto, id: number): Promise<void
     const rutaPdf = await ctx.almacen.guardar(`facturas/${nombre}.pdf`, pdf);
     await actualizar(ctx, id, { rutaPdf });
   } catch (error) {
+    ctx.log?.("error", `No se pudo generar el PDF de la factura ${id}`, error);
     await registrarAuditoria(ctx.db, { accion: "factura_pdf_pendiente", entidad: "factura", entidadId: id, detalle: { error: (error as Error).message } });
   }
 }
@@ -305,11 +306,12 @@ export async function procesarPendientesFacturas(ctx: Contexto): Promise<Resulta
     try {
       const r = await emitirFactura(ctx, id);
       if (r.estado !== "pendiente_envio") cambios.push(r);
-    } catch {
+    } catch (error) {
       // Ninguna factura debe bloquear el procesamiento de las demás: un fallo inesperado (p. ej.
       // la factura desapareció por una condición de carrera) se aísla aquí y se reintenta en la
       // siguiente pasada; nunca implica volver a llamar a gateway.enviarFactura para una factura
       // que SUNAT ya haya aceptado.
+      ctx.log?.("error", `Error al procesar la factura ${id}`, error);
     }
   }
 
@@ -324,9 +326,10 @@ export async function procesarPendientesFacturas(ctx: Contexto): Promise<Resulta
       await generarPdfFacturaSiFalta(ctx, id);
       const r = await resultadoFactura(ctx, id);
       if (r.rutaPdf) cambios.push(r);
-    } catch {
+    } catch (error) {
       // generarPdfFacturaSiFalta ya captura y audita sus propios fallos; este catch es una red
       // de seguridad adicional para que una factura no bloquee el resto del barrido.
+      ctx.log?.("error", `Error en el barrido de PDF de la factura ${id}`, error);
     }
   }
   return cambios;

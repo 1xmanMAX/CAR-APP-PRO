@@ -7,6 +7,8 @@ import {
 import { crearAlmacenLocal, type Almacen } from "./almacen";
 import type { Config } from "./config";
 
+export type NivelLog = "info" | "error";
+
 export interface Contexto {
   db: Db;
   gateway: SunatGateway;
@@ -25,6 +27,8 @@ export interface Contexto {
    * la factura no: cada documento debe llevar el sello "DOCUMENTO SIMULADO" según corresponda.
    */
   facturaSimulada: boolean;
+  /** Hook opcional para observabilidad del bot: se invoca en los catches que silencian errores. */
+  log?: (nivel: NivelLog, mensaje: string, detalle?: unknown) => void;
 }
 
 const PFX_PRUEBA = "certificado-prueba.pfx";

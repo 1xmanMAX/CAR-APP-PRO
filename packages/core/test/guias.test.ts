@@ -444,6 +444,40 @@ describe("emitirGuia", () => {
     expect(g2!.rutaPdf).toMatch(/\.pdf$/);
   });
 
+  it("una fila envenenada del barrido de PDF (resultadoGuia lanza) no descarta los resultados ya recolectados de las demás", async () => {
+    const ctx = await contexto();
+    const idEnvenenada = await registrarGuiaBorrador(ctx, entradaGuia());
+    const idSana = await registrarGuiaBorrador(ctx, entradaGuia());
+    const guardarOriginal = ctx.almacen.guardar;
+    ctx.almacen.guardar = async (ruta, c) => {
+      if (ruta.endsWith(".pdf")) throw new Error("disco lleno");
+      return guardarOriginal(ruta, c);
+    };
+    await emitirGuia(ctx, idEnvenenada); // queda aceptada, rutaPdf null (falló el guardado)
+    await emitirGuia(ctx, idSana); // idem
+    ctx.almacen.guardar = guardarOriginal;
+
+    const [envenenada] = await ctx.db.select().from(guiaTransportista).where(eq(guiaTransportista.id, idEnvenenada));
+    const nombreEnvenenada = `V001-${envenenada!.numero}.pdf`;
+
+    // Simula una condición de carrera/corrupción: justo cuando el barrido logra guardar el PDF
+    // de idEnvenenada, la fila desaparece (p. ej. borrada por otro proceso) antes de que
+    // resultadoGuia vuelva a leerla, así resultadoGuia lanza ErrorNegocio para esa guía en
+    // concreto en mitad del barrido.
+    ctx.almacen.guardar = async (ruta, c) => {
+      const resultado = await guardarOriginal(ruta, c);
+      if (ruta.endsWith(nombreEnvenenada)) {
+        await ctx.db.delete(guiaTransportista).where(eq(guiaTransportista.id, idEnvenenada));
+      }
+      return resultado;
+    };
+
+    const cambios = await procesarPendientesGuias(ctx);
+    expect(cambios.map((c) => c.id)).toContain(idSana);
+    const [sana] = await ctx.db.select().from(guiaTransportista).where(eq(guiaTransportista.id, idSana));
+    expect(sana!.rutaPdf).toMatch(/\.pdf$/);
+  });
+
   it("al reemitir desde rechazada, si la preparación falla no reenvía el XML rechazado", async () => {
     let ahora = new Date("2026-09-13T15:00:00Z");
     let acepta = false;

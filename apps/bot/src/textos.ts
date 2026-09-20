@@ -1,4 +1,12 @@
-import { formatearSoles, obtenerUbigeo, type Borrador, type MontosFactura, type TransporteGuia } from "@sunatapp/core";
+import {
+  formatearSoles,
+  obtenerUbigeo,
+  type Borrador,
+  type FilaCobro,
+  type FilaGuia,
+  type MontosFactura,
+  type TransporteGuia,
+} from "@sunatapp/core";
 
 export const textos = {
   registroOk: "✅ Listo. Solo te atenderé a ti.",
@@ -71,6 +79,18 @@ export const textos = {
   facturaAceptada: (serieNumero: string) => `✅ Factura ${serieNumero} aceptada.`,
   facturaRechazada: (serieNumero: string, mensaje: string) => `❌ SUNAT rechazó la factura ${serieNumero}: ${mensaje}`,
   facturaSinRespuesta: "⏳ SUNAT no respondió; lo reintento solo y te aviso.",
+
+  // --- Comandos ---
+  sinGuias: "Todavía no hay guías.",
+  sinPendientes: "No hay guías pendientes.",
+  botonRetomar: (serieNumero: string) => `Retomar ${serieNumero}`,
+  sinCobros: "No hay facturas por cobrar. 🎉",
+  pagadoUso: "Úsalo así: /pagado F001-2 1500",
+  facturaNoEncontrada: (serieNumero: string) => `No encontré la factura ${serieNumero}.`,
+  facturaSinSaldo: (serieNumero: string) => `La factura ${serieNumero} no tiene saldo pendiente.`,
+  cobroRegistrado: (saldoCentimos: number, estadoCobro: string) =>
+    `💰 Cobro registrado. Saldo: ${formatearSoles(saldoCentimos)} (${estadoCobro})`,
+  noHayNadaQueCancelar: "No hay nada que cancelar.",
 };
 
 /** Una pregunta por campo; son las únicas frases que el dueño ve cuando falta un dato. */
@@ -140,4 +160,47 @@ export function resumenFactura(d: {
       : `Detracción ${m.detraccionPorcentaje}%: ${formatearSoles(m.detraccionMonto)} · ${neto}`,
     `Pago: ${d.formaPago === "credito" ? `crédito ${d.diasCredito} días` : "contado"}`,
   ].join("\n");
+}
+
+/** "yyyy-mm-dd" → "dd/mm", sin año: alcanza para las listas de /guias, /pendientes y /cobros. */
+function fechaCorta(iso: string): string {
+  const [, m, d] = iso.split("-");
+  return `${d}/${m}`;
+}
+
+const ICONO_ESTADO_GUIA: Record<FilaGuia["estado"], string> = {
+  borrador: "📝",
+  pendiente_envio: "⏳",
+  enviada: "⏳",
+  aceptada: "✅",
+  rechazada: "❌",
+};
+
+/** Una línea de /guias: serie, fecha, destinatario, estado y —solo si está aceptada— si ya se facturó. */
+export function lineaGuia(f: FilaGuia): string {
+  const partes = [f.serieNumero, fechaCorta(f.fechaTraslado), f.destinatario, `${ICONO_ESTADO_GUIA[f.estado]} ${f.estado}`];
+  if (f.estado === "aceptada") partes.push(f.facturada ? "facturada" : "sin facturar");
+  return partes.join(" · ");
+}
+
+/** Una línea de /pendientes: sin fecha, va junto al botón para retomarla. */
+export function lineaPendiente(f: FilaGuia): string {
+  return [f.serieNumero, `${ICONO_ESTADO_GUIA[f.estado]} ${f.estado}`, f.destinatario].join(" · ");
+}
+
+const ICONO_ESTADO_COBRO: Record<FilaCobro["estado"], string> = {
+  vencida: "🔴",
+  vence_hoy: "🟡",
+  pendiente: "⚪",
+};
+
+/** Una línea de /cobros: a qué factura, quién debe, cuándo vence (o si ya venció) y cuánto falta. */
+export function lineaCobro(f: FilaCobro): string {
+  const vencimiento =
+    f.estado === "vence_hoy"
+      ? "vence hoy"
+      : f.estado === "vencida"
+        ? `vencida ${fechaCorta(f.fechaVencimiento)}`
+        : `vence ${fechaCorta(f.fechaVencimiento)}`;
+  return `${ICONO_ESTADO_COBRO[f.estado]} ${f.serieNumero} · ${f.cliente} · ${vencimiento} · ${formatearSoles(f.saldo)}`;
 }

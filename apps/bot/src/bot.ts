@@ -3,6 +3,7 @@ import type { UserFromGetMe } from "grammy/types";
 import type { Contexto } from "@sunatapp/core";
 import type { ProveedorExtraccion } from "@sunatapp/extractor";
 import type { Logger } from "./log";
+import { registrarComandos } from "./comandos";
 import { registrarFlujoFactura } from "./flujo-factura";
 import { registrarFlujoGuia } from "./flujo-guia";
 import { middlewareAutorizacion } from "./registro";
@@ -27,8 +28,10 @@ export function crearBot(token: string, deps: Dependencias, botInfo?: UserFromGe
   bot.use(session({ initial: (): Sesion => ({}) }));
   bot.use(middlewareAutorizacion(deps));
   bot.command(["start", "ayuda"], (c) => c.reply(textos.ayuda));
-  // El flujo de factura va primero: el de guía termina con un `bot.on("message:text")` atrapatodo.
+  // El de guía termina con un `bot.on("message:text")` atrapatodo, así que va al final: los
+  // comandos (incluido /cancelar, dueño de ambos flujos) y el de factura deben registrarse antes.
   registrarFlujoFactura(bot, deps);
+  registrarComandos(bot, deps);
   registrarFlujoGuia(bot, deps);
   bot.catch((e) => {
     deps.log.error("error en manejador", e.error);

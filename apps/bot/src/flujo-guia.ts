@@ -377,8 +377,11 @@ export async function manejarBoton(c: CtxBoton, deps: Dependencias): Promise<voi
     delete c.session.flujo;
     f = undefined;
   }
-  if (data.startsWith("g:reenviar:")) {
-    const guiaId = Number(data.slice("g:reenviar:".length));
+  // "g:reenviar:" (corregir y reenviar una guía rechazada) y "g:retomar:" (el botón de
+  // /pendientes) hacen exactamente lo mismo: rearman la conversación desde la guía guardada.
+  const prefijoRetomar = data.startsWith("g:reenviar:") ? "g:reenviar:" : data.startsWith("g:retomar:") ? "g:retomar:" : null;
+  if (prefijoRetomar) {
+    const guiaId = Number(data.slice(prefijoRetomar.length));
     if (!Number.isInteger(guiaId) || guiaId <= 0) {
       await c.reply(textos.sinFlujo);
       return;
@@ -479,10 +482,6 @@ export async function manejarBoton(c: CtxBoton, deps: Dependencias): Promise<voi
 }
 
 export function registrarFlujoGuia(bot: Bot<ContextoBot>, deps: Dependencias): void {
-  bot.command("cancelar", async (c) => {
-    delete c.session.flujo;
-    await c.reply(textos.cancelado);
-  });
   bot.on("message:document", (c) => manejarDocumento(c, deps));
   bot.on("message:photo", (c) => c.reply(textos.soloPdf).then(() => {}));
   bot.callbackQuery(/^g:/, (c) => manejarBoton(c, deps));

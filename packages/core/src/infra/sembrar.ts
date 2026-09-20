@@ -1,4 +1,5 @@
 import { conductor, empresa, usuario, vehiculo, type Db } from "@sunatapp/db";
+import { normalizarPlaca } from "@sunatapp/sunat";
 import { ErrorNegocio } from "../errores";
 
 export interface DatosIniciales {
@@ -17,6 +18,9 @@ export interface DatosIniciales {
 export async function sembrarDatosIniciales(db: Db, d: DatosIniciales): Promise<void> {
   if ((await db.select({ id: empresa.id }).from(empresa).limit(1)).length > 0) {
     throw new ErrorNegocio("Los datos iniciales ya fueron cargados");
+  }
+  if (d.vehiculoSecundario && normalizarPlaca(d.vehiculoSecundario.placa) === normalizarPlaca(d.vehiculo.placa)) {
+    throw new ErrorNegocio("La placa de la carreta no puede ser la misma que la del tracto");
   }
   await db.transaction(async (tx) => {
     await tx.insert(empresa).values(d.empresa);

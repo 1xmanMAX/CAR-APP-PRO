@@ -2,7 +2,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type * as DbModulo from "@sunatapp/db";
-import { auditoria, empresa, usuario } from "@sunatapp/db";
+import { auditoria, crearDb, empresa, usuario } from "@sunatapp/db";
 import { generarCertificadoPrueba } from "@sunatapp/sunat";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ErrorNegocio } from "../src/errores";
@@ -99,6 +99,16 @@ describe("sembrar y auditoría", () => {
     await expect(sembrarDatosIniciales(ctx.db, DATOS_INICIALES)).rejects.toBeInstanceOf(ErrorNegocio);
     await registrarAuditoria(ctx.db, { accion: "prueba", entidad: "empresa", entidadId: 1, detalle: { a: 1 } });
     expect((await ctx.db.select().from(auditoria))[0]).toMatchObject({ accion: "prueba", entidadId: "1" });
+  });
+
+  it("rechaza sembrar una carreta con la misma placa que el tracto, sin llegar a insertar nada", async () => {
+    const { db, cerrar } = await crearDb({ tipo: "pglite" });
+    cerrables.push(cerrar);
+    // "abc-123" normaliza igual que "ABC-123": el guion/minúsculas no deben colar la duplicada.
+    await expect(
+      sembrarDatosIniciales(db, { ...DATOS_INICIALES, vehiculoSecundario: { placa: "abc-123" } }),
+    ).rejects.toThrow("La placa de la carreta no puede ser la misma que la del tracto");
+    expect(await db.select({ id: empresa.id }).from(empresa)).toHaveLength(0);
   });
 });
 

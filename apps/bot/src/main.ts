@@ -12,7 +12,7 @@ import {
 import { crearExtractor } from "@sunatapp/extractor";
 import { crearBot, type Dependencias } from "./bot";
 import { programarAvisoDiario, textoAvisoDiario } from "./aviso-diario";
-import { cargarConfigBot, ErrorConfiguracion, mensajeDeArranque } from "./config";
+import { cargarConfigBot, ErrorConfiguracion, mensajeDeArranque, type ConfigBot } from "./config";
 import { notificarFactura } from "./flujo-factura";
 import { notificarGuia } from "./flujo-guia";
 import { crearTareaFondo, type TipoDocumento } from "./fondo";
@@ -22,7 +22,17 @@ import { generarCodigoRegistro } from "./registro";
 cargarEnv();
 
 const config = cargarConfig();
-const cfgBot = cargarConfigBot();
+
+// Un TELEGRAM_BOT_TOKEN ausente o un BOT_HORA_AVISO inválido no deben morir con un volcado de
+// pila: sin base de datos abierta todavía, no hay nada que cerrar más que avisar en castellano.
+let cfgBot: ConfigBot;
+try {
+  cfgBot = cargarConfigBot();
+} catch (error) {
+  crearLogger("./logs").error("el bot no pudo arrancar", error);
+  console.error(mensajeDeArranque(error));
+  process.exit(1);
+}
 const log = crearLogger(cfgBot.logDir);
 
 const { ctx, cerrar } = await crearContexto(config);

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { emitirGuia, registrarGuiaBorrador, registrarVehiculo } from "@sunatapp/core";
 import { crearContextoPrueba, entradaGuia, SunatSimulado } from "../../../packages/core/test/helpers";
 import { crearArnes } from "./arnes";
+import { notificarFactura } from "../src/flujo-factura";
 import { lineasFixture, pdfConLineas } from "./pdf-prueba";
 
 const cerrables: Array<() => Promise<void>> = [];
@@ -31,6 +32,57 @@ const RESUMEN = [
   "Detracción 4%: S/ 100.00 · Neto a cobrar: S/ 2,400.00",
   "Pago: crédito 30 días",
 ].join("\n");
+
+describe("flujo de factura: aviso al segundo plano", () => {
+  /**
+   * `alAvisar` existe para que quien reintenta desde una tarea de segundo plano (Task 12) no
+   * remate con "SUNAT no respondió" si lo que falló vino después de que el chat ya recibió algo.
+   * A diferencia de la guía —que tras avisar además ofrece facturar (una llamada más que puede
+   * fallar)— la factura no encadena ninguna llamada después del aviso: hoy no hay forma de que
+   * `emitir()` llegue a su `catch` con `avisado = true`, así que una prueba que reproduzca
+   * exactamente el patrón de `flujo-guia.test.ts` (fallar el envío posterior al aviso) pasaría
+   * igual con o sin la guarda, tan tautológica como la que motivó la Tarea 1. Esta prueba cubre en
+   * cambio lo que sí falta: que `notificarFactura` invoque `alAvisar` en cada desenlace posible
+   * (aceptada, rechazada y sin respuesta) antes de terminar, que es el contrato del que depende
+   * esa guarda. Se verifica el RED quitando las llamadas a `alAvisar()` de `notificarFactura` en
+   * `flujo-factura.ts`: esta prueba debe fallar.
+   */
+  it("avisa (llama a alAvisar) en cada desenlace de la factura", async () => {
+    const a = await crearArnes();
+    cerrables.push(a.cerrar);
+    let avisos = 0;
+    const alAvisar = () => {
+      avisos += 1;
+    };
+
+    await notificarFactura(
+      a.deps,
+      a.api,
+      111,
+      { id: 1, serieNumero: "F001-1", estado: "aceptada", codigo: null, mensaje: null, rutaPdf: null },
+      alAvisar,
+    );
+    expect(avisos).toBe(1);
+
+    await notificarFactura(
+      a.deps,
+      a.api,
+      111,
+      { id: 1, serieNumero: "F001-1", estado: "rechazada", codigo: "2800", mensaje: "dato inválido", rutaPdf: null },
+      alAvisar,
+    );
+    expect(avisos).toBe(2);
+
+    await notificarFactura(
+      a.deps,
+      a.api,
+      111,
+      { id: 1, serieNumero: "F001-1", estado: "enviada", codigo: null, mensaje: null, rutaPdf: null },
+      alAvisar,
+    );
+    expect(avisos).toBe(3);
+  });
+});
 
 describe("flujo de factura: camino feliz", () => {
   it("cobra el flete de una guía aceptada y emite la factura", async () => {

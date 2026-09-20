@@ -31,7 +31,11 @@ export async function crearArnes(
     sinDueno?: boolean;
     gateway?: Gateway;
     ctx?: Contexto;
-    /** Simula que Telegram rechaza una llamada concreta (se decide antes de registrarla). */
+    /**
+     * Simula que Telegram rechaza una llamada concreta (se decide antes de registrarla). Se
+     * evalúa una sola vez por llamada que cumpla la condición: falla la primera y deja pasar
+     * las siguientes, para no tragarse también el intento de aviso posterior.
+     */
     fallarApi?: (metodo: string, llamadas: Llamada[]) => boolean;
   } = {},
 ) {
@@ -56,8 +60,12 @@ export async function crearArnes(
     log: { info() {}, error() {} },
   };
   const bot = crearBot("123:prueba", deps, BOT_INFO);
+  let fallado = false;
   bot.api.config.use(async (_prev, metodo, payload) => {
-    if (o.fallarApi?.(metodo, llamadas)) throw new Error(`Telegram rechazó ${metodo}`);
+    if (!fallado && o.fallarApi?.(metodo, llamadas)) {
+      fallado = true;
+      throw new Error(`Telegram rechazó ${metodo}`);
+    }
     llamadas.push({ metodo, payload: payload as Record<string, unknown> });
     const conMensaje = ["sendMessage", "sendDocument", "editMessageText"].includes(metodo);
     return {

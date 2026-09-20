@@ -31,6 +31,12 @@ async function guiaDeDocumento(ctx: Contexto, documentoRecibidoId: number): Prom
   return g?.id ?? null;
 }
 
+/**
+ * Misma normalización de placa que `placaSql` en `transporte/transporte.ts`, duplicada a propósito
+ * porque aquí se consulta dentro de la transacción: las dos expresiones tienen que quedar byte a
+ * byte idénticas. Si divergen, comparar (allá) y registrar (aquí) encontrarían vehículos distintos
+ * para la misma placa y la guía saldría con otra unidad.
+ */
 async function vehiculoPorPlaca(tx: Tx, placa: string): Promise<{ id: number } | undefined> {
   const placaSql = sql`upper(regexp_replace(${vehiculo.placa}, '[^A-Za-z0-9]', '', 'g'))`;
   const [v] = await tx.select({ id: vehiculo.id }).from(vehiculo).where(sql`${placaSql} = ${normalizarPlaca(placa)}`);

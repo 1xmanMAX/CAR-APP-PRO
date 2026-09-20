@@ -24,6 +24,12 @@ export interface ComparacionTransporte {
   conductor: "registrado" | "nuevo";
 }
 
+/**
+ * Normalización de la placa dentro de SQL. Está duplicada a propósito en
+ * `guias/registrar.ts` (`vehiculoPorPlaca`), que trabaja sobre una transacción: ambas expresiones
+ * tienen que quedar byte a byte idénticas. Si divergen, comparar (aquí) y registrar (allá)
+ * encontrarían vehículos distintos para la misma placa y la guía saldría con otra unidad.
+ */
 function placaSql(columna: typeof vehiculo.placa) {
   return sql`upper(regexp_replace(${columna}, '[^A-Za-z0-9]', '', 'g'))`;
 }

@@ -43,6 +43,23 @@ describe("/guias", () => {
     await a.texto("/guias");
     expect(a.ultimoTexto()).toBe("V001-1 · 14/09 · CHOCANO CARGO SAC · ✅ aceptada · facturada");
   });
+
+  it("muestra el estado en castellano, no el nombre técnico de la base", async () => {
+    // Sin red la guía queda "pendiente_envio": el dueño no tiene por qué leer eso.
+    const a = await arnes({
+      gateway: {
+        enviarGuia: () => Promise.reject(new Error("sin red")),
+        consultarTicket: () => Promise.reject(new Error("sin red")),
+        enviarFactura: () => Promise.reject(new Error("sin red")),
+      } as never,
+    });
+    const guiaId = await registrarGuiaBorrador(a.ctx, entradaGuia());
+    await emitirGuia(a.ctx, guiaId);
+
+    await a.texto("/guias");
+    expect(a.ultimoTexto()).toContain("⏳ por enviar");
+    expect(a.ultimoTexto()).not.toContain("pendiente_envio");
+  });
 });
 
 describe("/pendientes", () => {

@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { listarGuias, registrarVehiculo } from "@sunatapp/core";
-import { SunatSimulado } from "../../../packages/core/test/helpers";
+import { ErrorNegocio, listarGuias, registrarVehiculo, resultadoGuia } from "@sunatapp/core";
+import { crearContextoPrueba, SunatSimulado } from "../../../packages/core/test/helpers";
+import { notificarGuia } from "../src/flujo-guia";
 import { crearArnes } from "./arnes";
 import { lineasFixture, pdfConLineas } from "./pdf-prueba";
 
@@ -304,6 +305,119 @@ describe("flujo de guía: envío a SUNAT", () => {
     await a.boton("g:emitir");
     expect(a.ultimoTexto()).toBe("La placa RRR-555 no está registrada.");
     expect(await listarGuias(a.ctx)).toHaveLength(0);
+  });
+});
+
+describe("flujo de guía: lo que el núcleo no admite", () => {
+  it("rechaza de entrada una guía con más de una carreta, antes de preguntar nada", async () => {
+    const a = await arnes(
+      lineasFixture((l) => puntosEnOrden(l).map((x) => x.replace("ABC-123 - XYZ-987", "ABC-123 - XYZ-987 - QQQ-222"))),
+    );
+    await a.documento("pdf1");
+    expect(a.ultimoTexto()).toBe(
+      "Esta guía indica más de una carreta (XYZ-987, QQQ-222) y la guía de transportista solo admite una. Corrígelo con el remitente y vuelve a enviarme el PDF.",
+    );
+    expect(await listarGuias(a.ctx)).toHaveLength(0);
+  });
+
+  it("dice en castellano por qué no pudo emitir y no deja la conversación colgada", async () => {
+    const creado = await crearContextoPrueba();
+    cerrables.push(creado.cerrar);
+    // El núcleo rechaza la guía por una regla de negocio justo al registrarla (p. ej. una placa
+    // que dejó de estar registrada entre el resumen y el "Emitir").
+    let rechazar = false;
+    const db = creado.ctx.db;
+    creado.ctx.db = new Proxy(db, {
+      get(objetivo, prop, receptor) {
+        if (prop === "transaction" && rechazar) {
+          return () => Promise.reject(new ErrorNegocio("La placa XYZ-987 no está registrada"));
+        }
+        return Reflect.get(objetivo, prop, receptor) as unknown;
+      },
+    }) as typeof db;
+    const a = await crearArnes({ ctx: creado.ctx, archivos: { pdf1: await pdfConLineas(lineasFixture(puntosEnOrden)) } });
+    cerrables.push(a.cerrar);
+    await registrarVehiculo(a.ctx, "XYZ-987");
+    await a.documento("pdf1");
+
+    rechazar = true;
+    await a.boton("g:emitir");
+    expect(a.ultimoTexto()).toBe("La placa XYZ-987 no está registrada");
+
+    rechazar = false;
+    await a.texto("hola");
+    expect(a.ultimoTexto()).toBe("Envíame el PDF de la guía del remitente o escribe /ayuda.");
+  });
+
+  it("no reabre una guía que ya no se puede corregir", async () => {
+    const a = await arnes();
+    await registrarVehiculo(a.ctx, "XYZ-987");
+    await a.documento("pdf1");
+    await a.boton("g:emitir");
+    await a.esperarTareas();
+
+    // Un botón viejo de /pendientes sobre una guía que mientras tanto SUNAT aceptó.
+    await a.boton("g:retomar:1");
+    expect(a.ultimoTexto()).toBe("La guía V001-1 ya no se puede corregir: está aceptada.");
+  });
+});
+
+describe("flujo de guía: avisos que no se repiten ni se pierden", () => {
+  it("no vuelve a ofrecer la factura de una guía que ya se facturó", async () => {
+    const a = await arnes();
+    await registrarVehiculo(a.ctx, "XYZ-987");
+    await a.documento("pdf1");
+    await a.boton("g:emitir");
+    await a.esperarTareas();
+    expect(a.textosEnviados()).toContain("¿Facturar este flete (V001-1)?");
+
+    await a.boton("f:si:1");
+    await a.texto("2500");
+    await a.boton("f:igv:si");
+    await a.boton("f:cli:rem");
+    await a.boton("f:pago:contado");
+    await a.boton("f:emitir");
+    await a.esperarTareas();
+
+    // El barrido de PDF del proceso de fondo vuelve a anunciar una guía ya aceptada.
+    const antes = a.textosEnviados().length;
+    await notificarGuia(a.deps, a.api, 111, await resultadoGuia(a.ctx, 1));
+    expect(a.textosEnviados().slice(antes)).toEqual(["✅ Guía V001-1 aceptada."]);
+  });
+
+  it("avisa al dueño si el envío de la guía revienta en segundo plano", async () => {
+    const creado = await crearContextoPrueba();
+    cerrables.push(creado.cerrar);
+    // El almacén se cae al buscar el PDF ya emitido: notificarGuia lanza dentro de la tarea.
+    creado.ctx.almacen = {
+      ...creado.ctx.almacen,
+      rutaAbsoluta: () => {
+        throw new Error("almacén caído");
+      },
+    };
+    const a = await crearArnes({ ctx: creado.ctx, archivos: { pdf1: await pdfConLineas(lineasFixture(puntosEnOrden)) } });
+    cerrables.push(a.cerrar);
+    await registrarVehiculo(a.ctx, "XYZ-987");
+    await a.documento("pdf1");
+
+    await a.boton("g:emitir");
+    await a.esperarTareas();
+    expect(a.documentosEnviados()).toHaveLength(0);
+    expect(a.ultimoTexto()).toBe("⏳ SUNAT no respondió; lo reintento solo y te aviso.");
+  });
+
+  it("no remata con «SUNAT no respondió» si el aviso ya había salido", async () => {
+    const a = await arnes(lineasFixture(puntosEnOrden), {
+      // El PDF llega al chat y falla lo que viene después (el ofrecimiento de facturar).
+      fallarApi: (metodo, llamadas) => metodo === "sendMessage" && llamadas.some((l) => l.metodo === "sendDocument"),
+    });
+    await registrarVehiculo(a.ctx, "XYZ-987");
+    await a.documento("pdf1");
+
+    await a.boton("g:emitir");
+    await a.esperarTareas();
+    expect(a.documentosEnviados()).toHaveLength(1);
+    expect(a.textosEnviados()).not.toContain("⏳ SUNAT no respondió; lo reintento solo y te aviso.");
   });
 });
 

@@ -8,8 +8,11 @@ import {
   compararTransporte,
   emitirGuia,
   entradaDesdeBorrador,
+  ErrorNegocio,
+  ErrorValidacion,
   ETIQUETAS_CAMPO,
   guardarExtraccion,
+  listarGuiasSinFacturar,
   normalizarPlaca,
   ORDEN_CAMPOS,
   registrarConductor,
@@ -39,8 +42,19 @@ type CtxTexto = Filter<ContextoBot, "message:text">;
 type CtxBoton = Filter<ContextoBot, "callback_query:data">;
 type Ctx = ContextoBot;
 
-/** Avisa del desenlace de una guía. También la usa el proceso de fondo (Task 12). */
-export async function notificarGuia(deps: Dependencias, api: Api, chatId: number, r: ResultadoEmision): Promise<void> {
+/**
+ * Avisa del desenlace de una guía. También la usa el proceso de fondo (Task 12).
+ *
+ * `alAvisar` se llama en cuanto el chat recibió algo: quien llama desde una tarea de segundo
+ * plano lo usa para no rematar con un "SUNAT no respondió" si lo que falló vino después del aviso.
+ */
+export async function notificarGuia(
+  deps: Dependencias,
+  api: Api,
+  chatId: number,
+  r: ResultadoEmision,
+  alAvisar: () => void = () => {},
+): Promise<void> {
   if (r.estado === "aceptada") {
     if (r.rutaPdf) {
       await api.sendDocument(chatId, new InputFile(deps.ctx.almacen.rutaAbsoluta(r.rutaPdf)), {
@@ -49,16 +63,23 @@ export async function notificarGuia(deps: Dependencias, api: Api, chatId: number
     } else {
       await api.sendMessage(chatId, textos.guiaAceptada(r.serieNumero));
     }
-    await ofrecerFactura(api, chatId, r.id, r.serieNumero);
+    alAvisar();
+    // El aviso de aceptación puede repetirse (p. ej. el barrido de PDF vuelve a anunciar una guía
+    // ya aceptada cuando su PDF llega tarde). Ofrecer facturar una guía ya facturada solo lleva a
+    // un "Sí" que responde "La guía ya tiene factura": se ofrece únicamente si sigue sin facturar.
+    const sinFacturar = await listarGuiasSinFacturar(deps.ctx);
+    if (sinFacturar.some((g) => g.id === r.id)) await ofrecerFactura(api, chatId, r.id, r.serieNumero);
     return;
   }
   if (r.estado === "rechazada") {
     await api.sendMessage(chatId, textos.guiaRechazada(r.serieNumero, r.mensaje ?? ""), {
       reply_markup: new InlineKeyboard().text(textos.botonReenviar, `g:reenviar:${r.id}`),
     });
+    alAvisar();
     return;
   }
   await api.sendMessage(chatId, textos.guiaSinRespuesta);
+  alAvisar();
 }
 
 // --- Lectura del PDF -------------------------------------------------------
@@ -142,6 +163,13 @@ export async function manejarDocumento(c: CtxDocumento, deps: Dependencias): Pro
   const comparacion = await compararTransporte(deps.ctx, transporte);
   if (!comparacion.rucEmpresaCoincide) {
     await c.reply(textos.transportistaAjeno(transporte.rucTransportista));
+    return;
+  }
+  // La GRE-T admite una sola carreta y el núcleo lo rechaza al registrar. Si se dejara seguir, el
+  // dueño respondería todas las preguntas para chocar con el error al final, sin forma de
+  // corregir el transporte desde el chat: se corta aquí, diciendo qué pasó.
+  if (transporte.placasSecundarias.length > 1) {
+    await c.reply(textos.demasiadasCarretas(transporte.placasSecundarias));
     return;
   }
   const placasNuevas = [
@@ -320,6 +348,13 @@ async function emitir(c: Ctx, deps: Dependencias, f: EstadoFlujoGuia): Promise<v
       guiaId = await registrarGuiaBorrador(deps.ctx, entrada, c.session.usuarioId);
     }
   } catch (error) {
+    if (error instanceof ErrorNegocio || error instanceof ErrorValidacion) {
+      // Nada salió hacia SUNAT: es un problema de los datos, y el dueño tiene que leerlo en
+      // castellano, no el "algo salió mal" genérico que además dejaba la conversación colgada.
+      delete c.session.flujo;
+      await c.reply(error.message);
+      return;
+    }
     f.paso = paso;
     throw error;
   }
@@ -331,14 +366,31 @@ async function emitir(c: Ctx, deps: Dependencias, f: EstadoFlujoGuia): Promise<v
   const chatId = c.chat!.id;
   const api = c.api;
   deps.enSegundoPlano(async () => {
-    const r = await emitirGuia(deps.ctx, guiaId);
-    await notificarGuia(deps, api, chatId, r);
+    // Igual que en el flujo de factura: callar dejaría al dueño esperando un aviso que no llega.
+    // `avisado` evita el doble mensaje si lo que falla es algo posterior al envío del aviso.
+    let avisado = false;
+    try {
+      const r = await emitirGuia(deps.ctx, guiaId);
+      await notificarGuia(deps, api, chatId, r, () => {
+        avisado = true;
+      });
+    } catch (error) {
+      deps.log.error(`error al emitir la guía ${guiaId}`, error);
+      if (!avisado) await api.sendMessage(chatId, textos.guiaSinRespuesta).catch(() => {});
+    }
   });
 }
 
 /** "Corregir y reenviar": rearma la conversación desde la guía guardada, sin depender del chat. */
 async function retomarGuia(c: Ctx, deps: Dependencias, guiaId: number): Promise<void> {
   const d = await cargarGuiaCompleta(deps.ctx.db, guiaId);
+  // Estos botones sobreviven en el chat: uno viejo puede apuntar a una guía que ya se aceptó (o
+  // que está en vuelo). El núcleo lo rechazaría recién al emitir; aquí se dice en castellano.
+  if (d.guia.estado !== "borrador" && d.guia.estado !== "rechazada") {
+    const serieNumero = d.guia.numero ? `${d.guia.serie}-${d.guia.numero}` : `${d.guia.serie}-(sin número)`;
+    await c.reply(textos.guiaYaNoCorregible(serieNumero, d.guia.estado));
+    return;
+  }
   const flujo: EstadoFlujoGuia = {
     tipo: "guia",
     paso: "resumen",

@@ -2,11 +2,29 @@ import {
   formatearSoles,
   obtenerUbigeo,
   type Borrador,
+  type EstadoGuia,
   type FilaCobro,
   type FilaGuia,
   type MontosFactura,
   type TransporteGuia,
 } from "@sunatapp/core";
+
+/**
+ * Los nombres técnicos del estado ("pendiente_envio", "enviada") no le dicen nada al dueño: cada
+ * vez que un estado se muestra en el chat pasa por aquí.
+ */
+const ETIQUETA_ESTADO_GUIA: Record<EstadoGuia, string> = {
+  borrador: "borrador",
+  pendiente_envio: "por enviar",
+  enviada: "enviada a SUNAT",
+  aceptada: "aceptada",
+  rechazada: "rechazada",
+};
+
+/** `estado` llega como string desde `ResultadoEmision`: un valor desconocido se muestra tal cual. */
+export function etiquetaEstadoGuia(estado: string): string {
+  return ETIQUETA_ESTADO_GUIA[estado as EstadoGuia] ?? estado;
+}
 
 export const textos = {
   registroOk: "✅ Listo. Solo te atenderé a ti.",
@@ -27,7 +45,12 @@ export const textos = {
   soloPdf: "Por ahora solo leo PDF. Envíame el PDF de la guía.",
   archivoGrande: "Ese archivo pasa de 20 MB, el límite de Telegram para bots. Envíame el PDF original de SUNAT.",
   pdfSinTexto: "No pude leer texto en ese PDF. Envíame el PDF original de SUNAT.",
-  guiaYaRegistrada: (serieNumero: string, estado: string) => `Esta guía ya la registré como ${serieNumero} (${estado}).`,
+  guiaYaRegistrada: (serieNumero: string, estado: string) =>
+    `Esta guía ya la registré como ${serieNumero} (${etiquetaEstadoGuia(estado)}).`,
+  guiaYaNoCorregible: (serieNumero: string, estado: string) =>
+    `La guía ${serieNumero} ya no se puede corregir: está ${etiquetaEstadoGuia(estado)}.`,
+  demasiadasCarretas: (placas: string[]) =>
+    `Esta guía indica más de una carreta (${placas.join(", ")}) y la guía de transportista solo admite una. Corrígelo con el remitente y vuelve a enviarme el PDF.`,
   transportistaAjeno: (ruc: string) => `⛔ Esta guía indica otro transportista (RUC ${ruc}). No la puedo emitir.`,
   placaNueva: (placa: string) => `La placa ${placa} no está registrada.`,
   botonRegistrarPlaca: (placa: string) => `Registrar ${placa}`,
@@ -183,14 +206,19 @@ const ICONO_ESTADO_GUIA: Record<FilaGuia["estado"], string> = {
 
 /** Una línea de /guias: serie, fecha, destinatario, estado y —solo si está aceptada— si ya se facturó. */
 export function lineaGuia(f: FilaGuia): string {
-  const partes = [f.serieNumero, fechaCorta(f.fechaTraslado), f.destinatario, `${ICONO_ESTADO_GUIA[f.estado]} ${f.estado}`];
+  const partes = [
+    f.serieNumero,
+    fechaCorta(f.fechaTraslado),
+    f.destinatario,
+    `${ICONO_ESTADO_GUIA[f.estado]} ${etiquetaEstadoGuia(f.estado)}`,
+  ];
   if (f.estado === "aceptada") partes.push(f.facturada ? "facturada" : "sin facturar");
   return partes.join(" · ");
 }
 
 /** Una línea de /pendientes: sin fecha, va junto al botón para retomarla. */
 export function lineaPendiente(f: FilaGuia): string {
-  return [f.serieNumero, `${ICONO_ESTADO_GUIA[f.estado]} ${f.estado}`, f.destinatario].join(" · ");
+  return [f.serieNumero, `${ICONO_ESTADO_GUIA[f.estado]} ${etiquetaEstadoGuia(f.estado)}`, f.destinatario].join(" · ");
 }
 
 const ICONO_ESTADO_COBRO: Record<FilaCobro["estado"], string> = {

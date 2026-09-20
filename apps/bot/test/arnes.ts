@@ -31,6 +31,8 @@ export async function crearArnes(
     sinDueno?: boolean;
     gateway?: Gateway;
     ctx?: Contexto;
+    /** Simula que Telegram rechaza una llamada concreta (se decide antes de registrarla). */
+    fallarApi?: (metodo: string, llamadas: Llamada[]) => boolean;
   } = {},
 ) {
   const creado = o.ctx
@@ -55,6 +57,7 @@ export async function crearArnes(
   };
   const bot = crearBot("123:prueba", deps, BOT_INFO);
   bot.api.config.use(async (_prev, metodo, payload) => {
+    if (o.fallarApi?.(metodo, llamadas)) throw new Error(`Telegram rechazó ${metodo}`);
     llamadas.push({ metodo, payload: payload as Record<string, unknown> });
     const conMensaje = ["sendMessage", "sendDocument", "editMessageText"].includes(metodo);
     return {
@@ -69,6 +72,8 @@ export async function crearArnes(
   return {
     ctx,
     deps,
+    /** Para llamar directamente a `notificarGuia`/`notificarFactura`, como hace el proceso de fondo. */
+    api: bot.api,
     llamadas,
     cerrar: async () => {
       await Promise.allSettled(tareas);

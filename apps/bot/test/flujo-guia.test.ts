@@ -1,0 +1,445 @@
+import { afterEach, describe, expect, it } from "vitest";
+import { ErrorNegocio, listarGuias, registrarVehiculo, resultadoGuia } from "@sunatapp/core";
+import { crearContextoPrueba, SunatSimulado } from "../../../packages/core/test/helpers";
+import { notificarGuia } from "../src/flujo-guia";
+import { crearArnes } from "./arnes";
+import { lineasFixture, pdfConLineas } from "./pdf-prueba";
+
+const cerrables: Array<() => Promise<void>> = [];
+afterEach(async () => {
+  while (cerrables.length) await cerrables.pop()!();
+});
+
+type Opciones = Parameters<typeof crearArnes>[0];
+
+/**
+ * El fixture del extractor trae las etiquetas de los puntos al revés (formato a dos columnas), así
+ * que el lector deja partida y llegada dudosas a propósito. Para los casos en los que el bot no
+ * debe preguntar nada se ponen en el orden natural; el caso del distrito usa el fixture tal cual.
+ */
+const puntosEnOrden = (l: string[]) =>
+  l.map((x) => (x === "PUNTO DE LLEGADA" ? "PUNTO DE PARTIDA :" : x === "PUNTO DE PARTIDA :" ? "PUNTO DE LLEGADA" : x));
+
+async function arnes(lineas: string[] = lineasFixture(puntosEnOrden), o: Opciones = {}) {
+  const a = await crearArnes({ ...o, archivos: { pdf1: await pdfConLineas(lineas) } });
+  cerrables.push(a.cerrar);
+  return a;
+}
+
+const sinFecha = () => lineasFixture((l) => puntosEnOrden(l).filter((x) => !x.includes("14/09/2026")));
+
+/** Guía con un conductor que no es el habitual de la empresa (DNI y licencia distintos). */
+const otroConductor = () =>
+  lineasFixture((l) =>
+    puntosEnOrden(l).map((x) =>
+      x
+        .replace("JHON LARRY VELEZMORO SOZA45288569", "PEDRO RAUL QUISPE MAMANI10203040")
+        .replace("Q45288569LICENCIA", "A10203040LICENCIA"),
+    ),
+  );
+
+/** SUNAT rechaza el primer envío y acepta el siguiente: sirve para cerrar "corregir y reenviar". */
+class SunatRechazaUnaVez {
+  private envios = 0;
+  private readonly rechaza = new SunatSimulado({ demoraMs: 0, rechazo: { codigo: "2800", mensaje: "dato inválido" } });
+  private readonly acepta = new SunatSimulado({ demoraMs: 0 });
+  enviarGuia(doc: Parameters<SunatSimulado["enviarGuia"]>[0]) {
+    this.envios += 1;
+    return this.acepta.enviarGuia(doc);
+  }
+  consultarTicket(ticket: string) {
+    return (this.envios <= 1 ? this.rechaza : this.acepta).consultarTicket(ticket);
+  }
+  enviarFactura(doc: Parameters<SunatSimulado["enviarFactura"]>[0]) {
+    return this.acepta.enviarFactura(doc);
+  }
+}
+
+describe("flujo de guía: camino feliz", () => {
+  it("lee el PDF, muestra el resumen y emite la guía", async () => {
+    const a = await arnes();
+    await registrarVehiculo(a.ctx, "XYZ-987");
+
+    await a.documento("pdf1");
+    const resumen = a.ultimoTexto();
+    expect(resumen.startsWith("🧾 Guía de transportista (borrador)")).toBe(true);
+    expect(resumen).toContain("Remitente: DISTRIBUIDORA SAC (20131312955)");
+    expect(resumen).toContain("Destinatario: CHOCANO CARGO SAC (20602712592)");
+    expect(resumen).toContain("Partida: AV. 28 DE JULIO 1275 LIMA — LA VICTORIA, LIMA");
+    expect(resumen).toContain("Llegada: CARRETERA FEDERICO BASADRE KM 86 PUCALLPA — CALLERIA, CORONEL PORTILLO");
+    expect(resumen).toContain("Traslado: 14/09/2026 · Peso: 1500.5 KGM");
+    expect(resumen).toContain("Vehículo: ABC-123 / XYZ-987 · Conductor: JHON LARRY VELEZMORO SOZA");
+    expect(resumen).toContain("Bienes: 1. CAJAS DE CERAMICA — 120 BX");
+    expect(resumen).toContain("GRE remitente: EG07-5531");
+    expect(a.botones().map((b) => b.callback_data)).toEqual(["g:emitir", "g:corregir", "g:cancelar"]);
+
+    await a.boton("g:emitir");
+    expect(a.ultimoTexto()).toBe("📤 Enviando a SUNAT…");
+
+    await a.esperarTareas();
+    const documentos = a.documentosEnviados();
+    expect(documentos).toHaveLength(1);
+    expect(documentos[0]!.payload.caption).toBe("✅ Guía V001-1 aceptada.");
+  });
+
+  it("avisa cuando llega otra vez el mismo PDF", async () => {
+    const a = await arnes();
+    await registrarVehiculo(a.ctx, "XYZ-987");
+    await a.documento("pdf1");
+    await a.boton("g:emitir");
+    await a.esperarTareas();
+
+    await a.documento("pdf1");
+    expect(a.ultimoTexto()).toBe("Esta guía ya la registré como V001-1 (aceptada).");
+  });
+});
+
+describe("flujo de guía: preguntas", () => {
+  it("pregunta el campo que no pudo leer y sigue con el resumen", async () => {
+    const a = await arnes(sinFecha());
+    await registrarVehiculo(a.ctx, "XYZ-987");
+    await a.documento("pdf1");
+    expect(a.ultimoTexto()).toBe("¿Cuál es la fecha de inicio de traslado? (dd/mm/aaaa)");
+
+    await a.texto("14/09/2026");
+    expect(a.ultimoTexto()).toContain("Traslado: 14/09/2026");
+  });
+
+  it("repite la pregunta cuando la respuesta no se entiende", async () => {
+    const a = await arnes(sinFecha());
+    await registrarVehiculo(a.ctx, "XYZ-987");
+    await a.documento("pdf1");
+
+    await a.texto("mañana");
+    expect(a.textosEnviados().slice(-2)).toEqual([
+      "Escribe la fecha así: 14/09/2026",
+      "¿Cuál es la fecha de inicio de traslado? (dd/mm/aaaa)",
+    ]);
+
+    await a.texto("14/09/2026");
+    expect(a.ultimoTexto()).toContain("Traslado: 14/09/2026");
+  });
+
+  it("deja corregir un campo desde el resumen", async () => {
+    const a = await arnes();
+    await registrarVehiculo(a.ctx, "XYZ-987");
+    await a.documento("pdf1");
+
+    await a.boton("g:corregir");
+    expect(a.botones().map((b) => b.callback_data)).toContain("g:campo:pesoBruto");
+    await a.boton("g:campo:pesoBruto");
+    expect(a.ultimoTexto()).toBe("¿Cuál es el peso bruto? (ej. 31.87)");
+
+    await a.texto("2000");
+    expect(a.ultimoTexto()).toContain("Peso: 2000 KGM");
+  });
+
+  it("pide dirección y distrito cuando no pudo leer los puntos de partida y llegada", async () => {
+    const a = await arnes(lineasFixture());
+    await registrarVehiculo(a.ctx, "XYZ-987");
+    await a.documento("pdf1");
+    expect(a.ultimoTexto()).toBe("¿Dirección del punto de partida?");
+
+    await a.texto("AV. 28 DE JULIO 1275 LIMA");
+    expect(a.ultimoTexto()).toBe("¿En qué distrito?");
+    await a.texto("Zzzzz");
+    expect(a.ultimoTexto()).toBe("No encontré ese distrito. Escribe solo el nombre del distrito.");
+
+    await a.texto("LA VICTORIA");
+    expect(a.botones().map((b) => b.callback_data)).toContain("g:ubigeo:150115");
+    await a.boton("g:ubigeo:150115");
+    expect(a.ultimoTexto()).toBe("¿Dirección del punto de llegada?");
+
+    await a.texto("CARRETERA FEDERICO BASADRE KM 86 PUCALLPA");
+    await a.texto("CALLERIA");
+    await a.boton("g:ubigeo:250101");
+    expect(a.ultimoTexto()).toContain("Partida: AV. 28 DE JULIO 1275 LIMA — LA VICTORIA, LIMA");
+    expect(a.ultimoTexto()).toContain("Llegada: CARRETERA FEDERICO BASADRE KM 86 PUCALLPA — CALLERIA, CORONEL PORTILLO");
+  });
+
+  it("cancela en cualquier momento y vuelve a la ayuda", async () => {
+    const a = await arnes(sinFecha());
+    await registrarVehiculo(a.ctx, "XYZ-987");
+    await a.documento("pdf1");
+
+    await a.texto("/cancelar");
+    expect(a.ultimoTexto()).toBe("Cancelado.");
+    await a.texto("hola");
+    expect(a.ultimoTexto()).toBe("Envíame el PDF de la guía del remitente o escribe /ayuda.");
+  });
+});
+
+describe("flujo de guía: transporte", () => {
+  it("no emite una guía de otro transportista", async () => {
+    const a = await arnes(lineasFixture((l) => puntosEnOrden(l).map((x) => x.replace("TRANSPORTES DEMO SAC20606433094", "TRANSPORTES DEMO SAC20131312955"))));
+    await a.documento("pdf1");
+    expect(a.ultimoTexto()).toBe("⛔ Esta guía indica otro transportista (RUC 20131312955). No la puedo emitir.");
+  });
+
+  it("ofrece registrar una placa nueva antes de seguir", async () => {
+    const a = await arnes();
+    await a.documento("pdf1");
+    expect(a.ultimoTexto()).toBe("La placa XYZ-987 no está registrada.");
+    // Sin un segundo vehículo activo no hay carreta habitual que ofrecer.
+    expect(a.botones()).toEqual([{ text: "Registrar XYZ-987", callback_data: "g:placa:reg:XYZ-987" }]);
+
+    await a.boton("g:placa:reg:XYZ-987");
+    expect(a.ultimoTexto()).toContain("Vehículo: ABC-123 / XYZ-987");
+  });
+
+  it("ofrece la carreta habitual cuando hay una", async () => {
+    const a = await arnes();
+    await registrarVehiculo(a.ctx, "QQQ-111");
+    await a.documento("pdf1");
+    expect(a.botones()).toEqual([
+      { text: "Registrar XYZ-987", callback_data: "g:placa:reg:XYZ-987" },
+      { text: "Usar la habitual QQQ-111", callback_data: "g:placa:hab:XYZ-987" },
+    ]);
+
+    await a.boton("g:placa:hab:XYZ-987");
+    expect(a.ultimoTexto()).toContain("Vehículo: ABC-123 / QQQ-111");
+  });
+
+  it("ofrece registrar un conductor nuevo y lo usa en la guía", async () => {
+    const a = await arnes(otroConductor());
+    await registrarVehiculo(a.ctx, "XYZ-987");
+    await a.documento("pdf1");
+    expect(a.ultimoTexto()).toBe("El conductor PEDRO RAUL QUISPE MAMANI (DNI 10203040) no está registrado.");
+    expect(a.botones()).toEqual([
+      { text: "Registrar conductor", callback_data: "g:cond:reg" },
+      { text: "Usar conductor habitual", callback_data: "g:cond:hab" },
+    ]);
+
+    await a.boton("g:cond:reg");
+    expect(a.ultimoTexto()).toContain("Conductor: PEDRO RAUL QUISPE MAMANI");
+  });
+
+  it("deja usar el conductor habitual en vez del que dice la guía", async () => {
+    const a = await arnes(otroConductor());
+    await registrarVehiculo(a.ctx, "XYZ-987");
+    await a.documento("pdf1");
+
+    await a.boton("g:cond:hab");
+    expect(a.ultimoTexto()).toContain("Conductor: JHON LARRY VELEZMORO SOZA");
+  });
+});
+
+describe("flujo de guía: envío a SUNAT", () => {
+  it("avisa del rechazo y ofrece corregir y reenviar", async () => {
+    const a = await arnes(lineasFixture(puntosEnOrden), {
+      gateway: new SunatSimulado({ demoraMs: 0, rechazo: { codigo: "2800", mensaje: "dato inválido" } }),
+    });
+    await registrarVehiculo(a.ctx, "XYZ-987");
+    await a.documento("pdf1");
+    await a.boton("g:emitir");
+    await a.esperarTareas();
+
+    expect(a.ultimoTexto()).toBe("❌ SUNAT rechazó la guía V001-1: dato inválido");
+    const botones = a.botones();
+    expect(botones[0]!.text).toBe("✏️ Corregir y reenviar");
+
+    await a.boton(botones[0]!.callback_data);
+    expect(a.ultimoTexto()).toContain("🧾 Guía de transportista (borrador)");
+  });
+
+  it("corrige la guía rechazada y la reenvía sobre la misma guía", async () => {
+    const a = await arnes(lineasFixture(puntosEnOrden), { gateway: new SunatRechazaUnaVez() as never });
+    await registrarVehiculo(a.ctx, "XYZ-987");
+    await a.documento("pdf1");
+    await a.boton("g:emitir");
+    await a.esperarTareas();
+    expect(a.ultimoTexto()).toBe("❌ SUNAT rechazó la guía V001-1: dato inválido");
+
+    await a.boton(a.botones()[0]!.callback_data);
+    await a.boton("g:corregir");
+    await a.boton("g:campo:pesoBruto");
+    await a.texto("2000");
+    expect(a.ultimoTexto()).toContain("Peso: 2000 KGM");
+
+    await a.boton("g:emitir");
+    await a.esperarTareas();
+    const guias = await listarGuias(a.ctx);
+    expect(guias).toHaveLength(1);
+    expect(guias[0]!.estado).toBe("aceptada");
+    expect(a.documentosEnviados()).toHaveLength(1);
+  });
+
+  it("no emite dos veces con doble clic", async () => {
+    const a = await arnes();
+    await registrarVehiculo(a.ctx, "XYZ-987");
+    await a.documento("pdf1");
+
+    await a.boton("g:emitir");
+    await a.boton("g:emitir");
+    expect(a.ultimoTexto()).toBe("Ya la estoy enviando.");
+    await a.esperarTareas();
+    expect(await listarGuias(a.ctx)).toHaveLength(1);
+
+    // Resuelta la guía, el flujo caduca: los botones vuelven a atenderse (la Task 10 manda los
+    // suyos desde el proceso de fondo, justo cuando el flujo sigue en "emitiendo").
+    await a.boton("g:corregir");
+    expect(a.ultimoTexto()).toBe("Envíame el PDF de la guía del remitente o escribe /ayuda.");
+  });
+
+  it("no emite el resumen anterior si mientras tanto llegó otro PDF", async () => {
+    const a = await crearArnes({
+      archivos: {
+        pdf1: await pdfConLineas(lineasFixture(puntosEnOrden)),
+        pdf2: await pdfConLineas(
+          lineasFixture((l) =>
+            puntosEnOrden(l).map((x) => x.replace("EG07 - 5531", "EG07 - 5532").replace("ABC-123 - XYZ-987", "ABC-123 - RRR-555")),
+          ),
+        ),
+      },
+    });
+    cerrables.push(a.cerrar);
+    await registrarVehiculo(a.ctx, "XYZ-987");
+    await a.documento("pdf1");
+    expect(a.ultimoTexto()).toContain("GRE remitente: EG07-5531");
+
+    // El segundo PDF trae una placa sin registrar: el flujo se queda esperando esa respuesta.
+    await a.documento("pdf2");
+    expect(a.ultimoTexto()).toBe("La placa RRR-555 no está registrada.");
+
+    // El botón "Emitir" del resumen anterior sigue visible: no debe emitir nada.
+    await a.boton("g:emitir");
+    expect(a.ultimoTexto()).toBe("La placa RRR-555 no está registrada.");
+    expect(await listarGuias(a.ctx)).toHaveLength(0);
+  });
+});
+
+describe("flujo de guía: lo que el núcleo no admite", () => {
+  it("rechaza de entrada una guía con más de una carreta, antes de preguntar nada", async () => {
+    const a = await arnes(
+      lineasFixture((l) => puntosEnOrden(l).map((x) => x.replace("ABC-123 - XYZ-987", "ABC-123 - XYZ-987 - QQQ-222"))),
+    );
+    await a.documento("pdf1");
+    expect(a.ultimoTexto()).toBe(
+      "Esta guía indica más de una carreta (XYZ-987, QQQ-222) y la guía de transportista solo admite una. Corrígelo con el remitente y vuelve a enviarme el PDF.",
+    );
+    expect(await listarGuias(a.ctx)).toHaveLength(0);
+  });
+
+  it("dice en castellano por qué no pudo emitir y no deja la conversación colgada", async () => {
+    const creado = await crearContextoPrueba();
+    cerrables.push(creado.cerrar);
+    // El núcleo rechaza la guía por una regla de negocio justo al registrarla (p. ej. una placa
+    // que dejó de estar registrada entre el resumen y el "Emitir").
+    let rechazar = false;
+    const db = creado.ctx.db;
+    creado.ctx.db = new Proxy(db, {
+      get(objetivo, prop, receptor) {
+        if (prop === "transaction" && rechazar) {
+          return () => Promise.reject(new ErrorNegocio("La placa XYZ-987 no está registrada"));
+        }
+        return Reflect.get(objetivo, prop, receptor) as unknown;
+      },
+    }) as typeof db;
+    const a = await crearArnes({ ctx: creado.ctx, archivos: { pdf1: await pdfConLineas(lineasFixture(puntosEnOrden)) } });
+    cerrables.push(a.cerrar);
+    await registrarVehiculo(a.ctx, "XYZ-987");
+    await a.documento("pdf1");
+
+    rechazar = true;
+    await a.boton("g:emitir");
+    expect(a.ultimoTexto()).toBe("La placa XYZ-987 no está registrada");
+
+    rechazar = false;
+    await a.texto("hola");
+    expect(a.ultimoTexto()).toBe("Envíame el PDF de la guía del remitente o escribe /ayuda.");
+  });
+
+  it("no reabre una guía que ya no se puede corregir", async () => {
+    const a = await arnes();
+    await registrarVehiculo(a.ctx, "XYZ-987");
+    await a.documento("pdf1");
+    await a.boton("g:emitir");
+    await a.esperarTareas();
+
+    // Un botón viejo de /pendientes sobre una guía que mientras tanto SUNAT aceptó.
+    await a.boton("g:retomar:1");
+    expect(a.ultimoTexto()).toBe("La guía V001-1 ya no se puede corregir: está aceptada.");
+  });
+});
+
+describe("flujo de guía: avisos que no se repiten ni se pierden", () => {
+  it("no vuelve a ofrecer la factura de una guía que ya se facturó", async () => {
+    const a = await arnes();
+    await registrarVehiculo(a.ctx, "XYZ-987");
+    await a.documento("pdf1");
+    await a.boton("g:emitir");
+    await a.esperarTareas();
+    expect(a.textosEnviados()).toContain("¿Facturar este flete (V001-1)?");
+
+    await a.boton("f:si:1");
+    await a.texto("2500");
+    await a.boton("f:igv:si");
+    await a.boton("f:cli:rem");
+    await a.boton("f:pago:contado");
+    await a.boton("f:emitir");
+    await a.esperarTareas();
+
+    // El barrido de PDF del proceso de fondo vuelve a anunciar una guía ya aceptada.
+    const antes = a.textosEnviados().length;
+    await notificarGuia(a.deps, a.api, 111, await resultadoGuia(a.ctx, 1));
+    expect(a.textosEnviados().slice(antes)).toEqual(["✅ Guía V001-1 aceptada."]);
+  });
+
+  it("avisa al dueño si el envío de la guía revienta en segundo plano", async () => {
+    const creado = await crearContextoPrueba();
+    cerrables.push(creado.cerrar);
+    // El almacén se cae al buscar el PDF ya emitido: notificarGuia lanza dentro de la tarea.
+    creado.ctx.almacen = {
+      ...creado.ctx.almacen,
+      rutaAbsoluta: () => {
+        throw new Error("almacén caído");
+      },
+    };
+    const a = await crearArnes({ ctx: creado.ctx, archivos: { pdf1: await pdfConLineas(lineasFixture(puntosEnOrden)) } });
+    cerrables.push(a.cerrar);
+    await registrarVehiculo(a.ctx, "XYZ-987");
+    await a.documento("pdf1");
+
+    await a.boton("g:emitir");
+    await a.esperarTareas();
+    expect(a.documentosEnviados()).toHaveLength(0);
+    expect(a.ultimoTexto()).toBe("⏳ SUNAT no respondió; lo reintento solo y te aviso.");
+  });
+
+  it("no remata con «SUNAT no respondió» si el aviso ya había salido", async () => {
+    const a = await arnes(lineasFixture(puntosEnOrden), {
+      // El PDF llega al chat y falla lo que viene después (el ofrecimiento de facturar).
+      fallarApi: (metodo, llamadas) => metodo === "sendMessage" && llamadas.some((l) => l.metodo === "sendDocument"),
+    });
+    await registrarVehiculo(a.ctx, "XYZ-987");
+    await a.documento("pdf1");
+
+    await a.boton("g:emitir");
+    await a.esperarTareas();
+    expect(a.documentosEnviados()).toHaveLength(1);
+    expect(a.textosEnviados()).not.toContain("⏳ SUNAT no respondió; lo reintento solo y te aviso.");
+  });
+});
+
+describe("flujo de guía: archivos que no sirven", () => {
+  it("rechaza una foto", async () => {
+    const a = await arnes();
+    await a.foto("foto1");
+    expect(a.ultimoTexto()).toBe("Por ahora solo leo PDF. Envíame el PDF de la guía.");
+  });
+
+  it("rechaza un PDF que pasa de 20 MB", async () => {
+    const a = await arnes();
+    await a.documento("pdf1", "application/pdf", 111, 21 * 1024 * 1024);
+    expect(a.ultimoTexto()).toBe(
+      "Ese archivo pasa de 20 MB, el límite de Telegram para bots. Envíame el PDF original de SUNAT.",
+    );
+  });
+
+  it("rechaza un PDF sin texto", async () => {
+    const a = await crearArnes({ archivos: { vacio: Buffer.from("no soy un pdf") } });
+    cerrables.push(a.cerrar);
+    await a.documento("vacio");
+    expect(a.ultimoTexto()).toBe("No pude leer texto en ese PDF. Envíame el PDF original de SUNAT.");
+  });
+});

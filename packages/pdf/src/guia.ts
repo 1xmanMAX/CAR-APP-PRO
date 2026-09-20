@@ -9,7 +9,7 @@ export interface PdfGuia {
   destinatario: { numeroDoc: string; razonSocial: string };
   partida: string;
   llegada: string;
-  vehiculoPlaca: string;
+  placas: string[];
   conductor: { nombre: string; numeroDoc: string; licencia: string };
   pesoBruto: string;
   unidadPeso: string;
@@ -34,7 +34,7 @@ export function generarPdfGuia(d: PdfGuia, o: { comprimir?: boolean } = {}): Pro
     campo(doc, "Peso bruto", `${d.pesoBruto} ${d.unidadPeso}`);
     if (d.documentosRelacionados.length) campo(doc, "Documentos relacionados", d.documentosRelacionados.join(", "));
     seccion(doc, "Vehículo y conductor");
-    campo(doc, "Placa", d.vehiculoPlaca);
+    campo(doc, d.placas.length > 1 ? "Placas" : "Placa", d.placas.join(" / "));
     campo(doc, "Conductor", `${d.conductor.nombre} - DNI ${d.conductor.numeroDoc}`);
     campo(doc, "Licencia", d.conductor.licencia);
     seccion(doc, "Bienes trasladados");

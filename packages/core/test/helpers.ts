@@ -8,6 +8,9 @@ import type { Contexto } from "../src/infra/contexto";
 import { sembrarDatosIniciales, type DatosIniciales } from "../src/infra/sembrar";
 import type { EntradaGuia } from "../src/guias/validar";
 
+/** Reexportado para que apps/bot pueda simular SUNAT sin depender de @sunatapp/sunat. */
+export { SunatSimulado } from "@sunatapp/sunat";
+
 let certificado: Certificado | undefined;
 
 export const DATOS_INICIALES: DatosIniciales = {
@@ -20,10 +23,12 @@ export const DATOS_INICIALES: DatosIniciales = {
   usuario: { nombre: "Dueño", email: "dueno@demo.pe", telegramId: 111 },
 };
 
-export async function crearContextoPrueba(o: { gateway?: SunatGateway; reloj?: () => Date; facturaSimulada?: boolean } = {}) {
+export async function crearContextoPrueba(
+  o: { gateway?: SunatGateway; reloj?: () => Date; facturaSimulada?: boolean; datos?: DatosIniciales } = {},
+) {
   certificado ??= cargarPfx(generarCertificadoPrueba({ ruc: "20606433094", razonSocial: "TRANSPORTES DEMO SAC", password: "x" }), "x");
   const { db, cerrar } = await crearDb({ tipo: "pglite" });
-  await sembrarDatosIniciales(db, DATOS_INICIALES);
+  await sembrarDatosIniciales(db, o.datos ?? DATOS_INICIALES);
   const ctx: Contexto = {
     db,
     gateway: o.gateway ?? new SunatSimulado({ demoraMs: 0 }),

@@ -1,5 +1,6 @@
-import "./cargar-env";
-import { cargarConfig, crearContexto, sembrarDatosIniciales, validarRuc } from "../src/index";
+import { cargarConfig, cargarEnv, crearContexto, sembrarDatosIniciales, validarRuc } from "../src/index";
+
+cargarEnv();
 
 const e = process.env;
 const faltantes = ["EMPRESA_RUC", "EMPRESA_RAZON_SOCIAL", "EMPRESA_DIRECCION", "EMPRESA_UBIGEO", "EMPRESA_REGISTRO_MTC", "VEHICULO_PLACA", "CONDUCTOR_DNI", "CONDUCTOR_NOMBRES", "CONDUCTOR_APELLIDOS", "CONDUCTOR_LICENCIA", "USUARIO_NOMBRE", "USUARIO_EMAIL"].filter((k) => !e[k]);
@@ -20,6 +21,8 @@ try {
       registroMtc: e.EMPRESA_REGISTRO_MTC!, ...(e.EMPRESA_CUENTA_DETRACCION ? { cuentaDetraccionBn: e.EMPRESA_CUENTA_DETRACCION } : {}),
     },
     vehiculo: { placa: e.VEHICULO_PLACA! },
+    // La carreta es opcional: sin ella la primera guía pregunta por la placa secundaria.
+    ...(e.VEHICULO_PLACA_SECUNDARIA ? { vehiculoSecundario: { placa: e.VEHICULO_PLACA_SECUNDARIA } } : {}),
     conductor: { numeroDoc: e.CONDUCTOR_DNI!, nombres: e.CONDUCTOR_NOMBRES!, apellidos: e.CONDUCTOR_APELLIDOS!, licencia: e.CONDUCTOR_LICENCIA! },
     usuario: { nombre: e.USUARIO_NOMBRE!, email: e.USUARIO_EMAIL!, ...(e.USUARIO_TELEGRAM_ID ? { telegramId: Number(e.USUARIO_TELEGRAM_ID) } : {}) },
   });

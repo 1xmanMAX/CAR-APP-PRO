@@ -42,7 +42,7 @@ export const vehiculo = pgTable("vehiculo", {
 export const conductor = pgTable("conductor", {
   id: serial("id").primaryKey(),
   tipoDoc: text("tipo_doc").notNull().default("1"),
-  numeroDoc: text("numero_doc").notNull(),
+  numeroDoc: text("numero_doc").notNull().unique(),
   nombres: text("nombres").notNull(),
   apellidos: text("apellidos").notNull(),
   licencia: text("licencia").notNull(),
@@ -75,6 +75,7 @@ export const documentoRecibido = pgTable("documento_recibido", {
   mime: text("mime").notNull(),
   datosExtraidos: jsonb("datos_extraidos"),
   confianza: jsonb("confianza"),
+  hashSha256: text("hash_sha256").unique(),
   creadoEn: creadoEn(),
 });
 
@@ -94,6 +95,7 @@ export const guiaTransportista = pgTable("guia_transportista", {
   pesoBruto: numeric("peso_bruto", { precision: 12, scale: 3 }).notNull(),
   unidadPeso: text("unidad_peso").notNull().default("KGM"),
   vehiculoId: integer("vehiculo_id").notNull().references(() => vehiculo.id),
+  vehiculoSecundarioId: integer("vehiculo_secundario_id").references(() => vehiculo.id),
   conductorId: integer("conductor_id").notNull().references(() => conductor.id),
   greRemitenteRef: text("gre_remitente_ref"),
   documentoRecibidoId: integer("documento_recibido_id").references(() => documentoRecibido.id),
@@ -104,11 +106,15 @@ export const guiaTransportista = pgTable("guia_transportista", {
   rutaXml: text("ruta_xml"),
   rutaCdr: text("ruta_cdr"),
   rutaPdf: text("ruta_pdf"),
+  urlQr: text("url_qr"),
   intentos: integer("intentos").notNull().default(0),
   proximoIntentoEn: timestamp("proximo_intento_en", { withTimezone: true }),
   creadoEn: creadoEn(),
   actualizadoEn: actualizadoEn(),
-}, (t) => [unique("guia_serie_numero").on(t.serie, t.numero)]);
+}, (t) => [
+  unique("guia_serie_numero").on(t.serie, t.numero),
+  unique("guia_documento_recibido").on(t.documentoRecibidoId),
+]);
 
 export const guiaItem = pgTable("guia_item", {
   id: serial("id").primaryKey(),

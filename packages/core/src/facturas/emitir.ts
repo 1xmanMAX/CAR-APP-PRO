@@ -33,7 +33,8 @@ async function leerSiExiste(ctx: Contexto, ruta: string): Promise<string | null>
   }
 }
 
-async function resultadoFactura(ctx: Contexto, id: number): Promise<ResultadoEmision> {
+/** Estado actual de una factura, para consultarlo sin reenviar nada (espejo de resultadoGuia). */
+export async function resultadoFactura(ctx: Contexto, id: number): Promise<ResultadoEmision> {
   const [f] = await ctx.db.select().from(factura).where(eq(factura.id, id));
   if (!f) throw new ErrorNegocio(`La factura ${id} no existe`);
   return {
@@ -161,6 +162,7 @@ async function generarPdfFacturaSiFalta(ctx: Contexto, id: number): Promise<void
     const rutaPdf = await ctx.almacen.guardar(`facturas/${nombre}.pdf`, pdf);
     await actualizar(ctx, id, { rutaPdf });
   } catch (error) {
+    ctx.log?.("error", `No se pudo generar el PDF de la factura ${id}`, error);
     await registrarAuditoria(ctx.db, { accion: "factura_pdf_pendiente", entidad: "factura", entidadId: id, detalle: { error: (error as Error).message } });
   }
 }
@@ -195,6 +197,10 @@ export async function emitirFactura(ctx: Contexto, facturaId: number): Promise<R
       cambios.horaEmision = hora;
       cambios.fechaVencimiento = f.formaPago === "credito" ? sumarDias(fecha, f.diasCredito!) : fecha;
       cambios.intentos = 0;
+      // Al reemitir desde "rechazada" (o SIN_ENVIO) se limpia el XML anterior: si la
+      // preparación de este intento falla antes de firmar/guardar uno nuevo, el siguiente
+      // reintento no debe reenviar el XML rechazado que SUNAT ya conoce.
+      cambios.rutaXml = null;
     }
     await tx.update(factura).set(cambios).where(eq(factura.id, facturaId));
     return {
@@ -301,11 +307,12 @@ export async function procesarPendientesFacturas(ctx: Contexto): Promise<Resulta
     try {
       const r = await emitirFactura(ctx, id);
       if (r.estado !== "pendiente_envio") cambios.push(r);
-    } catch {
+    } catch (error) {
       // Ninguna factura debe bloquear el procesamiento de las demás: un fallo inesperado (p. ej.
       // la factura desapareció por una condición de carrera) se aísla aquí y se reintenta en la
       // siguiente pasada; nunca implica volver a llamar a gateway.enviarFactura para una factura
       // que SUNAT ya haya aceptado.
+      ctx.log?.("error", `Error al procesar la factura ${id}`, error);
     }
   }
 
@@ -319,10 +326,13 @@ export async function procesarPendientesFacturas(ctx: Contexto): Promise<Resulta
     try {
       await generarPdfFacturaSiFalta(ctx, id);
       const r = await resultadoFactura(ctx, id);
-      if (r.rutaPdf) cambios.push(r);
-    } catch {
+      // Una factura emitida en esta misma pasada (cuyo PDF falló y ahora sí salió) ya está en
+      // `cambios`: volver a empujarla avisaría dos veces al dueño, con dos PDFs idénticos.
+      if (r.rutaPdf && !cambios.some((c) => c.id === id)) cambios.push(r);
+    } catch (error) {
       // generarPdfFacturaSiFalta ya captura y audita sus propios fallos; este catch es una red
       // de seguridad adicional para que una factura no bloquee el resto del barrido.
+      ctx.log?.("error", `Error en el barrido de PDF de la factura ${id}`, error);
     }
   }
   return cambios;

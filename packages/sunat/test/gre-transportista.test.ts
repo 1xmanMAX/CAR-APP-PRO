@@ -33,6 +33,15 @@ describe("construirXmlGreTransportista", () => {
     expect(resultado.valido).toBe(true);
   });
 
+  it("incluye la carreta como AttachedTransportEquipment y sigue pasando el XSD", async () => {
+    const d = { ...datosGrePrueba(), vehiculo: { placa: "ABC-123", placasSecundarias: ["XYZ-987"] } };
+    const xml = construirXmlGreTransportista(d);
+    expect(xml).toContain("<cac:TransportEquipment><cbc:ID>ABC123</cbc:ID><cac:AttachedTransportEquipment><cbc:ID>XYZ987</cbc:ID></cac:AttachedTransportEquipment></cac:TransportEquipment>");
+    const firmado = firmarXml(xml, cert);
+    const resultado = await validarXsd(firmado, "DespatchAdvice");
+    expect(resultado.errores).toEqual([]);
+  });
+
   it("validarXsd reporta errores si falta un elemento obligatorio", async () => {
     const firmado = firmarXml(construirXmlGreTransportista(datosGrePrueba()), cert);
     const roto = firmado.replace(/<cbc:ID>V001-1<\/cbc:ID>/, "");

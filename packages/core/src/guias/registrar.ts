@@ -1,4 +1,5 @@
-import { conductor, contraparte, empresa, eq, guiaItem, guiaTransportista, vehiculo, type Tx } from "@sunatapp/db";
+import { conductor, contraparte, empresa, eq, guiaItem, guiaTransportista, sql, vehiculo, type Tx } from "@sunatapp/db";
+import { normalizarPlaca } from "@sunatapp/sunat";
 import { tipoDocumentoDe } from "../dominio/validaciones";
 import { ErrorNegocio, ErrorValidacion } from "../errores";
 import { registrarAuditoria } from "../infra/auditoria";
@@ -25,18 +26,120 @@ async function asegurarContraparte(tx: Tx, p: { numeroDoc: string; razonSocial: 
   return ganador!.id;
 }
 
+async function guiaDeDocumento(ctx: Contexto, documentoRecibidoId: number): Promise<number | null> {
+  const [g] = await ctx.db.select({ id: guiaTransportista.id }).from(guiaTransportista).where(eq(guiaTransportista.documentoRecibidoId, documentoRecibidoId));
+  return g?.id ?? null;
+}
+
+/**
+ * Misma normalización de placa que `placaSql` en `transporte/transporte.ts`, duplicada a propósito
+ * porque aquí se consulta dentro de la transacción: las dos expresiones tienen que quedar byte a
+ * byte idénticas. Si divergen, comparar (allá) y registrar (aquí) encontrarían vehículos distintos
+ * para la misma placa y la guía saldría con otra unidad.
+ */
+async function vehiculoPorPlaca(tx: Tx, placa: string): Promise<{ id: number } | undefined> {
+  const placaSql = sql`upper(regexp_replace(${vehiculo.placa}, '[^A-Za-z0-9]', '', 'g'))`;
+  const [v] = await tx.select({ id: vehiculo.id }).from(vehiculo).where(sql`${placaSql} = ${normalizarPlaca(placa)}`);
+  return v;
+}
+
+interface TransporteResuelto {
+  vehiculoId: number;
+  vehiculoSecundarioId: number | null;
+  conductorId: number;
+}
+
+async function resolverTransporte(tx: Tx, emp: { ruc: string }, transporte: EntradaGuia["transporte"]): Promise<TransporteResuelto> {
+  if (!transporte) {
+    const [veh] = await tx.select().from(vehiculo).where(eq(vehiculo.activo, true)).limit(1);
+    const [cond] = await tx.select().from(conductor).where(eq(conductor.activo, true)).limit(1);
+    if (!veh || !cond) throw new ErrorNegocio("Falta configurar empresa, vehículo o conductor");
+    return { vehiculoId: veh.id, vehiculoSecundarioId: null, conductorId: cond.id };
+  }
+  if (transporte.rucTransportista !== emp.ruc) throw new ErrorNegocio("El transportista de la guía no es la empresa");
+  if (transporte.placasSecundarias.length > 1) throw new ErrorNegocio("Solo se admite una carreta por guía");
+  const vehPrincipal = await vehiculoPorPlaca(tx, transporte.placaPrincipal);
+  if (!vehPrincipal) throw new ErrorNegocio(`La placa ${transporte.placaPrincipal} no está registrada`);
+  let vehiculoSecundarioId: number | null = null;
+  const placaSecundaria = transporte.placasSecundarias[0];
+  if (placaSecundaria) {
+    const vehSecundario = await vehiculoPorPlaca(tx, placaSecundaria);
+    if (!vehSecundario) throw new ErrorNegocio(`La placa ${placaSecundaria} no está registrada`);
+    vehiculoSecundarioId = vehSecundario.id;
+  }
+  const [cond] = await tx.select({ id: conductor.id }).from(conductor).where(eq(conductor.numeroDoc, transporte.conductor.numeroDoc));
+  if (!cond) throw new ErrorNegocio(`El conductor con DNI ${transporte.conductor.numeroDoc} no está registrado`);
+  return { vehiculoId: vehPrincipal.id, vehiculoSecundarioId, conductorId: cond.id };
+}
+
 export async function registrarGuiaBorrador(ctx: Contexto, e: EntradaGuia, usuarioId?: number): Promise<number> {
   const errores = validarEntradaGuia(e);
   if (errores.length) throw new ErrorValidacion(errores);
-  return ctx.db.transaction(async (tx) => {
+  if (e.documentoRecibidoId !== undefined) {
+    const existente = await guiaDeDocumento(ctx, e.documentoRecibidoId);
+    if (existente !== null) return existente;
+  }
+  try {
+    return await ctx.db.transaction(async (tx) => {
+      const [emp] = await tx.select().from(empresa).limit(1);
+      if (!emp) throw new ErrorNegocio("Falta configurar empresa, vehículo o conductor");
+      const transporte = await resolverTransporte(tx, emp, e.transporte);
+      const [guia] = await tx
+        .insert(guiaTransportista)
+        .values({
+          serie: emp.serieGre,
+          fechaTraslado: e.fechaTraslado,
+          remitenteId: await asegurarContraparte(tx, e.remitente),
+          destinatarioId: await asegurarContraparte(tx, e.destinatario),
+          partidaDireccion: e.partida.direccion.trim(),
+          partidaUbigeo: e.partida.ubigeo,
+          llegadaDireccion: e.llegada.direccion.trim(),
+          llegadaUbigeo: e.llegada.ubigeo,
+          pesoBruto: e.pesoBruto,
+          unidadPeso: e.unidadPeso,
+          vehiculoId: transporte.vehiculoId,
+          vehiculoSecundarioId: transporte.vehiculoSecundarioId,
+          conductorId: transporte.conductorId,
+          greRemitenteRef: e.greRemitenteRef,
+          documentoRecibidoId: e.documentoRecibidoId ?? null,
+        })
+        .returning({ id: guiaTransportista.id });
+      await tx.insert(guiaItem).values(e.items.map((it) => ({ guiaId: guia!.id, ...it })));
+      await registrarAuditoria(tx, { usuarioId, accion: "guia_registrada", entidad: "guia_transportista", entidadId: guia!.id });
+      return guia!.id;
+    });
+  } catch (error) {
+    // Carrera: otra llamada registró primero una guía para el mismo documentoRecibidoId
+    // (violación de la restricción única "guia_documento_recibido").
+    const codigo = (error as { cause?: { code?: string }; code?: string }).cause?.code ?? (error as { code?: string }).code;
+    if (e.documentoRecibidoId !== undefined && codigo === "23505") {
+      const existente = await guiaDeDocumento(ctx, e.documentoRecibidoId);
+      if (existente !== null) return existente;
+    }
+    throw error;
+  }
+}
+
+/**
+ * Corrige una guía ya registrada sin cambiar su identidad: reemplaza datos e ítems solo si sigue
+ * en "borrador" o quedó "rechazada" por SUNAT. Una guía aceptada (o en vuelo) no se toca: su XML
+ * ya está en SUNAT y cambiarle los datos dejaría el PDF y la base contando cosas distintas.
+ */
+export async function actualizarGuiaBorrador(ctx: Contexto, guiaId: number, e: EntradaGuia, usuarioId?: number): Promise<void> {
+  const errores = validarEntradaGuia(e);
+  if (errores.length) throw new ErrorValidacion(errores);
+  await ctx.db.transaction(async (tx) => {
+    const [g] = await tx.select().from(guiaTransportista).where(eq(guiaTransportista.id, guiaId)).for("update");
+    if (!g) throw new ErrorNegocio(`La guía ${guiaId} no existe`);
+    if (g.estado !== "borrador" && g.estado !== "rechazada") {
+      throw new ErrorNegocio("Solo se pueden corregir guías en borrador o rechazadas");
+    }
     const [emp] = await tx.select().from(empresa).limit(1);
-    const [veh] = await tx.select().from(vehiculo).where(eq(vehiculo.activo, true)).limit(1);
-    const [cond] = await tx.select().from(conductor).where(eq(conductor.activo, true)).limit(1);
-    if (!emp || !veh || !cond) throw new ErrorNegocio("Falta configurar empresa, vehículo o conductor");
-    const [guia] = await tx
-      .insert(guiaTransportista)
-      .values({
-        serie: emp.serieGre,
+    if (!emp) throw new ErrorNegocio("Falta configurar empresa, vehículo o conductor");
+    const transporte = await resolverTransporte(tx, emp, e.transporte);
+    await tx
+      .update(guiaTransportista)
+      .set({
         fechaTraslado: e.fechaTraslado,
         remitenteId: await asegurarContraparte(tx, e.remitente),
         destinatarioId: await asegurarContraparte(tx, e.destinatario),
@@ -46,14 +149,15 @@ export async function registrarGuiaBorrador(ctx: Contexto, e: EntradaGuia, usuar
         llegadaUbigeo: e.llegada.ubigeo,
         pesoBruto: e.pesoBruto,
         unidadPeso: e.unidadPeso,
-        vehiculoId: veh.id,
-        conductorId: cond.id,
+        vehiculoId: transporte.vehiculoId,
+        vehiculoSecundarioId: transporte.vehiculoSecundarioId,
+        conductorId: transporte.conductorId,
         greRemitenteRef: e.greRemitenteRef,
-        documentoRecibidoId: e.documentoRecibidoId ?? null,
+        actualizadoEn: ctx.reloj(),
       })
-      .returning({ id: guiaTransportista.id });
-    await tx.insert(guiaItem).values(e.items.map((it) => ({ guiaId: guia!.id, ...it })));
-    await registrarAuditoria(tx, { usuarioId, accion: "guia_registrada", entidad: "guia_transportista", entidadId: guia!.id });
-    return guia!.id;
+      .where(eq(guiaTransportista.id, guiaId));
+    await tx.delete(guiaItem).where(eq(guiaItem.guiaId, guiaId));
+    await tx.insert(guiaItem).values(e.items.map((it) => ({ guiaId, ...it })));
+    await registrarAuditoria(tx, { usuarioId, accion: "guia_corregida", entidad: "guia_transportista", entidadId: guiaId });
   });
 }

@@ -90,6 +90,30 @@ async function manejarFalloEnvio(
 }
 
 /**
+ * Genera y guarda el PDF de una guía ya aceptada por SUNAT que todavía no tiene rutaPdf. Es un
+ * paso retryable e idempotente que nunca reenvía a SUNAT: si falla (almacenamiento caído, XML no
+ * legible...) la guía queda aceptada con rutaPdf null y el fallo se audita para que quede
+ * visible, sin lanzar la excepción hacia el llamador ni contar como intento de envío.
+ */
+export async function generarPdfGuiaSiFalta(ctx: Contexto, guiaId: number): Promise<void> {
+  const [g] = await ctx.db.select({ estado: guiaTransportista.estado, rutaPdf: guiaTransportista.rutaPdf })
+    .from(guiaTransportista).where(eq(guiaTransportista.id, guiaId));
+  if (!g || g.estado !== "aceptada" || g.rutaPdf) return;
+  try {
+    const d = await cargarGuiaCompleta(ctx.db, guiaId);
+    const nombre = nombreArchivo(d.empresa.ruc, "31", d.guia.serie, d.guia.numero!);
+    const xml = await ctx.almacen.leerTexto(d.guia.rutaXml!);
+    const textoQr = d.guia.urlQr ?? `${d.empresa.ruc}|31|${d.guia.serie}|${d.guia.numero}|${extraerDigest(xml)}|`;
+    const pdf = await generarPdfGuia(datosPdfGuiaDesde(d, textoQr, ctx.simulado));
+    const rutaPdf = await ctx.almacen.guardar(`guias/${nombre}.pdf`, pdf);
+    await actualizar(ctx, guiaId, { rutaPdf });
+  } catch (error) {
+    ctx.log?.("error", `No se pudo generar el PDF de la guía ${guiaId}`, error);
+    await registrarAuditoria(ctx.db, { accion: "guia_pdf_pendiente", entidad: "guia_transportista", entidadId: guiaId, detalle: { error: (error as Error).message } });
+  }
+}
+
+/**
  * Aplica una respuesta de SUNAT (aceptada/rechazada) solo si la guía sigue "enviada" con ese
  * ticket. El resultado se reclama con un único update compare-and-set (WHERE estado="enviada"
  * AND ticket=$ticket) ANTES de generar el CDR/PDF: si la guía ya no está en ese estado con ese
@@ -114,22 +138,22 @@ export async function aplicarRespuestaGuia(ctx: Contexto, guiaId: number, r: Res
   }
   await registrarAuditoria(ctx.db, { accion: "guia_aceptada", entidad: "guia_transportista", entidadId: guiaId });
 
-  // El resultado de SUNAT ya quedó confirmado arriba; el CDR y el PDF son pasos posteriores,
-  // independientes y reintentables, que nunca deben revertir esa aceptación ya aplicada. Un
-  // fallo aquí (almacenamiento caído, XML no legible...) queda auditado con rutaCdr/rutaPdf en
-  // null, sin relanzar la excepción.
+  // El resultado de SUNAT ya quedó confirmado arriba; el CDR/urlQr y el PDF son pasos
+  // posteriores, independientes y reintentables, que nunca deben revertir esa aceptación ya
+  // aplicada. Se persisten en dos escrituras separadas: si guardar el CDR falla, urlQr igual
+  // queda registrado (se intenta aparte) para que el barrido pueda regenerar el PDF sin depender
+  // de la respuesta de SUNAT ya descartada; y si además falla el PDF, queda auditado con rutaPdf
+  // en null sin relanzar la excepción.
   try {
-    const d = await cargarGuiaCompleta(ctx.db, guiaId);
-    const nombre = nombreArchivo(d.empresa.ruc, "31", d.guia.serie, d.guia.numero!);
-    const rutaCdr = r.cdrZip ? await ctx.almacen.guardar(`guias/R-${nombre}.zip`, r.cdrZip) : null;
-    const xml = await ctx.almacen.leerTexto(d.guia.rutaXml!);
-    const textoQr = r.urlQr ?? `${d.empresa.ruc}|31|${d.guia.serie}|${d.guia.numero}|${extraerDigest(xml)}|`;
-    const pdf = await generarPdfGuia(datosPdfGuiaDesde(d, textoQr, ctx.simulado));
-    const rutaPdf = await ctx.almacen.guardar(`guias/${nombre}.pdf`, pdf);
-    await actualizar(ctx, guiaId, { rutaCdr, rutaPdf });
+    const [emp] = await ctx.db.select({ ruc: empresa.ruc }).from(empresa).limit(1);
+    const [g] = await ctx.db.select({ serie: guiaTransportista.serie, numero: guiaTransportista.numero }).from(guiaTransportista).where(eq(guiaTransportista.id, guiaId));
+    const rutaCdr = r.cdrZip ? await ctx.almacen.guardar(`guias/R-${nombreArchivo(emp!.ruc, "31", g!.serie, g!.numero!)}.zip`, r.cdrZip) : null;
+    await actualizar(ctx, guiaId, { rutaCdr, urlQr: r.urlQr ?? null });
   } catch (error) {
-    await registrarAuditoria(ctx.db, { accion: "guia_pdf_pendiente", entidad: "guia_transportista", entidadId: guiaId, detalle: { error: (error as Error).message } });
+    await actualizar(ctx, guiaId, { urlQr: r.urlQr ?? null }).catch(() => {});
+    await registrarAuditoria(ctx.db, { accion: "guia_cdr_pendiente", entidad: "guia_transportista", entidadId: guiaId, detalle: { error: (error as Error).message } });
   }
+  await generarPdfGuiaSiFalta(ctx, guiaId);
   return true;
 }
 
@@ -163,6 +187,10 @@ export async function emitirGuia(ctx: Contexto, guiaId: number, o: { esperarResp
       cambios.fechaEmision = fecha;
       cambios.horaEmision = hora;
       cambios.intentos = 0;
+      // Al reemitir desde "rechazada" (o SIN_ENVIO) se limpia el XML anterior: si la
+      // preparación de este intento falla antes de firmar/guardar uno nuevo, el siguiente
+      // reintento no debe reenviar el XML rechazado que SUNAT ya conoce.
+      cambios.rutaXml = null;
     }
     await tx.update(guiaTransportista).set(cambios).where(eq(guiaTransportista.id, guiaId));
     return {
@@ -293,6 +321,7 @@ export async function procesarPendientesGuias(ctx: Contexto): Promise<ResultadoE
       // reservar/preparar, sondear el ticket o aplicar la respuesta (consulta de red, PDF,
       // almacenamiento, error inesperado...) se aísla aquí.
       if (error instanceof SunatNoDisponibleError) continue; // SUNAT sigue caída: se reintenta en la próxima pasada
+      ctx.log?.("error", `Error al procesar la guía ${g.id}`, error);
       try {
         // Si la guía sigue activa, la falla cuenta como un intento fallido de sondeo/aplicación;
         // al agotar MAX_INTENTOS deja de sondearse (sin cambiar de estado) con un mensaje manual.
@@ -305,9 +334,28 @@ export async function procesarPendientesGuias(ctx: Contexto): Promise<ResultadoE
           const mensaje = intentos >= MAX_INTENTOS ? MENSAJE_SIN_RESPUESTA_TICKET : `Error al procesar la guía: ${(error as Error).message}`;
           await actualizar(ctx, g.id, { intentos, mensajeRespuesta: mensaje });
         }
-      } catch {
+      } catch (error2) {
         // Si ni siquiera se pudo registrar el fallo, se continúa con las demás guías.
+        ctx.log?.("error", `No se pudo registrar el fallo de la guía ${g.id}`, error2);
       }
+    }
+  }
+
+  // Barrido independiente del envío: guías ya aceptadas por SUNAT a las que les falta el PDF
+  // (por un fallo previo de almacenamiento). Nunca llama a gateway.enviarGuia. Cada fila se aísla
+  // en su propio try/catch: generarPdfGuiaSiFalta ya audita sus propios fallos, así que este
+  // catch es una red de seguridad adicional para que una guía envenenada no descarte los cambios
+  // ya recolectados de las demás.
+  const sinPdf = await ctx.db.select({ id: guiaTransportista.id }).from(guiaTransportista)
+    .where(and(eq(guiaTransportista.estado, "aceptada"), isNull(guiaTransportista.rutaPdf)));
+  for (const { id } of sinPdf) {
+    try {
+      await generarPdfGuiaSiFalta(ctx, id);
+      const r = await resultadoGuia(ctx, id);
+      if (r.rutaPdf && !cambios.some((c) => c.id === id)) cambios.push(r);
+    } catch (error) {
+      // ya auditado por generarPdfGuiaSiFalta
+      ctx.log?.("error", `Error en el barrido de PDF de la guía ${id}`, error);
     }
   }
   return cambios;

@@ -15,7 +15,7 @@ export function datosGrePrueba(): DatosGreTransportista {
     llegada: { ubigeo: "250101", direccion: "CARRETERA FEDERICO BASADRE KM 86" },
     pesoBruto: "1500.5",
     unidadPeso: "KGM",
-    vehiculo: { placa: "abc-123" },
+    vehiculo: { placa: "abc-123", placasSecundarias: [] },
     conductor: { tipoDoc: "1", numeroDoc: "45288569", nombres: "JHON LARRY", apellidos: "VELEZMORO SOZA", licencia: "Q45288569" },
     documentosRelacionados: [{ tipo: "09", serieNumero: "EG01-123", rucEmisor: "20131312955" }],
     items: [

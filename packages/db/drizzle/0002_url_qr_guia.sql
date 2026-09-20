@@ -1,0 +1,1 @@
+ALTER TABLE "guia_transportista" ADD COLUMN "url_qr" text;

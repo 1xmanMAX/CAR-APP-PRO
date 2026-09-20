@@ -18,7 +18,7 @@ export interface DatosGreTransportista {
   llegada: Direccion;
   pesoBruto: string;
   unidadPeso: "KGM" | "TNE";
-  vehiculo: { placa: string };
+  vehiculo: { placa: string; placasSecundarias: string[] };
   conductor: { tipoDoc: TipoDocIdentidadSunat; numeroDoc: string; nombres: string; apellidos: string; licencia: string };
   documentosRelacionados: Array<{ tipo: "01" | "09"; serieNumero: string; rucEmisor: string }>;
   items: Array<{ descripcion: string; cantidad: string; unidadMedida: string }>;
@@ -128,7 +128,9 @@ ${relacionados}
       </cac:Despatch>
     </cac:Delivery>
     <cac:TransportHandlingUnit>
-      <cac:TransportEquipment><cbc:ID>${x(normalizarPlaca(d.vehiculo.placa))}</cbc:ID></cac:TransportEquipment>
+      <cac:TransportEquipment><cbc:ID>${x(normalizarPlaca(d.vehiculo.placa))}</cbc:ID>${d.vehiculo.placasSecundarias
+        .map((p) => `<cac:AttachedTransportEquipment><cbc:ID>${x(normalizarPlaca(p))}</cbc:ID></cac:AttachedTransportEquipment>`)
+        .join("")}</cac:TransportEquipment>
     </cac:TransportHandlingUnit>
   </cac:Shipment>
 ${lineas}

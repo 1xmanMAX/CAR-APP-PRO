@@ -20,3 +20,6 @@ referencias/
 .DS_Store
 Thumbs.db
 .superpowers/
+
+# Logs del bot
+logs/

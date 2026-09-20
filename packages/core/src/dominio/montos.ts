@@ -64,7 +64,8 @@ export function parsearMonto(texto: string): number | null {
 
   if (entero.includes(",") && entero.includes(".")) return null;
   const separador = entero.includes(",") ? "," : ".";
-  if (entero.includes(separador) && !new RegExp(`^\\d{1,3}(\\${separador}\\d{3})+$`).test(entero)) return null;
+  // Un grupo de miles nunca empieza en 0, así que "0.001" no es mil sino algo que no se entiende.
+  if (entero.includes(separador) && !new RegExp(`^[1-9]\\d{0,2}(\\${separador}\\d{3})+$`).test(entero)) return null;
 
   const digitos = entero.replace(/[.,]/g, "");
   if (!/^\d+$/.test(digitos)) return null;

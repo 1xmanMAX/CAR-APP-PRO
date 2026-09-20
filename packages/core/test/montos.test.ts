@@ -60,9 +60,13 @@ describe("parsearMonto", () => {
     expect(parsearMonto(texto)).toBe(centimos);
   });
 
-  it.each(["dos mil", "0", "-5", "", "S/", "2500.567", "12a3", "2.500,00.5"])("rechaza %s", (texto) => {
-    expect(parsearMonto(texto)).toBeNull();
-  });
+  // Un grupo de miles nunca empieza en 0: "0.001" no es mil, es un monto que no se entiende.
+  it.each(["dos mil", "0", "-5", "", "S/", "2500.567", "12a3", "2.500,00.5", "0.001", "0,001", "0.004"])(
+    "rechaza %s",
+    (texto) => {
+      expect(parsearMonto(texto)).toBeNull();
+    },
+  );
 });
 
 describe("formatearSoles", () => {

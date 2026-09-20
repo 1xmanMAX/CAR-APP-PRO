@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { emitirGuia, registrarGuiaBorrador, registrarVehiculo } from "@sunatapp/core";
-import { entradaGuia, SunatSimulado } from "../../../packages/core/test/helpers";
+import { crearContextoPrueba, entradaGuia, SunatSimulado } from "../../../packages/core/test/helpers";
 import { crearArnes } from "./arnes";
 import { lineasFixture, pdfConLineas } from "./pdf-prueba";
 
@@ -83,6 +83,48 @@ describe("flujo de factura: camino feliz", () => {
 
     await a.esperarTareas();
     expect(a.documentosEnviados()).toHaveLength(1);
+  });
+
+  it("atiende con normalidad el mensaje que llega cuando la factura ya se resolvió", async () => {
+    const a = await arnes();
+    await guiaAceptada(a.ctx);
+    await a.texto("/facturar V001-1");
+    await a.texto("2500");
+    await a.boton("f:igv:si");
+    await a.boton("f:cli:rem");
+    await a.boton("f:pago:contado");
+    await a.boton("f:emitir");
+    await a.esperarTareas();
+
+    // El flujo se quedó en "emitiendo": debe caducar solo, sin que nadie toque la sesión de fuera.
+    await a.texto("hola");
+    expect(a.ultimoTexto()).toBe("Envíame el PDF de la guía del remitente o escribe /ayuda.");
+  });
+
+  it("avisa al dueño si el envío en segundo plano revienta", async () => {
+    const creado = await crearContextoPrueba();
+    cerrables.push(creado.cerrar);
+    // El almacén se cae al buscar el PDF ya emitido: notificarFactura lanza dentro de la tarea.
+    creado.ctx.almacen = {
+      ...creado.ctx.almacen,
+      rutaAbsoluta: () => {
+        throw new Error("almacén caído");
+      },
+    };
+    const a = await crearArnes({ ctx: creado.ctx });
+    cerrables.push(a.cerrar);
+    await guiaAceptada(a.ctx);
+
+    await a.texto("/facturar V001-1");
+    await a.texto("2500");
+    await a.boton("f:igv:si");
+    await a.boton("f:cli:rem");
+    await a.boton("f:pago:contado");
+    await a.boton("f:emitir");
+    await a.esperarTareas();
+
+    expect(a.documentosEnviados()).toHaveLength(0);
+    expect(a.ultimoTexto()).toBe("⏳ SUNAT no respondió; lo reintento solo y te aviso.");
   });
 });
 

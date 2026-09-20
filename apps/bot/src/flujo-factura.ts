@@ -8,12 +8,13 @@ import {
   listarGuiasSinFacturar,
   parsearMonto,
   prepararFactura,
+  resultadoFactura,
   resultadoGuia,
   type ResultadoEmision,
 } from "@sunatapp/core";
 import { InlineKeyboard, InputFile, type Api, type Bot, type Filter, type NextFunction } from "grammy";
 import type { ContextoBot, Dependencias } from "./bot";
-import { flujoFactura, type EstadoFlujoFactura, type Sesion } from "./sesion";
+import { flujoFactura, type EstadoFlujoFactura } from "./sesion";
 import { resumenFactura, textos } from "./textos";
 
 type CtxTexto = Filter<ContextoBot, "message:text">;
@@ -146,10 +147,18 @@ async function elegirCliente(c: Ctx, deps: Dependencias, f: EstadoFlujoFactura, 
   await avanzar(c, deps, f);
 }
 
+/** Una factura ya resuelta sigue su curso aunque el chat se quede con el flujo en "emitiendo". */
+async function siguePendiente(deps: Dependencias, facturaId: number | undefined): Promise<boolean> {
+  if (facturaId === undefined) return true;
+  const r = await resultadoFactura(deps.ctx, facturaId);
+  return r.estado !== "aceptada" && r.estado !== "observada" && r.estado !== "rechazada";
+}
+
 /**
- * Prepara la factura y la manda a SUNAT en segundo plano. El flujo se queda en "emitiendo" para
- * que un segundo clic no emita dos veces, y la propia tarea lo borra al terminar: así el chat no
- * se queda atascado respondiendo "Ya la estoy enviando." para siempre.
+ * Prepara la factura y la manda a SUNAT en segundo plano. El flujo se queda en "emitiendo" (no se
+ * borra) para que un segundo clic no emita dos veces; en cuanto SUNAT responde, el flujo caduca
+ * solo (siguePendiente) en el siguiente mensaje, sin depender de que nadie toque la sesión desde
+ * fuera del manejador.
  */
 async function emitir(c: Ctx, deps: Dependencias, f: EstadoFlujoFactura): Promise<void> {
   const paso = f.paso;
@@ -169,6 +178,7 @@ async function emitir(c: Ctx, deps: Dependencias, f: EstadoFlujoFactura): Promis
       c.session.usuarioId,
     );
     facturaId = preparada.facturaId;
+    f.facturaId = facturaId;
   } catch (error) {
     if (error instanceof ErrorNegocio) {
       // Nada se envió a SUNAT: se le dice al dueño qué pasó y la conversación termina aquí.
@@ -180,15 +190,17 @@ async function emitir(c: Ctx, deps: Dependencias, f: EstadoFlujoFactura): Promis
     throw error;
   }
   await c.reply(textos.enviandoFactura);
-  const sesion: Sesion = c.session;
   const chatId = c.chat!.id;
   const api = c.api;
   deps.enSegundoPlano(async () => {
     try {
       const r = await emitirFactura(deps.ctx, facturaId);
       await notificarFactura(api, deps, chatId, r);
-    } finally {
-      if (sesion.flujo === f) delete sesion.flujo;
+    } catch (error) {
+      // La factura ya existe y quedó ligada a la guía: callar dejaría al dueño esperando un aviso
+      // que nunca llega y sin poder volver a facturar esa guía. El proceso de fondo la retomará.
+      deps.log.error(`error al emitir la factura ${facturaId}`, error);
+      await api.sendMessage(chatId, textos.facturaSinRespuesta).catch(() => {});
     }
   });
 }
@@ -206,7 +218,13 @@ export async function manejarTextoFactura(c: CtxTexto, deps: Dependencias, next:
     return;
   }
   if (f.paso === "emitiendo") {
-    await c.reply(textos.yaEnviando);
+    if (await siguePendiente(deps, f.facturaId)) {
+      await c.reply(textos.yaEnviando);
+      return;
+    }
+    // La factura ya se resolvió: el flujo caduca aquí mismo y el texto sigue su camino normal.
+    delete c.session.flujo;
+    await next();
     return;
   }
   if (f.paso === "monto") {
@@ -241,15 +259,23 @@ export async function manejarBotonFactura(c: CtxBoton, deps: Dependencias): Prom
   // Telegram deja el botón "cargando" hasta que se le responde: siempre, pase lo que pase después.
   await c.answerCallbackQuery().catch(() => {});
   const data = c.callbackQuery.data;
-  const f = flujoFactura(c.session);
-  // Mientras el envío sigue en curso no se atiende ningún botón (ni el "Sí" de otra guía).
+  let f = flujoFactura(c.session);
+  // Mientras el envío sigue en curso no se atiende ningún botón; en cuanto SUNAT responde, el
+  // flujo caduca y deja de tragarse los botones (incluidos los que manda el proceso de fondo).
   if (f?.paso === "emitiendo") {
-    await c.reply(textos.yaEnviando);
-    return;
+    if (await siguePendiente(deps, f.facturaId)) {
+      await c.reply(textos.yaEnviando);
+      return;
+    }
+    delete c.session.flujo;
+    f = undefined;
   }
   if (data.startsWith("f:si:") || data.startsWith("f:despues:")) {
     const guiaId = Number(data.slice(data.lastIndexOf(":") + 1));
-    if (!Number.isInteger(guiaId) || guiaId <= 0) {
+    // El botón viene de un mensaje viejo: la guía puede haber desaparecido (o el id ser basura).
+    const guia =
+      Number.isInteger(guiaId) && guiaId > 0 ? await resultadoGuia(deps.ctx, guiaId).catch(() => null) : null;
+    if (!guia) {
       await c.reply(textos.sinFlujo);
       return;
     }
@@ -257,7 +283,6 @@ export async function manejarBotonFactura(c: CtxBoton, deps: Dependencias): Prom
       await iniciarFlujoFactura(c, deps, guiaId);
       return;
     }
-    const guia = await resultadoGuia(deps.ctx, guiaId);
     await c.reply(textos.facturarDespues(guia.serieNumero));
     return;
   }
@@ -291,6 +316,11 @@ export async function manejarBotonFactura(c: CtxBoton, deps: Dependencias): Prom
       return;
     }
     const d = await cargarGuiaCompleta(deps.ctx.db, f.guiaId);
+    // Un remitente con DNI (traslado de una persona natural) no puede recibir factura.
+    if (d.remitente.tipoDoc !== "6") {
+      await c.reply(textos.clienteSinRuc);
+      return;
+    }
     f.clienteId = d.guia.remitenteId;
     f.cliente = { numeroDoc: d.remitente.numeroDoc, razonSocial: d.remitente.razonSocial };
     await avanzar(c, deps, f);

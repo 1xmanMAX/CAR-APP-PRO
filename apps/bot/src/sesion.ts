@@ -37,6 +37,8 @@ export interface EstadoFlujoFactura {
   clienteId?: number;
   formaPago?: "contado" | "credito";
   diasCredito?: number;
+  /** Solo tras confirmar: la factura ya creada, para saber si el envío sigue en curso. */
+  facturaId?: number;
   /** Solo para escribir el resumen: el cliente ya elegido (remitente u otro RUC). */
   cliente?: { numeroDoc: string; razonSocial: string };
 }

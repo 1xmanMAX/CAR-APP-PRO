@@ -33,7 +33,8 @@ async function leerSiExiste(ctx: Contexto, ruta: string): Promise<string | null>
   }
 }
 
-async function resultadoFactura(ctx: Contexto, id: number): Promise<ResultadoEmision> {
+/** Estado actual de una factura, para consultarlo sin reenviar nada (espejo de resultadoGuia). */
+export async function resultadoFactura(ctx: Contexto, id: number): Promise<ResultadoEmision> {
   const [f] = await ctx.db.select().from(factura).where(eq(factura.id, id));
   if (!f) throw new ErrorNegocio(`La factura ${id} no existe`);
   return {

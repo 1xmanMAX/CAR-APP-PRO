@@ -3,7 +3,7 @@ import { documentoRecibido, eq, guiaTransportista } from "@sunatapp/db";
 import type { Contexto } from "../infra/contexto";
 
 export interface ArchivoRecibido { contenido: Buffer; mime: string; telegramFileId?: string; usuarioId?: number }
-export interface DocumentoRegistrado { id: number; nuevo: boolean; guiaId: number | null; rutaArchivo: string }
+export interface DocumentoRegistrado { id: number; nuevo: boolean; guiaId: number | null; rutaArchivo: string | null }
 
 const EXTENSIONES: Record<string, string> = { "application/pdf": "pdf", "image/jpeg": "jpg", "image/png": "png", "audio/ogg": "ogg" };
 

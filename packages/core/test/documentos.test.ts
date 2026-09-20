@@ -23,7 +23,7 @@ describe("registrarDocumentoRecibido", () => {
     expect(a.nuevo).toBe(true);
     expect(b).toEqual({ ...a, nuevo: false });
     expect(a.rutaArchivo).toMatch(/^recibidos\/[0-9a-f]{64}\.pdf$/);
-    expect(await ctx.almacen.leer(a.rutaArchivo)).toEqual(pdf);
+    expect(await ctx.almacen.leer(a.rutaArchivo!)).toEqual(pdf);
   });
 
   it("informa la guía ya registrada para ese documento y no crea otra", async () => {

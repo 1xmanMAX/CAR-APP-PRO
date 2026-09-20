@@ -1,5 +1,7 @@
+import { sql } from "drizzle-orm";
 import {
   bigint, boolean, date, integer, jsonb, numeric, pgEnum, pgTable, primaryKey, serial, text, timestamp, unique,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 
 const creadoEn = () => timestamp("creado_en", { withTimezone: true }).notNull().defaultNow();
@@ -12,9 +14,22 @@ export const estadoCobroEnum = pgEnum("estado_cobro", ["pendiente", "parcial", "
 export const formaPagoEnum = pgEnum("forma_pago", ["contado", "credito"]);
 export const medioCobroEnum = pgEnum("medio_cobro", ["transferencia", "efectivo", "otro"]);
 
+export const categoriaGastoEnum = pgEnum("categoria_gasto",
+  ["combustible", "peaje", "viaticos", "hospedaje", "estiba", "balanza", "cochera", "reparacion", "otros"]);
+export const estadoViajeEnum = pgEnum("estado_viaje", ["planificado", "en_curso", "cerrado"]);
+export const medioEntregaEnum = pgEnum("medio_entrega", ["efectivo", "yape", "transferencia", "otro"]);
+export const tipoMensajeEnum = pgEnum("tipo_mensaje", ["pdf", "foto", "voz", "texto"]);
+export const estadoLecturaEnum = pgEnum("estado_lectura", ["pendiente", "por_confirmar", "confirmado", "descartado", "error"]);
+export const tramoGuiaEnum = pgEnum("tramo_guia", ["ida", "retorno"]);
+
 export type EstadoGuia = (typeof estadoGuiaEnum.enumValues)[number];
 export type EstadoSunatFactura = (typeof estadoSunatFacturaEnum.enumValues)[number];
 export type EstadoCobro = (typeof estadoCobroEnum.enumValues)[number];
+export type CategoriaGasto = (typeof categoriaGastoEnum.enumValues)[number];
+export type EstadoViaje = (typeof estadoViajeEnum.enumValues)[number];
+export type MedioEntrega = (typeof medioEntregaEnum.enumValues)[number];
+export type EstadoLectura = (typeof estadoLecturaEnum.enumValues)[number];
+export type TipoMensaje = (typeof tipoMensajeEnum.enumValues)[number];
 
 export const empresa = pgTable("empresa", {
   id: serial("id").primaryKey(),
@@ -52,9 +67,10 @@ export const conductor = pgTable("conductor", {
 export const usuario = pgTable("usuario", {
   id: serial("id").primaryKey(),
   nombre: text("nombre").notNull(),
-  email: text("email").notNull().unique(),
+  email: text("email").unique(),
   passwordHash: text("password_hash"),
   telegramId: bigint("telegram_id", { mode: "number" }).unique(),
+  telegramNombre: text("telegram_nombre"),
   activo: boolean("activo").notNull().default(true),
 });
 
@@ -71,13 +87,24 @@ export const documentoRecibido = pgTable("documento_recibido", {
   id: serial("id").primaryKey(),
   usuarioId: integer("usuario_id").references(() => usuario.id),
   telegramFileId: text("telegram_file_id"),
-  rutaArchivo: text("ruta_archivo").notNull(),
+  rutaArchivo: text("ruta_archivo"),
   mime: text("mime").notNull(),
+  tipo: tipoMensajeEnum("tipo").notNull().default("pdf"),
+  texto: text("texto"),
+  estadoLectura: estadoLecturaEnum("estado_lectura").notNull().default("pendiente"),
+  clasificacion: text("clasificacion"),
+  correcciones: jsonb("correcciones"),
+  intentosLectura: integer("intentos_lectura").notNull().default(0),
+  proximoIntentoEn: timestamp("proximo_intento_en", { withTimezone: true }),
+  telegramChatId: bigint("telegram_chat_id", { mode: "number" }),
+  telegramMessageId: bigint("telegram_message_id", { mode: "number" }),
   datosExtraidos: jsonb("datos_extraidos"),
   confianza: jsonb("confianza"),
   hashSha256: text("hash_sha256").unique(),
   creadoEn: creadoEn(),
-});
+}, (t) => [
+  unique("documento_telegram_mensaje").on(t.telegramChatId, t.telegramMessageId),
+]);
 
 export const guiaTransportista = pgTable("guia_transportista", {
   id: serial("id").primaryKey(),
@@ -99,6 +126,8 @@ export const guiaTransportista = pgTable("guia_transportista", {
   conductorId: integer("conductor_id").notNull().references(() => conductor.id),
   greRemitenteRef: text("gre_remitente_ref"),
   documentoRecibidoId: integer("documento_recibido_id").references(() => documentoRecibido.id),
+  viajeId: integer("viaje_id").references(() => viaje.id),
+  tramo: tramoGuiaEnum("tramo"),
   estado: estadoGuiaEnum("estado").notNull().default("borrador"),
   ticket: text("ticket"),
   codigoRespuesta: text("codigo_respuesta"),
@@ -183,5 +212,92 @@ export const auditoria = pgTable("auditoria", {
   entidad: text("entidad").notNull(),
   entidadId: text("entidad_id"),
   detalle: jsonb("detalle"),
+  creadoEn: creadoEn(),
+});
+
+export const ruta = pgTable("ruta", {
+  id: serial("id").primaryKey(),
+  nombre: text("nombre").notNull().unique(),
+  activa: boolean("activa").notNull().default(true),
+});
+
+export const rutaPresupuesto = pgTable("ruta_presupuesto", {
+  rutaId: integer("ruta_id").notNull().references(() => ruta.id, { onDelete: "cascade" }),
+  categoria: categoriaGastoEnum("categoria").notNull(),
+  monto: centimos("monto").notNull(),
+}, (t) => [primaryKey({ columns: [t.rutaId, t.categoria] })]);
+
+export const viaje = pgTable("viaje", {
+  id: serial("id").primaryKey(),
+  codigo: text("codigo").notNull().unique(),
+  rutaId: integer("ruta_id").references(() => ruta.id),
+  vehiculoId: integer("vehiculo_id").notNull().references(() => vehiculo.id),
+  vehiculoSecundarioId: integer("vehiculo_secundario_id").references(() => vehiculo.id),
+  conductorId: integer("conductor_id").notNull().references(() => conductor.id),
+  fechaSalida: date("fecha_salida", { mode: "string" }).notNull(),
+  fechaRegreso: date("fecha_regreso", { mode: "string" }),
+  estado: estadoViajeEnum("estado").notNull().default("planificado"),
+  nota: text("nota"),
+  creadoEn: creadoEn(),
+  actualizadoEn: actualizadoEn(),
+}, (t) => [
+  uniqueIndex("viaje_en_curso_vehiculo").on(t.vehiculoId).where(sql`${t.estado} = 'en_curso'`),
+]);
+
+export const viajePresupuesto = pgTable("viaje_presupuesto", {
+  viajeId: integer("viaje_id").notNull().references(() => viaje.id, { onDelete: "cascade" }),
+  categoria: categoriaGastoEnum("categoria").notNull(),
+  monto: centimos("monto").notNull(),
+}, (t) => [primaryKey({ columns: [t.viajeId, t.categoria] })]);
+
+export const entrega = pgTable("entrega", {
+  id: serial("id").primaryKey(),
+  viajeId: integer("viaje_id").notNull().references(() => viaje.id),
+  fecha: date("fecha", { mode: "string" }).notNull(),
+  monto: centimos("monto").notNull(),
+  medio: medioEntregaEnum("medio").notNull(),
+  nota: text("nota"),
+  documentoId: integer("documento_id").references(() => documentoRecibido.id),
+  usuarioId: integer("usuario_id").references(() => usuario.id),
+  creadoEn: creadoEn(),
+});
+
+export const gasto = pgTable("gasto", {
+  id: serial("id").primaryKey(),
+  viajeId: integer("viaje_id").references(() => viaje.id),
+  categoria: categoriaGastoEnum("categoria").notNull(),
+  monto: centimos("monto").notNull(),
+  fecha: date("fecha", { mode: "string" }).notNull(),
+  proveedorRuc: text("proveedor_ruc"),
+  proveedorNombre: text("proveedor_nombre"),
+  comprobante: text("comprobante"),
+  nota: text("nota"),
+  documentoId: integer("documento_id").references(() => documentoRecibido.id),
+  usuarioId: integer("usuario_id").references(() => usuario.id),
+  creadoEn: creadoEn(),
+  editadoEn: timestamp("editado_en", { withTimezone: true }),
+});
+
+export const lecturaIa = pgTable("lectura_ia", {
+  id: serial("id").primaryKey(),
+  documentoId: integer("documento_id").notNull().references(() => documentoRecibido.id),
+  proveedor: text("proveedor").notNull(),
+  modelo: text("modelo").notNull(),
+  tokensEntrada: integer("tokens_entrada").notNull().default(0),
+  tokensCache: integer("tokens_cache").notNull().default(0),
+  tokensSalida: integer("tokens_salida").notNull().default(0),
+  costoMicroUsd: bigint("costo_micro_usd", { mode: "number" }).notNull().default(0),
+  respuesta: jsonb("respuesta"),
+  error: text("error"),
+  creadoEn: creadoEn(),
+});
+
+export const invitacion = pgTable("invitacion", {
+  id: serial("id").primaryKey(),
+  codigoHash: text("codigo_hash").notNull().unique(),
+  creadaPor: integer("creada_por").notNull().references(() => usuario.id),
+  expiraEn: timestamp("expira_en", { withTimezone: true }).notNull(),
+  usadaPor: integer("usada_por").references(() => usuario.id),
+  usadaEn: timestamp("usada_en", { withTimezone: true }),
   creadoEn: creadoEn(),
 });

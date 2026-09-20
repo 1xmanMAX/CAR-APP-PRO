@@ -326,7 +326,9 @@ export async function procesarPendientesFacturas(ctx: Contexto): Promise<Resulta
     try {
       await generarPdfFacturaSiFalta(ctx, id);
       const r = await resultadoFactura(ctx, id);
-      if (r.rutaPdf) cambios.push(r);
+      // Una factura emitida en esta misma pasada (cuyo PDF falló y ahora sí salió) ya está en
+      // `cambios`: volver a empujarla avisaría dos veces al dueño, con dos PDFs idénticos.
+      if (r.rutaPdf && !cambios.some((c) => c.id === id)) cambios.push(r);
     } catch (error) {
       // generarPdfFacturaSiFalta ya captura y audita sus propios fallos; este catch es una red
       // de seguridad adicional para que una factura no bloquee el resto del barrido.

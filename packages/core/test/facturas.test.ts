@@ -110,6 +110,45 @@ describe("emitirFactura", () => {
     expect(await procesarPendientesFacturas(ctx)).toEqual([expect.objectContaining({ id: facturaId, estado: "aceptada" })]);
   });
 
+  it("no avisa dos veces de una factura emitida y con el PDF completado en la misma pasada", async () => {
+    let caido = true;
+    const base = new SunatSimulado({ demoraMs: 0 });
+    const gw: SunatGateway = {
+      enviarGuia: (d: DocumentoFirmado) => base.enviarGuia(d),
+      consultarTicket: (t: string) => base.consultarTicket(t),
+      enviarFactura: async (d: DocumentoFirmado) => {
+        if (caido) throw new SunatNoDisponibleError("sin red");
+        return base.enviarFactura(d);
+      },
+    };
+    const { ctx, guiaId } = await contextoConGuia(gw);
+    const { facturaId } = await prepararFactura(ctx, { guiaId, montoCentimos: 50000, incluyeIgv: true, formaPago: "contado" });
+    expect((await emitirFactura(ctx, facturaId)).estado).toBe("pendiente_envio");
+    caido = false;
+
+    // El primer guardado del PDF falla (la factura queda aceptada sin PDF) y el barrido de PDF de
+    // esa misma pasada lo completa: la factura no puede aparecer dos veces en los cambios, o el
+    // dueño recibiría dos veces "Factura F001-1 aceptada" con dos PDFs idénticos.
+    const almacenOriginal = ctx.almacen;
+    let pdfFallado = false;
+    ctx.almacen = {
+      ...almacenOriginal,
+      guardar: async (ruta: string, contenido: Buffer | string) => {
+        if (!pdfFallado && ruta.endsWith(".pdf")) {
+          pdfFallado = true;
+          throw new Error("disco lleno (simulado)");
+        }
+        return almacenOriginal.guardar(ruta, contenido);
+      },
+    };
+    ahora = new Date(ahora.getTime() + 6 * 60_000);
+    const cambios = await procesarPendientesFacturas(ctx);
+    expect(pdfFallado).toBe(true);
+    expect(cambios).toEqual([expect.objectContaining({ id: facturaId, estado: "aceptada" })]);
+    const [f] = await ctx.db.select().from(factura).where(eq(factura.id, facturaId));
+    expect(f!.rutaPdf).not.toBeNull();
+  });
+
   it("no envía dos veces si hay un envío en curso (doble clic / solape con el fondo)", async () => {
     let llamadas = 0;
     let liberar!: (r: RespuestaSunat) => void;

@@ -12,7 +12,7 @@ import {
 import { crearExtractor } from "@sunatapp/extractor";
 import { crearBot, type Dependencias } from "./bot";
 import { programarAvisoDiario, textoAvisoDiario } from "./aviso-diario";
-import { cargarConfigBot } from "./config";
+import { cargarConfigBot, ErrorConfiguracion, mensajeDeArranque } from "./config";
 import { notificarFactura } from "./flujo-factura";
 import { notificarGuia } from "./flujo-guia";
 import { crearTareaFondo, type TipoDocumento } from "./fondo";
@@ -96,9 +96,17 @@ try {
     return Buffer.from(await r.arrayBuffer());
   };
 
+  // Un lector que no existe (hoy `ia`) es un .env mal puesto, no un problema de red ni de token.
+  let extractor;
+  try {
+    extractor = crearExtractor({ tipo: cfgBot.extractor }, { validarRuc, obtenerUbigeo });
+  } catch (error) {
+    throw new ErrorConfiguracion(`EXTRACTOR=${cfgBot.extractor}: ${(error as Error).message}`);
+  }
+
   const deps: Dependencias = {
     ctx,
-    extractor: crearExtractor({ tipo: cfgBot.extractor }, { validarRuc, obtenerUbigeo }),
+    extractor,
     descargarArchivo,
     enSegundoPlano: (tarea) => {
       void tarea().catch((error: unknown) => log.error("error en tarea de segundo plano", error));
@@ -115,7 +123,7 @@ try {
     const chatId = await duenoTelegramId(ctx);
     if (chatId === null) return;
     if (tipo === "guia") await notificarGuia(deps, bot.api, chatId, r);
-    else await notificarFactura(bot.api, deps, chatId, r);
+    else await notificarFactura(deps, bot.api, chatId, r);
   };
 
   const fondo = crearTareaFondo(deps, notificarAlDueno);
@@ -145,10 +153,11 @@ try {
     await apagado.catch(() => {});
     process.exit(1);
   }
-  // Telegram rechaza el token, no hay red…: hay que soltar la base de datos igual, no dejar el
-  // proceso muriendo con un volcado crudo. El detalle va al log; el token nunca se imprime.
+  // Telegram rechaza el token, no hay red, el .env está mal…: hay que soltar la base de datos
+  // igual, no dejar el proceso muriendo con un volcado crudo. El detalle va al log; el token
+  // nunca se imprime. `mensajeDeArranque` distingue la configuración del token/la conexión.
   log.error("el bot no pudo arrancar", error);
-  console.error("El bot no pudo arrancar. Revisa TELEGRAM_BOT_TOKEN y tu conexión.");
+  console.error(mensajeDeArranque(error));
   detenerFondo?.();
   detenerAviso?.();
   await esperarPasada?.().catch(() => {});

@@ -30,8 +30,21 @@ export async function ofrecerFactura(api: Api, chatId: number, guiaId: number, s
   });
 }
 
-/** Avisa del desenlace de una factura. También la usará el proceso de fondo (Task 12). */
-export async function notificarFactura(api: Api, deps: Dependencias, chatId: number, r: ResultadoEmision): Promise<void> {
+/**
+ * Avisa del desenlace de una factura. También la usa el proceso de fondo (Task 12).
+ * El orden de los parámetros es el mismo que el de `notificarGuia`: se llaman una al lado de la
+ * otra y confundirlas sería fácil.
+ *
+ * `alAvisar` se llama en cuanto el chat recibió algo. Quien llama desde una tarea de segundo
+ * plano lo usa para no rematar con un "SUNAT no respondió" si lo que falló vino después del aviso.
+ */
+export async function notificarFactura(
+  deps: Dependencias,
+  api: Api,
+  chatId: number,
+  r: ResultadoEmision,
+  alAvisar: () => void = () => {},
+): Promise<void> {
   if (r.estado === "aceptada" || r.estado === "observada") {
     if (r.rutaPdf) {
       await api.sendDocument(chatId, new InputFile(deps.ctx.almacen.rutaAbsoluta(r.rutaPdf)), {
@@ -40,13 +53,16 @@ export async function notificarFactura(api: Api, deps: Dependencias, chatId: num
     } else {
       await api.sendMessage(chatId, textos.facturaAceptada(r.serieNumero));
     }
+    alAvisar();
     return;
   }
   if (r.estado === "rechazada") {
     await api.sendMessage(chatId, textos.facturaRechazada(r.serieNumero, r.mensaje ?? ""));
+    alAvisar();
     return;
   }
   await api.sendMessage(chatId, textos.facturaSinRespuesta);
+  alAvisar();
 }
 
 // --- Conversación ----------------------------------------------------------
@@ -193,14 +209,19 @@ async function emitir(c: Ctx, deps: Dependencias, f: EstadoFlujoFactura): Promis
   const chatId = c.chat!.id;
   const api = c.api;
   deps.enSegundoPlano(async () => {
+    // Si el aviso ya salió (el PDF llegó al chat y falló algo posterior), no se manda además un
+    // "SUNAT no respondió": serían dos mensajes contradictorios sobre la misma factura.
+    let avisado = false;
     try {
       const r = await emitirFactura(deps.ctx, facturaId);
-      await notificarFactura(api, deps, chatId, r);
+      await notificarFactura(deps, api, chatId, r, () => {
+        avisado = true;
+      });
     } catch (error) {
       // La factura ya existe y quedó ligada a la guía: callar dejaría al dueño esperando un aviso
       // que nunca llega y sin poder volver a facturar esa guía. El proceso de fondo la retomará.
       deps.log.error(`error al emitir la factura ${facturaId}`, error);
-      await api.sendMessage(chatId, textos.facturaSinRespuesta).catch(() => {});
+      if (!avisado) await api.sendMessage(chatId, textos.facturaSinRespuesta).catch(() => {});
     }
   });
 }

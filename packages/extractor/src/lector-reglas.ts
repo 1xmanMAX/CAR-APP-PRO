@@ -122,11 +122,15 @@ export function leerGuiaDeTexto(texto: string, v: Validadores): GuiaExtraida {
   }
 
   // --- Unidad del peso: la unidad suelta manda sobre la etiqueta "(KGM)" ---
+  // Solo se da por segura si hay una única línea candidata: confundir TNE con KGM multiplica (o
+  // divide) el peso por mil en un documento que se manda a SUNAT. Con varias, o con ninguna, el
+  // valor queda "dudosa" y el bot lo pregunta.
   const iUnidad = lineas.findIndex((l) => RE_UNIDAD_PESO.test(l));
-  const unidadPeso: Campo<"KGM" | "TNE"> =
-    iUnidad >= 0
-      ? { valor: lineas[iUnidad] as "KGM" | "TNE", confianza: "segura" }
-      : { valor: "KGM", confianza: "dudosa" };
+  const unidades = lineas.filter((l) => RE_UNIDAD_PESO.test(l));
+  const unidadPeso: Campo<"KGM" | "TNE"> = {
+    valor: (unidades[0] ?? "KGM") as "KGM" | "TNE",
+    confianza: unidades.length === 1 ? "segura" : "dudosa",
+  };
 
   // --- Razón social del remitente: la del destinatario si comparten RUC, si no el membrete ---
   let razonRemitente: string | null = null;

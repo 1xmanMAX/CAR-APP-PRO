@@ -71,6 +71,13 @@ describe("leerGuiaDeTexto: nunca da por segura una lectura ambigua", () => {
     expect(g.pesoBruto).toEqual({ valor: null, confianza: "dudosa" });
   });
 
+  it("no elige la primera unidad de peso cuando hay más de una candidata", () => {
+    // Confundir TNE con KGM multiplica el peso por mil en un documento que se manda a SUNAT.
+    const dosUnidades = texto.replace("KGM\nDISTRIBUIDORA SAC", "KGM\nTNE\nDISTRIBUIDORA SAC");
+    expect(leerGuiaDeTexto(dosUnidades, v).unidadPeso.confianza).toBe("dudosa");
+    expect(leerGuiaDeTexto(texto, v).unidadPeso).toEqual({ valor: "KGM", confianza: "segura" });
+  });
+
   it("no confunde la línea del transportista con el destinatario", () => {
     const g = leerGuiaDeTexto(
       ["RUC 20131312955", "TRANSPORTES DEMO SAC20606433094", "20602712592", "CHOCANO CARGO SAC", "20602712592"].join("\n"),

@@ -65,7 +65,9 @@ async function comandoPagado(c: CtxComando, deps: Dependencias): Promise<void> {
   const { serieNumero, resto } = partirArgumentos(texto);
   let montoCentimos: number | undefined;
   if (resto) {
-    const monto = parsearMonto(resto);
+    // Esto es dinero: si después del monto sobra algo, no se adivina. `parsearMonto` borra los
+    // espacios, así que "/pagado F001-2 1500 300" se leería como S/ 15,003.00 en vez de fallar.
+    const monto = /\s/.test(resto) ? null : parsearMonto(resto);
     if (monto === null) {
       await c.reply(textos.pagadoUso);
       return;

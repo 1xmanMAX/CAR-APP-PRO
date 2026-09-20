@@ -1,9 +1,10 @@
-import "./cargar-env";
 import { empresa } from "@sunatapp/db";
 import {
-  cargarConfig, crearContexto, emitirFactura, emitirGuia, formatearSoles, listarCobrosPendientes, prepararFactura,
-  registrarCobro, registrarGuiaBorrador, sembrarDatosIniciales,
+  cargarConfig, cargarEnv, crearContexto, emitirFactura, emitirGuia, formatearSoles, listarCobrosPendientes,
+  prepararFactura, registrarCobro, registrarGuiaBorrador, sembrarDatosIniciales,
 } from "../src/index";
+
+cargarEnv();
 
 const config = cargarConfig();
 const { ctx, cerrar } = await crearContexto(config);

@@ -136,6 +136,13 @@ describe("/pagado", () => {
     expect(a.ultimoTexto()).toBe("Úsalo así: /pagado F001-2 1500");
   });
 
+  it("rechaza lo que sobra después del monto en vez de pegarlo como miles", async () => {
+    // "1500 300" se leía como S/ 15,003.00: parsearMonto borra los espacios. Es dinero: mejor negarse.
+    const a = await arnes();
+    await a.texto("/pagado F001-2 1500 300");
+    expect(a.ultimoTexto()).toBe("Úsalo así: /pagado F001-2 1500");
+  });
+
   it("factura inexistente", async () => {
     const a = await arnes();
     await a.texto("/pagado F009-9");

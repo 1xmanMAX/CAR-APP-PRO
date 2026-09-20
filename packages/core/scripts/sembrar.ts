@@ -1,5 +1,6 @@
-import "./cargar-env";
-import { cargarConfig, crearContexto, sembrarDatosIniciales, validarRuc } from "../src/index";
+import { cargarConfig, cargarEnv, crearContexto, sembrarDatosIniciales, validarRuc } from "../src/index";
+
+cargarEnv();
 
 const e = process.env;
 const faltantes = ["EMPRESA_RUC", "EMPRESA_RAZON_SOCIAL", "EMPRESA_DIRECCION", "EMPRESA_UBIGEO", "EMPRESA_REGISTRO_MTC", "VEHICULO_PLACA", "CONDUCTOR_DNI", "CONDUCTOR_NOMBRES", "CONDUCTOR_APELLIDOS", "CONDUCTOR_LICENCIA", "USUARIO_NOMBRE", "USUARIO_EMAIL"].filter((k) => !e[k]);

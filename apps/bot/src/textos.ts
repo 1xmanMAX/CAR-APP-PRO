@@ -91,6 +91,11 @@ export const textos = {
   cobroRegistrado: (saldoCentimos: number, estadoCobro: string) =>
     `💰 Cobro registrado. Saldo: ${formatearSoles(saldoCentimos)} (${estadoCobro})`,
   noHayNadaQueCancelar: "No hay nada que cancelar.",
+
+  // --- Aviso diario ---
+  avisoTitulo: "📅 Cobros de hoy",
+  avisoVencidas: "🔴 Vencidas:",
+  avisoVencenHoy: "🟡 Vencen hoy:",
 };
 
 /** Una pregunta por campo; son las únicas frases que el dueño ve cuando falta un dato. */
@@ -203,4 +208,13 @@ export function lineaCobro(f: FilaCobro): string {
         ? `vencida ${fechaCorta(f.fechaVencimiento)}`
         : `vence ${fechaCorta(f.fechaVencimiento)}`;
   return `${ICONO_ESTADO_COBRO[f.estado]} ${f.serieNumero} · ${f.cliente} · ${vencimiento} · ${formatearSoles(f.saldo)}`;
+}
+
+/**
+ * Una línea del aviso diario. A diferencia de /cobros, el icono va en el título de cada bloque
+ * (vencidas / vencen hoy), así que aquí solo se repite la fecha de las que ya vencieron.
+ */
+export function lineaAviso(f: FilaCobro): string {
+  const base = `• ${f.serieNumero} · ${f.cliente} · ${formatearSoles(f.saldo)}`;
+  return f.estado === "vencida" ? `${base} (venció ${fechaCorta(f.fechaVencimiento)})` : base;
 }

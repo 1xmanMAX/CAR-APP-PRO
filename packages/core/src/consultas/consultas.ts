@@ -76,7 +76,14 @@ export async function buscarGuiaPorSerieNumero(ctx: Contexto, texto: string): Pr
   return g ?? null;
 }
 
-export async function buscarContrapartePorDoc(ctx: Contexto, numeroDoc: string): Promise<{ id: number; razonSocial: string } | null> {
-  const [c] = await ctx.db.select({ id: contraparte.id, razonSocial: contraparte.razonSocial }).from(contraparte).where(eq(contraparte.numeroDoc, numeroDoc));
+/** `tipoDoc` viene en el resultado porque una factura solo admite clientes con RUC (tipoDoc "6"). */
+export async function buscarContrapartePorDoc(
+  ctx: Contexto,
+  numeroDoc: string,
+): Promise<{ id: number; razonSocial: string; numeroDoc: string; tipoDoc: string } | null> {
+  const [c] = await ctx.db
+    .select({ id: contraparte.id, razonSocial: contraparte.razonSocial, numeroDoc: contraparte.numeroDoc, tipoDoc: contraparte.tipoDoc })
+    .from(contraparte)
+    .where(eq(contraparte.numeroDoc, numeroDoc));
   return c ?? null;
 }

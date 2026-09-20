@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calcularMontosFactura, formatearSoles } from "../src/dominio/montos";
+import { calcularMontosFactura, formatearSoles, parsearMonto } from "../src/dominio/montos";
 
 const detraccion = { porcentaje: 4, umbralCentimos: 40000 };
 
@@ -42,6 +42,26 @@ describe("calcularMontosFactura", () => {
     expect(() => calcularMontosFactura({ montoCentimos: monto, incluyeIgv: true, detraccion })).toThrow(
       "El monto debe ser un entero positivo en céntimos",
     );
+  });
+});
+
+describe("parsearMonto", () => {
+  it.each([
+    ["2500", 250000],
+    ["2,500.50", 250050],
+    ["2500,5", 250050],
+    ["2500.5", 250050],
+    ["S/ 1 200", 120000],
+    ["s/1,200", 120000],
+    ["  2500  ", 250000],
+    ["0.05", 5],
+    ["1,234,567.89", 123456789],
+  ])("lee %s como %i céntimos", (texto, centimos) => {
+    expect(parsearMonto(texto)).toBe(centimos);
+  });
+
+  it.each(["dos mil", "0", "-5", "", "S/", "2500.567", "12a3", "2.500,00.5"])("rechaza %s", (texto) => {
+    expect(parsearMonto(texto)).toBeNull();
   });
 });
 

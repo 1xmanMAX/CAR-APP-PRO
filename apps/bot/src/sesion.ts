@@ -24,12 +24,33 @@ export interface EstadoFlujoGuia {
   direccionPendiente?: string;
 }
 
-/** Estado por chat. La Task 10 añade su propio flujo de factura con otro `tipo`. */
+/**
+ * La conversación de una factura, desde el monto del flete hasta el envío a SUNAT. Arranca sobre
+ * una guía ya aceptada, así que todo lo que hace falta recordar son las respuestas del dueño.
+ */
+export interface EstadoFlujoFactura {
+  tipo: "factura";
+  guiaId: number;
+  paso: "monto" | "igv" | "cliente" | "ruc_cliente" | "pago" | "dias" | "resumen" | "emitiendo";
+  montoCentimos?: number;
+  incluyeIgv?: boolean;
+  clienteId?: number;
+  formaPago?: "contado" | "credito";
+  diasCredito?: number;
+  /** Solo para escribir el resumen: el cliente ya elegido (remitente u otro RUC). */
+  cliente?: { numeroDoc: string; razonSocial: string };
+}
+
+/** Estado por chat: una conversación a la vez, sea de guía o de factura. */
 export interface Sesion {
   usuarioId?: number;
-  flujo?: EstadoFlujoGuia | { tipo: string };
+  flujo?: EstadoFlujoGuia | EstadoFlujoFactura | { tipo: string };
 }
 
 export function flujoGuia(s: Sesion): EstadoFlujoGuia | undefined {
   return s.flujo?.tipo === "guia" ? (s.flujo as EstadoFlujoGuia) : undefined;
+}
+
+export function flujoFactura(s: Sesion): EstadoFlujoFactura | undefined {
+  return s.flujo?.tipo === "factura" ? (s.flujo as EstadoFlujoFactura) : undefined;
 }

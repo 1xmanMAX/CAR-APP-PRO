@@ -1,4 +1,4 @@
-import { obtenerUbigeo, type Borrador, type TransporteGuia } from "@sunatapp/core";
+import { formatearSoles, obtenerUbigeo, type Borrador, type MontosFactura, type TransporteGuia } from "@sunatapp/core";
 
 export const textos = {
   registroOk: "✅ Listo. Solo te atenderé a ti.",
@@ -40,6 +40,37 @@ export const textos = {
   guiaRechazada: (serieNumero: string, mensaje: string) => `❌ SUNAT rechazó la guía ${serieNumero}: ${mensaje}`,
   botonReenviar: "✏️ Corregir y reenviar",
   guiaSinRespuesta: "⏳ SUNAT no respondió; lo reintento solo y te aviso.",
+
+  // --- Flujo de factura ---
+  ofrecerFactura: (serieNumero: string) => `¿Facturar este flete (${serieNumero})?`,
+  botonFacturarSi: "Sí",
+  botonFacturarDespues: "Después",
+  facturarDespues: (serieNumero: string) => `Listo, queda sin facturar. Usa /facturar ${serieNumero} cuando quieras.`,
+  facturarSinGuia: "Dime qué guía facturo, por ejemplo /facturar V001-1.",
+  guiaNoEncontrada: (serieNumero: string) => `No encontré la guía ${serieNumero}.`,
+  soloGuiasAceptadas: "Solo se pueden facturar guías aceptadas por SUNAT.",
+  guiaYaFacturada: (serieNumero: string) => `La guía ${serieNumero} ya tiene factura.`,
+  preguntaMonto: "¿Cuál es el monto del flete? (ej. 2500)",
+  montoNoEntendido: "No entendí el monto. Escríbelo así: 2500 o 2,500.50",
+  preguntaIgv: "¿El monto incluye IGV?",
+  botonIncluyeIgv: "Incluye IGV",
+  botonMasIgv: "Más IGV",
+  preguntaCliente: "¿A quién se factura?",
+  botonClienteRemitente: (razonSocial: string) => `Remitente: ${razonSocial}`,
+  botonClienteOtro: "Otro RUC",
+  preguntaRucCliente: "Escribe el RUC del cliente.",
+  rucNoRegistrado: "Ese RUC no está registrado. Por ahora factura al remitente o a un cliente con el que ya trabajaste.",
+  clienteSinRuc: "La factura requiere un cliente con RUC.",
+  preguntaPago: "¿Forma de pago?",
+  botonContado: "Contado",
+  botonCredito: (dias: number) => `Crédito ${dias} días`,
+  botonOtroPlazo: "Otro plazo",
+  preguntaDias: "¿Cuántos días de crédito?",
+  diasNoEntendidos: "No entendí los días. Escribe un número entero mayor a cero, por ejemplo 45.",
+  enviandoFactura: "📤 Enviando la factura a SUNAT…",
+  facturaAceptada: (serieNumero: string) => `✅ Factura ${serieNumero} aceptada.`,
+  facturaRechazada: (serieNumero: string, mensaje: string) => `❌ SUNAT rechazó la factura ${serieNumero}: ${mensaje}`,
+  facturaSinRespuesta: "⏳ SUNAT no respondió; lo reintento solo y te aviso.",
 };
 
 /** Una pregunta por campo; son las únicas frases que el dueño ve cuando falta un dato. */
@@ -86,5 +117,27 @@ export function resumenGuia(b: Borrador, t: TransporteGuia, nombresConductor: st
     `Vehículo: ${placas} · Conductor: ${nombresConductor}`,
     `Bienes: ${bienes}`,
     `GRE remitente: ${b.greRemitenteRef ?? "—"}`,
+  ].join("\n");
+}
+
+/** El resumen que el dueño confirma antes de emitir la factura: montos ya calculados por el núcleo. */
+export function resumenFactura(d: {
+  serieNumeroGuia: string;
+  cliente: { numeroDoc: string; razonSocial: string };
+  montos: MontosFactura;
+  formaPago: "contado" | "credito";
+  diasCredito?: number;
+}): string {
+  const m = d.montos;
+  const neto = `Neto a cobrar: ${formatearSoles(m.cobrable)}`;
+  return [
+    "🧾 Factura (borrador)",
+    `Guía: ${d.serieNumeroGuia}`,
+    `Cliente: ${d.cliente.razonSocial} (${d.cliente.numeroDoc})`,
+    `Subtotal: ${formatearSoles(m.subtotal)} · IGV: ${formatearSoles(m.igv)} · Total: ${formatearSoles(m.total)}`,
+    m.detraccionPorcentaje === null
+      ? neto
+      : `Detracción ${m.detraccionPorcentaje}%: ${formatearSoles(m.detraccionMonto)} · ${neto}`,
+    `Pago: ${d.formaPago === "credito" ? `crédito ${d.diasCredito} días` : "contado"}`,
   ].join("\n");
 }

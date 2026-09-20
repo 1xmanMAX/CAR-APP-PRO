@@ -26,6 +26,7 @@ import {
 import { PdfSinTextoError, type GuiaExtraida } from "@sunatapp/extractor";
 import { InlineKeyboard, InputFile, type Api, type Bot, type Filter } from "grammy";
 import type { ContextoBot, Dependencias } from "./bot";
+import { ofrecerFactura } from "./flujo-factura";
 import { flujoGuia, type EstadoFlujoGuia, type PendienteTransporte } from "./sesion";
 import { preguntas, resumenGuia, textos } from "./textos";
 
@@ -38,19 +39,6 @@ type CtxTexto = Filter<ContextoBot, "message:text">;
 type CtxBoton = Filter<ContextoBot, "callback_query:data">;
 type Ctx = ContextoBot;
 
-/**
- * Gancho para la Task 10: después de una guía aceptada se ofrece emitir la factura. En esta tarea
- * no hace nada todavía; el PDF con su leyenda ya se envió antes de llamarlo.
- */
-export async function ofrecerFactura(
-  _deps: Dependencias,
-  _api: Api,
-  _chatId: number,
-  _resultado: ResultadoEmision,
-): Promise<void> {
-  // La implementa la Task 10.
-}
-
 /** Avisa del desenlace de una guía. También la usa el proceso de fondo (Task 12). */
 export async function notificarGuia(deps: Dependencias, api: Api, chatId: number, r: ResultadoEmision): Promise<void> {
   if (r.estado === "aceptada") {
@@ -61,7 +49,7 @@ export async function notificarGuia(deps: Dependencias, api: Api, chatId: number
     } else {
       await api.sendMessage(chatId, textos.guiaAceptada(r.serieNumero));
     }
-    await ofrecerFactura(deps, api, chatId, r);
+    await ofrecerFactura(api, chatId, r.id, r.serieNumero);
     return;
   }
   if (r.estado === "rechazada") {

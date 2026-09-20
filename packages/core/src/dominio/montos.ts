@@ -46,6 +46,33 @@ export function calcularMontosFactura(e: {
   };
 }
 
+/**
+ * Lee un monto escrito a mano ("2500", "2,500.50", "2500,5", "S/ 1 200") y lo devuelve en
+ * céntimos enteros; null si no se entiende o no es positivo. Acepta coma o punto como separador
+ * decimal —en el chat se escribe de las dos formas— pero exige que los miles vengan agrupados de
+ * tres en tres con un único separador, para no adivinar en casos ambiguos como "2.500,00.5".
+ */
+export function parsearMonto(texto: string): number | null {
+  const limpio = texto.replace(/\s| /g, "").replace(/^s\/\.?/i, "");
+  if (!/^[\d.,]+$/.test(limpio)) return null;
+
+  const ultimoSeparador = Math.max(limpio.lastIndexOf(","), limpio.lastIndexOf("."));
+  const digitosFinales = ultimoSeparador === -1 ? 0 : limpio.length - ultimoSeparador - 1;
+  const hayDecimales = digitosFinales === 1 || digitosFinales === 2;
+  const entero = hayDecimales ? limpio.slice(0, ultimoSeparador) : limpio;
+  const decimales = hayDecimales ? limpio.slice(ultimoSeparador + 1) : "";
+
+  if (entero.includes(",") && entero.includes(".")) return null;
+  const separador = entero.includes(",") ? "," : ".";
+  if (entero.includes(separador) && !new RegExp(`^\\d{1,3}(\\${separador}\\d{3})+$`).test(entero)) return null;
+
+  const digitos = entero.replace(/[.,]/g, "");
+  if (!/^\d+$/.test(digitos)) return null;
+  const centimos = Number(digitos) * 100 + Number(decimales.padEnd(2, "0") || "0");
+  if (!Number.isSafeInteger(centimos) || centimos <= 0) return null;
+  return centimos;
+}
+
 export function formatearSoles(centimos: number): string {
   const soles = Math.trunc(centimos / 100);
   const cent = String(Math.abs(centimos % 100)).padStart(2, "0");

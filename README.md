@@ -31,13 +31,18 @@ Los de arriba (Node 24+, pnpm 9) y un bot propio creado con
 | Variable | Ejemplo | Para qué |
 |---|---|---|
 | `TELEGRAM_BOT_TOKEN` | `123456:AA…` | Token del bot. Obligatorio; nunca se escribe en el código ni en los logs. |
-| `EXTRACTOR` | `reglas` | Lector del PDF del remitente: `reglas` (por defecto) o `ia`. |
+| `EXTRACTOR` | `reglas` | Lector del PDF del remitente. Hoy solo `reglas` (por defecto); `ia` está reservado y **todavía no está disponible**: el bot no arranca si lo pones. |
 | `BOT_HORA_AVISO` | `08:00` | Hora de Lima del aviso diario de cobros. |
 | `LOG_DIR` | `./logs` | Carpeta del `bot.log` (una línea JSON por evento). |
 
 ### Arranque
+Antes de sembrar hay que completar en `.env` las variables `EMPRESA_*`, `VEHICULO_*`,
+`CONDUCTOR_*` y `USUARIO_*` (ver `.env.example`): `pnpm sembrar` las carga una sola vez y falla
+diciendo cuáles faltan. `VEHICULO_PLACA_SECUNDARIA` es opcional pero conviene ponerla: es la
+carreta de la unidad habitual, y sin ella el bot pregunta por la placa secundaria en cada guía.
+
 ```bash
-pnpm sembrar              # empresa, vehículo, conductor y usuario (una sola vez)
+pnpm sembrar              # empresa, vehículo(s), conductor y usuario (una sola vez)
 pnpm bot                  # arranca el bot
 ```
 La primera vez el bot imprime en consola un `Código de registro: 123456`. Envíaselo por Telegram

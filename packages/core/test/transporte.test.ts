@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { cargarGuiaCompleta } from "../src/guias/cargar";
 import { registrarGuiaBorrador } from "../src/guias/registrar";
 import { compararTransporte, registrarConductor, registrarVehiculo, transporteHabitual } from "../src/transporte/transporte";
-import { crearContextoPrueba, entradaGuia } from "./helpers";
+import { crearContextoPrueba, DATOS_INICIALES, entradaGuia } from "./helpers";
 
 const conductorDemo = { numeroDoc: "45288569", nombres: "JHON LARRY", apellidos: "VELEZMORO SOZA", licencia: "Q45288569" };
 
@@ -67,5 +67,17 @@ describe("transporte", () => {
   it("transporteHabitual devuelve lo registrado", async () => {
     const ctx = await contexto();
     expect(await transporteHabitual(ctx)).toEqual({ rucTransportista: "20606433094", placaPrincipal: "ABC-123", placasSecundarias: [], conductor: conductorDemo });
+  });
+
+  it("sembrar la carreta deja la unidad habitual completa (tracto + carreta), sin preguntas", async () => {
+    const ctx = await contexto({
+      datos: { ...DATOS_INICIALES, vehiculoSecundario: { placa: "V1X-971" } },
+    });
+    const habitual = await transporteHabitual(ctx);
+    expect(habitual.placaPrincipal).toBe("ABC-123");
+    expect(habitual.placasSecundarias).toEqual(["V1X-971"]);
+    // Y el núcleo la reconoce como registrada: la guía sale sin preguntar por la placa secundaria.
+    const comparacion = await compararTransporte(ctx, { ...habitual });
+    expect(comparacion.placasSecundarias).toEqual([{ placa: "V1X-971", estado: "registrada" }]);
   });
 });

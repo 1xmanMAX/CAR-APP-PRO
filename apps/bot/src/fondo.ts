@@ -8,6 +8,13 @@ export interface TareaFondo {
   pasada(): Promise<void>;
   /** Arranca el bucle periódico y devuelve la función que lo detiene. */
   iniciar(intervaloMs?: number): () => void;
+  /**
+   * Espera a que termine la pasada que estuviera corriendo (si no hay ninguna, retorna ya).
+   * Detener el bucle solo cancela el temporizador: al apagar hay que esperar esto antes de
+   * cerrar la base de datos, o la pasada en vuelo se queda escribiendo sobre una conexión
+   * cerrada (un registro a medias y un aviso perdido).
+   */
+  esperarPasada(): Promise<void>;
 }
 
 const INTERVALO_MS = 60_000;
@@ -25,7 +32,7 @@ export function crearTareaFondo(
   deps: Dependencias,
   notificar: (tipo: TipoDocumento, r: ResultadoEmision) => Promise<void>,
 ): TareaFondo {
-  let enCurso = false;
+  let enCurso: Promise<void> | null = null;
 
   const avisar = async (tipo: TipoDocumento, cambios: ResultadoEmision[]): Promise<void> => {
     for (const r of cambios) {
@@ -37,23 +44,26 @@ export function crearTareaFondo(
     }
   };
 
-  const pasada = async (): Promise<void> => {
-    if (enCurso) return;
-    enCurso = true;
+  const ejecutar = async (): Promise<void> => {
     try {
-      try {
-        await avisar("guia", await procesarPendientesGuias(deps.ctx));
-      } catch (error) {
-        deps.log.error("Error al procesar las guías pendientes", error);
-      }
-      try {
-        await avisar("factura", await procesarPendientesFacturas(deps.ctx));
-      } catch (error) {
-        deps.log.error("Error al procesar las facturas pendientes", error);
-      }
-    } finally {
-      enCurso = false;
+      await avisar("guia", await procesarPendientesGuias(deps.ctx));
+    } catch (error) {
+      deps.log.error("Error al procesar las guías pendientes", error);
     }
+    try {
+      await avisar("factura", await procesarPendientesFacturas(deps.ctx));
+    } catch (error) {
+      deps.log.error("Error al procesar las facturas pendientes", error);
+    }
+  };
+
+  const pasada = (): Promise<void> => {
+    if (enCurso) return Promise.resolve();
+    const actual = ejecutar().finally(() => {
+      if (enCurso === actual) enCurso = null;
+    });
+    enCurso = actual;
+    return actual;
   };
 
   return {
@@ -61,6 +71,9 @@ export function crearTareaFondo(
     iniciar(intervaloMs = INTERVALO_MS) {
       const temporizador = setInterval(() => void pasada(), intervaloMs);
       return () => clearInterval(temporizador);
+    },
+    async esperarPasada() {
+      await enCurso;
     },
   };
 }

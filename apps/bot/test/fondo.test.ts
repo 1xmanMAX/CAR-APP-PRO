@@ -135,6 +135,38 @@ describe("tarea de fondo", () => {
     expect(errores.join(" ")).toContain("aviso");
   });
 
+  it("esperarPasada() deja terminar la pasada en vuelo antes de cerrar la base", async () => {
+    const gateway = new GatewayControlado();
+    const { ctx, avanzar, tarea, notificaciones } = await preparar(gateway);
+    await guiaPendiente(ctx, avanzar);
+    gateway.fallar = false;
+
+    const detener = tarea.iniciar(5);
+    await gateway.entrada; // hay una pasada colgada dentro del envío a SUNAT
+    detener(); // el temporizador ya no dispara, pero esa pasada sigue viva
+
+    // Así apaga main.ts: detener el bucle, esperar la pasada y recién entonces cerrar.
+    const orden: string[] = [];
+    const apagado = (async () => {
+      await tarea.esperarPasada();
+      orden.push("cerrado");
+    })();
+    await new Promise((r) => setImmediate(r));
+    expect(orden).toEqual([]);
+    expect(notificaciones).toHaveLength(0);
+
+    gateway.soltar();
+    await apagado;
+    expect(notificaciones).toHaveLength(1);
+    expect(orden).toEqual(["cerrado"]);
+  });
+
+  it("esperarPasada() retorna en el acto si no hay ninguna en curso", async () => {
+    const gateway = new GatewayControlado();
+    const { tarea } = await preparar(gateway);
+    await expect(tarea.esperarPasada()).resolves.toBeUndefined();
+  });
+
   it("iniciar() repite la pasada y el cancelador la detiene", async () => {
     vi.useFakeTimers();
     try {

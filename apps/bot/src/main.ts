@@ -28,9 +28,53 @@ const log = crearLogger(cfgBot.logDir);
 const { ctx, cerrar } = await crearContexto(config);
 ctx.log = (n, m, d) => log[n](m, d);
 
+/**
+ * La base se suelta una sola vez, venga el apagado de donde venga (señal, fallo de arranque o
+ * falta de datos sembrados): cerrarla dos veces revienta con "Called end on pool more than once".
+ */
+let cerrado: Promise<void> | null = null;
+const cerrarUnaVez = (): Promise<void> =>
+  (cerrado ??= cerrar().catch((error: unknown) => log.error("error al cerrar la base de datos", error)));
+
+// Se rellenan conforme arranca cada pieza. Las señales se atienden desde ya —con el contexto
+// abierto— porque un Ctrl-C a medio arranque también tiene que cerrar la base.
+let detenerBot: (() => Promise<void>) | undefined;
+let detenerFondo: (() => void) | undefined;
+let detenerAviso: (() => void) | undefined;
+let esperarPasada: (() => Promise<void>) | undefined;
+
+/**
+ * Apagado ordenado e idempotente: se deja de aceptar mensajes, se cortan las dos tareas
+ * periódicas, se espera a la pasada de fondo que estuviera en vuelo (detener el bucle no la
+ * cancela) y recién entonces se cierra la base. Nunca rechaza: cada paso anota su propio fallo,
+ * para que el apagado no se disfrace de fallo de arranque más abajo.
+ */
+let apagado: Promise<void> | undefined;
+const apagar = (senal: string): void => {
+  if (apagado) return;
+  log.info(`Apagando el bot (${senal})`);
+  detenerFondo?.();
+  detenerAviso?.();
+  apagado = (async () => {
+    try {
+      await detenerBot?.();
+    } catch (error) {
+      log.error("error al detener el bot", error);
+    }
+    try {
+      await esperarPasada?.();
+    } catch (error) {
+      log.error("error al terminar la pasada de fondo", error);
+    }
+    await cerrarUnaVez();
+  })();
+};
+process.once("SIGINT", () => apagar("SIGINT"));
+process.once("SIGTERM", () => apagar("SIGTERM"));
+
 if (!(await hayUsuarios(ctx))) {
   console.error("Ejecuta pnpm sembrar primero");
-  await cerrar();
+  await cerrarUnaVez();
   process.exit(1);
 }
 
@@ -40,80 +84,74 @@ if (!(await hayDueno(ctx))) {
   console.log(`Código de registro: ${codigoRegistro} — envíalo al bot desde tu Telegram.`);
 }
 
-/** Usa `bot`, declarado justo debajo: solo se ejecuta con el bot ya creado. */
-const descargarArchivo = async (fileId: string): Promise<Buffer> => {
-  const f = await bot.api.getFile(fileId);
-  // La URL lleva el token dentro: nunca debe aparecer en un log ni en un mensaje de error.
-  const r = await fetch(`https://api.telegram.org/file/bot${cfgBot.token}/${f.file_path}`);
-  if (!r.ok) throw new Error(`No se pudo descargar el archivo (${r.status})`);
-  return Buffer.from(await r.arrayBuffer());
-};
+// Desde aquí todo va protegido: con el contexto ya abierto, cualquier tropiezo al montar el
+// extractor o el bot (un token con formato inválido, por ejemplo) debe cerrar la base igual.
+try {
+  /** Usa `bot`, declarado justo debajo: solo se ejecuta con el bot ya creado. */
+  const descargarArchivo = async (fileId: string): Promise<Buffer> => {
+    const f = await bot.api.getFile(fileId);
+    // La URL lleva el token dentro: nunca debe aparecer en un log ni en un mensaje de error.
+    const r = await fetch(`https://api.telegram.org/file/bot${cfgBot.token}/${f.file_path}`);
+    if (!r.ok) throw new Error(`No se pudo descargar el archivo (${r.status})`);
+    return Buffer.from(await r.arrayBuffer());
+  };
 
-const deps: Dependencias = {
-  ctx,
-  extractor: crearExtractor({ tipo: cfgBot.extractor }, { validarRuc, obtenerUbigeo }),
-  descargarArchivo,
-  enSegundoPlano: (tarea) => {
-    void tarea().catch((error: unknown) => log.error("error en tarea de segundo plano", error));
-  },
-  codigoRegistro,
-  log,
-};
+  const deps: Dependencias = {
+    ctx,
+    extractor: crearExtractor({ tipo: cfgBot.extractor }, { validarRuc, obtenerUbigeo }),
+    descargarArchivo,
+    enSegundoPlano: (tarea) => {
+      void tarea().catch((error: unknown) => log.error("error en tarea de segundo plano", error));
+    },
+    codigoRegistro,
+    log,
+  };
 
-const bot = crearBot(cfgBot.token, deps);
+  const bot = crearBot(cfgBot.token, deps);
+  detenerBot = () => bot.stop();
 
-/** Los avisos automáticos van siempre al dueño; sin dueño registrado todavía, no hay a quién. */
-async function notificarAlDueno(tipo: TipoDocumento, r: ResultadoEmision): Promise<void> {
-  const chatId = await duenoTelegramId(ctx);
-  if (chatId === null) return;
-  if (tipo === "guia") await notificarGuia(deps, bot.api, chatId, r);
-  else await notificarFactura(bot.api, deps, chatId, r);
-}
-
-const fondo = crearTareaFondo(deps, notificarAlDueno);
-const detenerFondo = fondo.iniciar();
-
-const detenerAviso = programarAvisoDiario(async () => {
-  try {
+  /** Los avisos automáticos van siempre al dueño; sin dueño registrado todavía, no hay a quién. */
+  const notificarAlDueno = async (tipo: TipoDocumento, r: ResultadoEmision): Promise<void> => {
     const chatId = await duenoTelegramId(ctx);
     if (chatId === null) return;
-    const texto = await textoAvisoDiario(ctx);
-    if (texto === null) return;
-    await bot.api.sendMessage(chatId, texto);
-  } catch (error) {
-    log.error("no se pudo enviar el aviso diario", error);
-  }
-}, cfgBot.horaAviso);
+    if (tipo === "guia") await notificarGuia(deps, bot.api, chatId, r);
+    else await notificarFactura(bot.api, deps, chatId, r);
+  };
 
-/**
- * Apagado ordenado: se deja de aceptar mensajes, se cortan las dos tareas periódicas y recién
- * entonces se suelta la base de datos. Se guarda la promesa para esperarla abajo: `bot.stop()`
- * hace que `bot.start()` resuelva, y el proceso no debe terminar antes de cerrar la conexión.
- */
-let apagado: Promise<void> | null = null;
-const apagar = (senal: string): void => {
-  if (apagado) return;
-  log.info(`Apagando el bot (${senal})`);
-  detenerFondo();
-  detenerAviso();
-  apagado = bot
-    .stop()
-    .catch((error: unknown) => log.error("error al detener el bot", error))
-    .then(() => cerrar());
-};
-process.once("SIGINT", () => apagar("SIGINT"));
-process.once("SIGTERM", () => apagar("SIGTERM"));
+  const fondo = crearTareaFondo(deps, notificarAlDueno);
+  esperarPasada = () => fondo.esperarPasada();
+  detenerFondo = fondo.iniciar();
 
-try {
+  detenerAviso = programarAvisoDiario(async () => {
+    try {
+      const chatId = await duenoTelegramId(ctx);
+      if (chatId === null) return;
+      const texto = await textoAvisoDiario(ctx);
+      if (texto === null) return;
+      await bot.api.sendMessage(chatId, texto);
+    } catch (error) {
+      log.error("no se pudo enviar el aviso diario", error);
+    }
+  }, cfgBot.horaAviso);
+
+  // `bot.stop()` hace que esto resuelva: el proceso no debe terminar antes de que el apagado
+  // que lo provocó haya cerrado la base.
   await bot.start({ onStart: () => log.info("Bot iniciado") });
   await apagado;
 } catch (error) {
+  if (apagado) {
+    // Ya había un apagado en marcha: lo que falló es el cierre, no el arranque. Anunciar un
+    // problema de token aquí sería mentir, y volver a cerrar reventaría la conexión.
+    await apagado.catch(() => {});
+    process.exit(1);
+  }
   // Telegram rechaza el token, no hay red…: hay que soltar la base de datos igual, no dejar el
   // proceso muriendo con un volcado crudo. El detalle va al log; el token nunca se imprime.
   log.error("el bot no pudo arrancar", error);
   console.error("El bot no pudo arrancar. Revisa TELEGRAM_BOT_TOKEN y tu conexión.");
-  detenerFondo();
-  detenerAviso();
-  await cerrar();
+  detenerFondo?.();
+  detenerAviso?.();
+  await esperarPasada?.().catch(() => {});
+  await cerrarUnaVez();
   process.exit(1);
 }

@@ -218,6 +218,7 @@ export const auditoria = pgTable("auditoria", {
 export const ruta = pgTable("ruta", {
   id: serial("id").primaryKey(),
   nombre: text("nombre").notNull().unique(),
+  nombreNormalizado: text("nombre_normalizado").notNull().unique(),
   activa: boolean("activa").notNull().default(true),
 });
 

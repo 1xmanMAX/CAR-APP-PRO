@@ -48,7 +48,7 @@ describe("siguienteCorrelativo", () => {
 
 describe("viajes, gastos y lecturas", () => {
   it("modela un viaje en curso con presupuesto, gasto y entrega, y protege la unicidad", async () => {
-    const [r] = await db.insert(ruta).values({ nombre: "Arequipa - Lima" }).returning();
+    const [r] = await db.insert(ruta).values({ nombre: "Arequipa - Lima", nombreNormalizado: "AREQUIPA - LIMA" }).returning();
     await db.insert(rutaPresupuesto).values({ rutaId: r!.id, categoria: "combustible", monto: 50000 });
 
     const [v] = await db.insert(vehiculo).values({ placa: "ABC-123" }).returning();

@@ -1,4 +1,4 @@
-import { eq, ruta, rutaPresupuesto, type CategoriaGasto } from "@sunatapp/db";
+import { categoriaGastoEnum, eq, ruta, rutaPresupuesto, type CategoriaGasto } from "@sunatapp/db";
 import { ErrorNegocio } from "../errores";
 import { registrarAuditoria } from "../infra/auditoria";
 import type { Contexto } from "../infra/contexto";
@@ -15,6 +15,8 @@ export interface Ruta {
   plantilla: LineaPlantilla[];
 }
 
+const ORDEN_CATEGORIAS = categoriaGastoEnum.enumValues;
+
 function normalizar(texto: string): string {
   return texto
     .normalize("NFD")
@@ -30,12 +32,20 @@ function validarPlantilla(plantilla: LineaPlantilla[]): void {
   }
 }
 
+function codigoError(error: unknown): string | undefined {
+  return (error as { cause?: { code?: string }; code?: string }).cause?.code ?? (error as { code?: string }).code;
+}
+
 async function plantillaDe(ctx: Contexto, rutaId: number): Promise<LineaPlantilla[]> {
   const filas = await ctx.db
     .select({ categoria: rutaPresupuesto.categoria, monto: rutaPresupuesto.monto })
     .from(rutaPresupuesto)
-    .where(eq(rutaPresupuesto.rutaId, rutaId));
-  return filas;
+    .where(eq(rutaPresupuesto.rutaId, rutaId))
+    .orderBy(rutaPresupuesto.categoria);
+  // El orden de despliegue es el de la enumeración (combustible, peaje, viáticos, ...), no el
+  // alfabético que da el ORDER BY de arriba; ese ORDER BY solo hace determinista el resultado
+  // de la consulta antes de reordenar en JS.
+  return [...filas].sort((a, b) => ORDEN_CATEGORIAS.indexOf(a.categoria) - ORDEN_CATEGORIAS.indexOf(b.categoria));
 }
 
 async function todasLasRutas(ctx: Contexto): Promise<Array<typeof ruta.$inferSelect>> {
@@ -53,18 +63,26 @@ export async function crearRuta(
   usuarioId?: number,
 ): Promise<number> {
   validarPlantilla(plantilla);
-  const buscado = normalizar(nombre);
+  const nombreNormalizado = normalizar(nombre);
+  // Chequeo amistoso primero (evita abrir una transacción para el caso común); la restricción
+  // única en `nombreNormalizado` (migración 0006) es el respaldo real contra la carrera entre dos
+  // creaciones concurrentes con el mismo nombre normalizado.
   const existentes = await todasLasRutas(ctx);
-  if (existentes.some((r) => normalizar(r.nombre) === buscado)) throw new ErrorNegocio("Ya existe una ruta con ese nombre");
-  return ctx.db.transaction(async (tx) => {
-    const [fila] = await tx.insert(ruta).values({ nombre }).returning({ id: ruta.id });
-    const rutaId = fila!.id;
-    if (plantilla.length > 0) {
-      await tx.insert(rutaPresupuesto).values(plantilla.map((l) => ({ rutaId, categoria: l.categoria, monto: l.monto })));
-    }
-    await registrarAuditoria(tx, { usuarioId, accion: "ruta_creada", entidad: "ruta", entidadId: rutaId, detalle: { nombre, plantilla } });
-    return rutaId;
-  });
+  if (existentes.some((r) => r.nombreNormalizado === nombreNormalizado)) throw new ErrorNegocio("Ya existe una ruta con ese nombre");
+  try {
+    return await ctx.db.transaction(async (tx) => {
+      const [fila] = await tx.insert(ruta).values({ nombre, nombreNormalizado }).returning({ id: ruta.id });
+      const rutaId = fila!.id;
+      if (plantilla.length > 0) {
+        await tx.insert(rutaPresupuesto).values(plantilla.map((l) => ({ rutaId, categoria: l.categoria, monto: l.monto })));
+      }
+      await registrarAuditoria(tx, { usuarioId, accion: "ruta_creada", entidad: "ruta", entidadId: rutaId, detalle: { nombre, plantilla } });
+      return rutaId;
+    });
+  } catch (error) {
+    if (codigoError(error) === "23505") throw new ErrorNegocio("Ya existe una ruta con ese nombre");
+    throw error;
+  }
 }
 
 export async function listarRutas(ctx: Contexto, incluirInactivas = false): Promise<Ruta[]> {
@@ -107,7 +125,7 @@ export async function desactivarRuta(ctx: Contexto, rutaId: number): Promise<voi
 export async function buscarRuta(ctx: Contexto, texto: string): Promise<Ruta[]> {
   const buscado = normalizar(texto);
   if (!buscado) return [];
-  const filas = (await todasLasRutas(ctx)).filter((f) => f.activa && normalizar(f.nombre).includes(buscado));
+  const filas = (await todasLasRutas(ctx)).filter((f) => f.activa && f.nombreNormalizado.includes(buscado));
   const resultado: Ruta[] = [];
   for (const f of filas) resultado.push(await filaAModelo(ctx, f));
   return resultado;

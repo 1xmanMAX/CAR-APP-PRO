@@ -86,4 +86,25 @@ describe("rutas", () => {
     const resultado = await buscarRuta(ctx, "puno");
     expect(resultado.map((r) => r.id)).toEqual([id1]);
   });
+
+  it("buscarRuta encuentra una ruta con tildes escribiendo el texto sin tildes", async () => {
+    const ctx = await contexto();
+    const id = await crearRuta(ctx, "Puno ⇄ Ácora", []);
+    const resultado = await buscarRuta(ctx, "acora");
+    expect(resultado.map((r) => r.id)).toEqual([id]);
+  });
+
+  it("dos creaciones concurrentes con el mismo nombre normalizado dejan solo una ruta", async () => {
+    const ctx = await contexto();
+    const resultados = await Promise.allSettled([
+      crearRuta(ctx, "Arequipa ⇄ Puno", []),
+      crearRuta(ctx, "AREQUIPA ⇄ PUNO", []),
+    ]);
+    const cumplidas = resultados.filter((r) => r.status === "fulfilled");
+    const rechazadas = resultados.filter((r) => r.status === "rejected");
+    expect(cumplidas).toHaveLength(1);
+    expect(rechazadas).toHaveLength(1);
+    expect((rechazadas[0] as PromiseRejectedResult).reason.message).toBe("Ya existe una ruta con ese nombre");
+    expect(await listarRutas(ctx, true)).toHaveLength(1);
+  });
 });

@@ -43,6 +43,13 @@
       "when": 1789913899712,
       "tag": "0005_viajes_y_lecturas",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1789915495126,
+      "tag": "0006_ruta_nombre_normalizado",
+      "breakpoints": true
     }
   ]
 }

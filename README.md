@@ -38,7 +38,7 @@ inventario, reparaciones), chofer (solo Telegram).
 Diseño de referencia: `DSISEÑO DE LA APP/HANDOFF.md`.
 
 ## Requisitos
-Node 24+, pnpm 9.
+Node 22+ (LTS), pnpm 9.
 
 ## Uso local
 ```bash

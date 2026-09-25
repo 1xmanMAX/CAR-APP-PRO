@@ -50,6 +50,13 @@
       "when": 1789915495126,
       "tag": "0006_ruta_nombre_normalizado",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1790309172565,
+      "tag": "0007_control_flota",
+      "breakpoints": true
     }
   ]
 }

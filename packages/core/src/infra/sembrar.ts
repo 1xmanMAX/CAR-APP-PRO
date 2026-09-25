@@ -1,4 +1,5 @@
-import { conductor, empresa, usuario, vehiculo, type Db } from "@sunatapp/db";
+import { conductor, empresa, eq, usuario, vehiculo, type Db } from "@sunatapp/db";
+import { sembrarCatalogoPartes } from "../flota/catalogo";
 import { normalizarPlaca } from "@sunatapp/sunat";
 import { ErrorNegocio } from "../errores";
 
@@ -26,9 +27,13 @@ export async function sembrarDatosIniciales(db: Db, d: DatosIniciales): Promise<
     await tx.insert(empresa).values(d.empresa);
     // El orden importa: `transporteHabitual` toma el primer vehículo activo como tracto y el
     // segundo como carreta.
-    await tx.insert(vehiculo).values(d.vehiculo);
-    if (d.vehiculoSecundario) await tx.insert(vehiculo).values(d.vehiculoSecundario);
+    const [tracto] = await tx.insert(vehiculo).values({ ...d.vehiculo, codigo: "T-01", tipo: "tracto" }).returning({ id: vehiculo.id });
+    if (d.vehiculoSecundario) {
+      const [carreta] = await tx.insert(vehiculo).values({ ...d.vehiculoSecundario, tipo: "carreta" }).returning({ id: vehiculo.id });
+      await tx.update(vehiculo).set({ carretaId: carreta!.id }).where(eq(vehiculo.id, tracto!.id));
+    }
     await tx.insert(conductor).values({ ...d.conductor, tipoDoc: "1" });
-    await tx.insert(usuario).values(d.usuario);
+    await tx.insert(usuario).values({ ...d.usuario, rol: "dueno" });
+    await sembrarCatalogoPartes(tx);
   });
 }

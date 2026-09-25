@@ -261,3 +261,9 @@ svg.graf { width: 100%; height: auto; display: block; }
   .nav, .header .datos, .btn { display: none !important; }
 }
 [hidden] { display: none !important; }
+
+/* Respaldo para WebViews viejos sin `gap` en flex (lo detecta app.js dentro de la app Android). */
+.sin-gap .pagina > * + *, .sin-gap .panel > * + *, .sin-gap .filas > * + * { margin-top: 10px; }
+.sin-gap .header > * + *, .sin-gap .header .datos > * + *, .sin-gap .acciones > * + *, .sin-gap .nav a + a,
+.sin-gap .form-grid > *, .sin-gap form.linea > * + *, .sin-gap .usuario-menu > * + * { margin-left: 12px; }
+.sin-gap .tira i { margin: 0 3px 3px 0; }

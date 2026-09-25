@@ -59,6 +59,7 @@ const ANCLAS = {
 };
 
 function iniciar() {
+  window.__visor3d = true;
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.setClearColor("#121719");

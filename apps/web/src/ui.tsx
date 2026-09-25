@@ -6,6 +6,9 @@ import { puedeVer } from "@sunatapp/core";
 
 // ── Formato ──────────────────────────────────────────────────────────────────
 
+/** Cambia en cada arranque del servidor: evita que el celular use CSS/JS viejos de su caché. */
+export const V = Date.now().toString(36);
+
 /** Céntimos → "S/ 1,234" (sin decimales, para KPIs y gráficos). */
 export function soles(centimos: number): string {
   const s = Math.round(centimos / 100);
@@ -96,7 +99,7 @@ export const Layout: FC<PropsWithChildren<PropsLayout>> = (p) => (
       <meta name="apple-mobile-web-app-capable" content="yes" />
       <meta name="apple-mobile-web-app-title" content="Flota" />
       <link rel="apple-touch-icon" href="/static/iconos/apple-touch-icon.png" />
-      <link rel="stylesheet" href="/static/app.css" />
+      <link rel="stylesheet" href={`/static/app.css?v=${V}`} />
       <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='4' fill='%23121719'/%3E%3Ccircle cx='29' cy='13' r='5' fill='%23FF5AAE'/%3E%3Ccircle cx='13' cy='26' r='5' fill='%238FB4CC'/%3E%3C/svg%3E" />
       {p.importmap ? raw(`<script type="importmap">{"imports":{"three":"/vendor/three/build/three.module.js","three/addons/":"/vendor/three/examples/jsm/"}}</script>`) : null}
     </head>
@@ -133,8 +136,8 @@ export const Layout: FC<PropsWithChildren<PropsLayout>> = (p) => (
         {p.error ? <div class="aviso error" role="alert">{p.error}</div> : null}
         {p.children}
       </div>
-      <script src="/static/app.js" defer></script>
-      {(p.scripts ?? []).map((s) => <script type="module" src={s}></script>)}
+      <script src={`/static/app.js?v=${V}`} defer></script>
+      {(p.scripts ?? []).map((s) => <script type="module" src={`${s}?v=${V}`}></script>)}
     </body>
   </html>
 );
@@ -189,7 +192,7 @@ export const PaginaSimple: FC<PropsWithChildren<{ titulo: string }>> = (p) => (
       <meta name="apple-mobile-web-app-capable" content="yes" />
       <meta name="apple-mobile-web-app-title" content="Flota" />
       <link rel="apple-touch-icon" href="/static/iconos/apple-touch-icon.png" />
-      <link rel="stylesheet" href="/static/app.css" />
+      <link rel="stylesheet" href={`/static/app.css?v=${V}`} />
       <link rel="icon" type="image/svg+xml" href="/static/iconos/icono.svg" />
     </head>
     <body>
@@ -200,7 +203,7 @@ export const PaginaSimple: FC<PropsWithChildren<{ titulo: string }>> = (p) => (
         </div>
         {p.children}
       </div>
-      <script src="/static/app.js" defer></script>
+      <script src={`/static/app.js?v=${V}`} defer></script>
     </body>
   </html>
 );

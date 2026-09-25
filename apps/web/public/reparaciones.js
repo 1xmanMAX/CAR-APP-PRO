@@ -29,9 +29,10 @@ if (form) {
   function partes() {
     const id = Number(selUnidad.value);
     const actual = selParte.value;
-    selParte.replaceChildren(new Option("— reparación general (sin parte) —", ""));
+    selParte.innerHTML = "";
+    selParte.add(new Option("— reparación general (sin parte) —", ""));
     for (const p of datos.partes.filter((x) => x.vehiculoId === id)) selParte.add(new Option(p.nombre, String(p.id), false, String(p.id) === actual));
-    odometro.placeholder = String(datos.odometros[id] ?? "");
+    odometro.placeholder = String(datos.odometros[id] != null ? datos.odometros[id] : "");
   }
 
   function sugerirRepuesto() {

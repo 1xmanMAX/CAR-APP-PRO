@@ -13,7 +13,7 @@
       try {
         const r = await fetch(url, { credentials: "same-origin" });
         if (r.ok) el.innerHTML = await r.text();
-      } catch { /* sin red: se intenta en la próxima vuelta */ }
+      } catch (e) { /* sin red: se intenta en la próxima vuelta */ }
     }, cada);
   }
   document.addEventListener("submit", (e) => {
@@ -24,7 +24,7 @@
   document.addEventListener("submit", (e) => {
     if (e.defaultPrevented) return;
     const f = e.target;
-    if (f.method?.toLowerCase() !== "post") return;
+    if (!f.method || f.method.toLowerCase() !== "post") return;
     setTimeout(() => { for (const b of f.querySelectorAll("button[type=submit], button:not([type])")) b.disabled = true; }, 0);
   });
   // Limpia ?ok=/?error= de la barra de direcciones para que un F5 no repita el aviso.
@@ -47,7 +47,7 @@
     aviso = e;
     if (boton) boton.hidden = false;
   });
-  boton?.addEventListener("click", async () => {
+  if (boton) boton.addEventListener("click", async () => {
     if (!aviso) return;
     aviso.prompt();
     await aviso.userChoice.catch(() => {});
@@ -61,6 +61,14 @@
 (() => {
   if (!/ControlFlotaAndroid/.test(navigator.userAgent)) return;
   document.documentElement.classList.add("en-app");
+  // WebViews viejos (Android sin actualizar) no entienden `gap` en flex: se agregan márgenes.
+  const d = document.createElement("div");
+  d.style.cssText = "display:flex;flex-direction:column;row-gap:1px;position:absolute";
+  d.appendChild(document.createElement("div"));
+  d.appendChild(document.createElement("div"));
+  document.body.appendChild(d);
+  if (d.scrollHeight !== 1) document.documentElement.classList.add("sin-gap");
+  d.remove();
   const b = document.getElementById("app-servidor");
   if (b) b.hidden = false;
 })();

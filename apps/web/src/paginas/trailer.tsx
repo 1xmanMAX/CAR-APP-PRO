@@ -3,6 +3,7 @@ import {
   ajustarVidaParte, ErrorNegocio, estadoPorZona, instalarParte, listarTiposParte, listarUnidades, listarViajesFlota, partesDeUnidad,
   puedeEditar, viajesDesde, ZONAS, type ParteConDesgaste,
 } from "@sunatapp/core";
+import { raw } from "hono/html";
 import { accion, formulario, pagina, type App, type C, type Deps } from "../base";
 import { Barra, ChipEstado, Datos, ETIQUETA_ESTADO, fechaMedia, miles, Panel, soles2, Vacio } from "../ui";
 
@@ -120,7 +121,8 @@ async function vista(c: C, d: Deps) {
               </div>
             ) : null}
             <div class="pie"><span><i class="d-ok"></i>OK</span><span><i class="d-proximo"></i>PRÓXIMO (70%+)</span><span><i class="d-cambiar"></i>CAMBIAR (90%+)</span><span><i style="background:#E9E3D6;opacity:.5"></i>SIN CONTROL</span></div>
-            <div class="sin-webgl" hidden>Tu navegador no puede mostrar el modelo 3D (WebGL desactivado). La lista de partes funciona igual.</div>
+            {raw(`<script>setTimeout(function(){if(!window.__visor3d){var e=document.querySelector("#visor .sin-webgl");if(e)e.hidden=false;}},6000)</script>`)}
+            <div class="sin-webgl" hidden>Este navegador no puede mostrar el modelo 3D (WebGL o navegador desactualizado: actualiza "Android System WebView" o Chrome). La lista de partes funciona igual.</div>
           </div>
           <div class="datos-visor">
             <div><span class="lbl">KM TOTAL</span><b>{miles(unidad.odometroKm)}</b></div>

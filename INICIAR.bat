@@ -28,6 +28,10 @@ if errorlevel 1 goto error
 
 echo  Abriendo http://localhost:3000 ... La primera vez te pedira crear tu acceso de dueno.
 echo  Para cerrar la app: cierra esta ventana.
+echo  Desde el celular - app Android, mismo wifi - usa esta direccion:
+for /f "tokens=2 delims=:" %%a in ('ipconfig ^| findstr /c:"IPv4"') do echo     %%a:3000
+echo  Si Windows pregunta por el firewall, marca "Redes privadas" y permite el acceso.
+echo.
 start "" cmd /c "timeout /t 8 >nul & start http://localhost:3000"
 call npx --yes pnpm@9.12.3 app
 goto fin

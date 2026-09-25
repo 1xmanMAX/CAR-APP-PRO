@@ -7,7 +7,7 @@ on:
   push:
     branches: ["main", "claude/**"]
     tags: ["v*"]
-    paths-ignore: ["docs/**", "**/*.md"]
+    paths-ignore: ["docs/**", "**/*.md", "LEEME-PRIMERO.txt"]
   workflow_dispatch:
 
 permissions:
@@ -41,6 +41,24 @@ jobs:
           echo "etiqueta=$ETIQUETA" >> "$GITHUB_OUTPUT"
           ls -la "$ARCHIVO"
 
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.14.3"
+
+      - name: App de Android (APK)
+        working-directory: android
+        env:
+          VERSION_CODE: ${{ github.run_number }}
+        run: |
+          gradle --no-daemon assembleRelease
+          cp app/build/outputs/apk/release/app-release.apk "../ControlFlota-${{ steps.zip.outputs.etiqueta }}.apk"
+          ls -la ../*.apk
+
       - name: Publicar prerelease
         uses: softprops/action-gh-release@v2
         with:
@@ -50,7 +68,9 @@ jobs:
           make_latest: false
           target_commitish: ${{ github.sha }}
           overwrite_files: true
-          files: ${{ steps.zip.outputs.archivo }}
+          files: |
+            ${{ steps.zip.outputs.archivo }}
+            ControlFlota-${{ steps.zip.outputs.etiqueta }}.apk
           body: |
             Versión de prueba para la PC.
 
@@ -59,3 +79,7 @@ jobs:
             3. Entra con `demo@flota.pe` / `demo1234` y pulsa **⬇ INSTALAR APP** para tenerla como app.
 
             Detalles en `LEEME-PRIMERO.txt` dentro del ZIP.
+
+            **Android:** descarga el `.apk` en el celular, ábrelo y permite "instalar apps de esta fuente".
+            La primera vez pide la dirección del servidor: la IP de tu PC y el puerto (ej. `192.168.1.10:3000`),
+            que muestra INICIAR-DEMO.bat al arrancar. Celular y PC en el mismo wifi.

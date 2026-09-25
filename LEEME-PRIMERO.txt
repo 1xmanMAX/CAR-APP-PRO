@@ -28,5 +28,12 @@ CONTROL FLOTA · cómo probarla en tu PC
    - Sin token de Telegram funciona solo la web; con token también el bot.
    - SUNAT queda en modo SIMULADO (sin validez tributaria) hasta configurar el certificado.
 
-Desde el celular (misma red wifi): http://IP-DE-TU-PC:3000
-(para instalarla en Android como app hace falta publicarla con https: siguiente paso).
+6. APP DE ANDROID
+   - Descarga ControlFlota-(versión).apk en el celular (misma página de descarga que este ZIP).
+   - Ábrelo; Android pedirá permitir "instalar apps de esta fuente": acepta.
+   - Al abrir la app pide la dirección del servidor: la IP de tu PC y el puerto, por ejemplo
+     192.168.1.10:3000 (INICIAR-DEMO.bat la muestra al arrancar). Celular y PC en el mismo wifi.
+   - Si no conecta: la ventana de INICIAR-DEMO debe estar abierta y el firewall de Windows debe
+     permitir Node.js en "Redes privadas".
+   - Para cambiar de servidor: botón ⚙ SERVIDOR arriba, dentro de la app.
+   - Fuera de tu wifi (en ruta) hace falta publicar el servidor en internet con un dominio.

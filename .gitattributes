@@ -19,3 +19,5 @@
 # Fuera del ZIP de la prerelease (no hacen falta para usar la app).
 DSISE* export-ignore
 .github export-ignore
+*.jks binary
+android export-ignore

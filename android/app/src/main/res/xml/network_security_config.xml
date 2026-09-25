@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- El servidor suele estar en la red local (http://192.168.x.x:3000) mientras no haya dominio con
+     HTTPS: por eso se permite http sin cifrar. Con un dominio https esto no se usa. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

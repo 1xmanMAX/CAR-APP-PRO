@@ -115,6 +115,7 @@ export const Layout: FC<PropsWithChildren<PropsLayout>> = (p) => (
             <a href="/telegram" class={`bot-estado${p.cab.botEnLinea ? "" : " off"}`}>BOT TELEGRAM · {p.cab.botEnLinea ? "EN LÍNEA" : "DESCONECTADO"}</a>
             <span class="hora" data-reloj="">{p.cab.hora}</span>
             <button type="button" class="btn chico primario" id="instalar-app" hidden>⬇ INSTALAR APP</button>
+            <a class="btn chico" id="app-servidor" href="flota-app://servidor" hidden>⚙ SERVIDOR</a>
             <div class="usuario-menu">
               <span class="muted">{p.usuario.nombre}</span>
               <form method="post" action="/salir"><button class="btn chico" type="submit">SALIR</button></form>

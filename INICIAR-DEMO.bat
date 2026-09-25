@@ -32,6 +32,10 @@ echo  Para instalarla como app: boton INSTALAR APP arriba a la derecha,
 echo  o el icono de instalar en la barra de direcciones de Chrome o Edge.
 echo  Para cerrar la app: cierra esta ventana.
 echo.
+echo  Desde el celular - app Android, mismo wifi - usa esta direccion:
+for /f "tokens=2 delims=:" %%a in ('ipconfig ^| findstr /c:"IPv4"') do echo     %%a:3000
+echo  Si Windows pregunta por el firewall, marca "Redes privadas" y permite el acceso.
+echo.
 start "" cmd /c "timeout /t 8 >nul & start http://localhost:3000"
 call npx --yes pnpm@9.12.3 web
 goto fin

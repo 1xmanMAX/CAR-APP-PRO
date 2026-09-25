@@ -56,3 +56,11 @@
   });
   window.addEventListener("appinstalled", () => { if (boton) boton.hidden = true; });
 })();
+
+// Dentro de la app de Android: opción para cambiar de servidor y sin botón de instalar.
+(() => {
+  if (!/ControlFlotaAndroid/.test(navigator.userAgent)) return;
+  document.documentElement.classList.add("en-app");
+  const b = document.getElementById("app-servidor");
+  if (b) b.hidden = false;
+})();

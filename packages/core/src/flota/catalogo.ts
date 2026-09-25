@@ -81,7 +81,7 @@ function validarVida(v: { vidaKm: number | null; vidaViajes: number | null; vida
 
 export async function guardarTipoParte(
   ctx: Contexto,
-  e: Omit<TipoParte, "id" | "activo" | "codigo"> & { id?: number; codigo?: string },
+  e: Omit<TipoParte, "id" | "activo" | "codigo" | "nombreCorto"> & { id?: number; codigo?: string; nombreCorto?: string },
   usuarioId?: number,
 ): Promise<number> {
   validarVida(e);
@@ -91,7 +91,8 @@ export async function guardarTipoParte(
     vidaKm: e.vidaKm, vidaViajes: e.vidaViajes, vidaDias: e.vidaDias,
   };
   if (e.id !== undefined) {
-    const [f] = await ctx.db.update(tipoParte).set(valores).where(eq(tipoParte.id, e.id)).returning({ id: tipoParte.id });
+    const { nombreCorto, ...resto } = valores;
+    const [f] = await ctx.db.update(tipoParte).set(e.nombreCorto ? valores : resto).where(eq(tipoParte.id, e.id)).returning({ id: tipoParte.id });
     if (!f) throw new ErrorNegocio("El tipo de parte no existe");
     await registrarAuditoria(ctx.db, { usuarioId, accion: "tipo_parte_editado", entidad: "tipo_parte", entidadId: f.id, detalle: valores });
     return f.id;

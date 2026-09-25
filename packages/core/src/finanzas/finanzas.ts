@@ -154,7 +154,7 @@ export async function registrarReinversion(
 export async function listarReinversiones(ctx: Contexto, anio: string) {
   return ctx.db.select({ r: reinversion, codigo: vehiculo.codigo }).from(reinversion)
     .leftJoin(vehiculo, eq(vehiculo.id, reinversion.vehiculoId))
-    .where(sql`${reinversion.fecha} like ${`${anio}-%`}`).orderBy(desc(reinversion.fecha));
+    .where(and(sql`${reinversion.fecha} >= ${`${anio}-01-01`}`, sql`${reinversion.fecha} <= ${`${anio}-12-31`}`)).orderBy(desc(reinversion.fecha));
 }
 
 async function sumaTabla(ctx: Contexto, tabla: typeof ingreso | typeof reinversion, desde: string, hasta: string, vehiculoId?: number): Promise<number> {

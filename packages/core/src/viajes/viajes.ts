@@ -177,7 +177,7 @@ export async function listarViajes(
   o: { mes?: string; rutaId?: number; estado?: EstadoViaje; limite?: number } = {},
 ): Promise<Viaje[]> {
   const filtros = [];
-  if (o.mes !== undefined) filtros.push(sql`${viaje.fechaSalida} like ${`${o.mes}-%`}`);
+  if (o.mes !== undefined) filtros.push(sql`to_char(${viaje.fechaSalida}, 'YYYY-MM') = ${o.mes}`);
   if (o.rutaId !== undefined) filtros.push(eq(viaje.rutaId, o.rutaId));
   if (o.estado !== undefined) filtros.push(eq(viaje.estado, o.estado));
   const base = ctx.db

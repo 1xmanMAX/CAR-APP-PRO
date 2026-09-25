@@ -193,7 +193,7 @@ export async function registrarLecturaOdometro(
   if (e.km < v.odometroKm) {
     throw new ErrorNegocio(`El odómetro de ${v.codigo ?? "la unidad"} ya marca ${v.odometroKm.toLocaleString("en-US")} km; la lectura no puede ser menor`);
   }
-  if (e.km - v.odometroKm > 20000) {
+  if (v.odometroKm > 0 && e.km - v.odometroKm > 20000) {
     throw new ErrorNegocio(`La lectura suma ${(e.km - v.odometroKm).toLocaleString("en-US")} km de golpe; revisa el número`);
   }
   await db.update(vehiculo).set({ odometroKm: e.km }).where(eq(vehiculo.id, e.vehiculoId));

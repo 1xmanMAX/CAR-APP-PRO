@@ -1,4 +1,4 @@
-import { and, contraparte, desc, eq, facturaGuia, guiaTransportista, inArray, isNull, type EstadoGuia } from "@sunatapp/db";
+import { and, contraparte, desc, empresa, eq, factura, facturaGuia, guiaTransportista, inArray, isNull, type EstadoGuia } from "@sunatapp/db";
 import { parsearSerieNumero } from "../dominio/serie-numero";
 import type { Contexto } from "../infra/contexto";
 
@@ -86,4 +86,19 @@ export async function buscarContrapartePorDoc(
     .from(contraparte)
     .where(eq(contraparte.numeroDoc, numeroDoc));
   return c ?? null;
+}
+
+export async function obtenerEmpresa(ctx: Contexto) {
+  const [emp] = await ctx.db.select().from(empresa).limit(1);
+  return emp ?? null;
+}
+
+/** Rutas en el almacén de los archivos de una guía o factura (para descargarlos). */
+export async function archivosDocumento(ctx: Contexto, tipo: "guia" | "factura", id: number): Promise<{ pdf: string | null; xml: string | null; cdr: string | null } | null> {
+  if (tipo === "guia") {
+    const [g] = await ctx.db.select({ pdf: guiaTransportista.rutaPdf, xml: guiaTransportista.rutaXml, cdr: guiaTransportista.rutaCdr }).from(guiaTransportista).where(eq(guiaTransportista.id, id));
+    return g ?? null;
+  }
+  const [f] = await ctx.db.select({ pdf: factura.rutaPdf, xml: factura.rutaXml, cdr: factura.rutaCdr }).from(factura).where(eq(factura.id, id));
+  return f ?? null;
 }

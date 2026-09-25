@@ -1,0 +1,133 @@
+/** @jsxRuntime automatic @jsxImportSource hono/jsx */
+import {
+  ErrorNegocio, guardarTipoParte, guardarUsuario, listarTiposParte, listarUsuarios, NOMBRE_ROL, ZONAS, type RolUsuario, type ZonaModelo,
+} from "@sunatapp/core";
+import { accion, empresaActual, formulario, pagina, type App, type C, type Deps } from "../base";
+import { enteroONull } from "./flota";
+import { miles, Panel } from "../ui";
+
+const ROLES = Object.keys(NOMBRE_ROL) as RolUsuario[];
+
+async function vista(c: C, d: Deps) {
+  const ctx = d.ctx;
+  const [usuarios, tipos, emp] = await Promise.all([listarUsuarios(ctx), listarTiposParte(ctx, true), empresaActual(ctx)]);
+  const yo = c.get("usuario");
+  return pagina(c, d, { titulo: "Ajustes", seccion: "ajustes" }, (
+    <>
+      <div class="grid g-lado">
+        <Panel titulo="USUARIOS Y ROLES">
+          <div class="tabla-wrap"><table class="t">
+            <thead><tr><th>Nombre</th><th>Correo</th><th>Rol</th><th>Telegram</th><th>Web</th><th>Editar</th></tr></thead>
+            <tbody>{usuarios.map((u) => (
+              <tr>
+                <td><b>{u.nombre}</b>{!u.activo ? <span class="chip neutro" style="margin-left:4px">INACTIVO</span> : null}</td>
+                <td>{u.email ?? "—"}</td><td>{NOMBRE_ROL[u.rol]}</td>
+                <td>{u.telegramId ? <span class="chip tg">{u.telegramNombre ?? u.telegramId}</span> : "—"}</td>
+                <td>{u.tieneClave ? "✓" : "—"}</td>
+                <td>
+                  <details class="plegable"><summary><span class="btn chico">EDITAR</span></summary>
+                    <form method="post" action={`/ajustes/usuario/${u.id}`} class="filas" style="margin-top:6px;min-width:240px">
+                      <label class="campo"><span>Nombre</span><input name="nombre" value={u.nombre} required /></label>
+                      <label class="campo"><span>Correo</span><input name="email" type="email" value={u.email ?? ""} /></label>
+                      <label class="campo"><span>Rol</span><select name="rol" disabled={u.id === yo.id}>{ROLES.map((r) => <option value={r} selected={r === u.rol}>{NOMBRE_ROL[r]}</option>)}</select></label>
+                      {u.id === yo.id ? <input type="hidden" name="rol" value={u.rol} /> : null}
+                      <label class="campo"><span>ID de Telegram</span><input name="telegramId" inputmode="numeric" value={u.telegramId ?? ""} /></label>
+                      <label class="campo"><span>Nueva contraseña</span><input name="clave" type="password" minlength={8} autocomplete="new-password" /></label>
+                      {u.id !== yo.id ? <label class="campo" style="flex-direction:row;gap:6px;align-items:center"><input type="checkbox" name="activo" value="1" checked={u.activo} style="width:auto;min-height:0" /><span style="text-transform:none">Activo</span></label> : <input type="hidden" name="activo" value="1" />}
+                      <button class="btn primario chico" type="submit">GUARDAR</button>
+                    </form>
+                  </details>
+                </td>
+              </tr>
+            ))}</tbody>
+          </table></div>
+          <details class="plegable"><summary><span class="btn chico fantasma">+ AGREGAR USUARIO</span></summary>
+            <form method="post" action="/ajustes/usuario" class="form-grid" style="margin-top:8px">
+              <label class="campo"><span>Nombre *</span><input name="nombre" required /></label>
+              <label class="campo"><span>Rol</span><select name="rol">{ROLES.map((r) => <option value={r}>{NOMBRE_ROL[r]}</option>)}</select></label>
+              <label class="campo"><span>Correo (para la web)</span><input name="email" type="email" /></label>
+              <label class="campo"><span>Contraseña (mín. 8)</span><input name="clave" type="password" minlength={8} autocomplete="new-password" /></label>
+              <label class="campo"><span>ID de Telegram</span><input name="telegramId" inputmode="numeric" placeholder="el bot lo dice con /start" /></label>
+              <button class="btn primario" type="submit">AGREGAR</button>
+            </form>
+          </details>
+          <span class="muted" style="font-size:11px">Dueño: ve y edita todo. Contador: viajes, facturas, finanzas y rentabilidad. Taller: trailer 3D, flota, inventario y reparaciones. Chofer: solo Telegram.</span>
+        </Panel>
+        <Panel titulo="EMPRESA">
+          {emp ? (
+            <div class="filas" style="font-size:12px">
+              <div><span class="lbl">RAZÓN SOCIAL</span><br /><b>{emp.razonSocial}</b></div>
+              <div><span class="lbl">RUC</span><br />{emp.ruc}</div>
+              <div><span class="lbl">DIRECCIÓN</span><br />{emp.direccion}</div>
+              <div><span class="lbl">REGISTRO MTC</span><br />{emp.registroMtc}</div>
+              <div><span class="lbl">SERIES</span><br />Guía {emp.serieGre} · Factura {emp.serieFactura}</div>
+              <div><span class="lbl">MODO SUNAT</span><br />{d.ctx.simulado ? "SIMULADO / BETA (sin validez tributaria)" : "REAL"}</div>
+            </div>
+          ) : <span class="muted">Carga los datos de la empresa con <code>pnpm sembrar</code>.</span>}
+        </Panel>
+      </div>
+      <Panel titulo="CATÁLOGO DE PARTES · VIDA ÚTIL POR DEFECTO" der={<span class="lbl">MANDA EL CONTADOR QUE SE CUMPLA PRIMERO · VACÍO = NO APLICA</span>}>
+        <div class="tabla-wrap"><table class="t">
+          <thead><tr><th>Parte</th><th>Zona del modelo 3D</th><th class="num">Km</th><th class="num">Viajes</th><th class="num">Días</th><th></th></tr></thead>
+          <tbody>{tipos.map((t) => (
+            <tr>
+              <td colspan={6} style="padding:4px 8px">
+                <form method="post" action={`/ajustes/parte/${t.id}`} class="linea" style="align-items:center">
+                  <input name="nombre" value={t.nombre} aria-label="Nombre" style="flex:3;min-width:180px" />
+                  <select name="zona" aria-label="Zona" style="flex:2;min-width:150px">{(Object.keys(ZONAS) as ZonaModelo[]).map((z) => <option value={z} selected={z === t.zona}>{ZONAS[z]}</option>)}</select>
+                  <input name="vidaKm" value={t.vidaKm ?? ""} inputmode="numeric" aria-label="Vida en km" placeholder="km" style="flex:1;min-width:90px" />
+                  <input name="vidaViajes" value={t.vidaViajes ?? ""} inputmode="numeric" aria-label="Vida en viajes" placeholder="viajes" style="flex:1;min-width:70px" />
+                  <input name="vidaDias" value={t.vidaDias ?? ""} inputmode="numeric" aria-label="Vida en días" placeholder="días" style="flex:1;min-width:70px" />
+                  <button class="btn chico" type="submit">GUARDAR</button>
+                </form>
+              </td>
+            </tr>
+          ))}</tbody>
+        </table></div>
+        <details class="plegable"><summary><span class="btn chico fantasma">+ NUEVA PARTE</span></summary>
+          <form method="post" action="/ajustes/parte" class="linea" style="margin-top:8px">
+            <input name="nombre" required placeholder="Nombre de la parte" aria-label="Nombre" style="flex:3" />
+            <select name="zona" aria-label="Zona" style="flex:2">{(Object.keys(ZONAS) as ZonaModelo[]).map((z) => <option value={z}>{ZONAS[z]}</option>)}</select>
+            <input name="vidaKm" inputmode="numeric" placeholder="km" aria-label="Vida en km" style="flex:1" />
+            <input name="vidaViajes" inputmode="numeric" placeholder="viajes" aria-label="Vida en viajes" style="flex:1" />
+            <input name="vidaDias" inputmode="numeric" placeholder="días" aria-label="Vida en días" style="flex:1" />
+            <button class="btn primario chico" type="submit">AGREGAR</button>
+          </form>
+        </details>
+        <span class="muted" style="font-size:11px">Ejemplo actual: frenos del semirremolque {miles(tipos.find((t) => t.codigo === "frenos_sr")?.vidaKm)} km. Los valores iniciales son de ejemplo: ajústalos a tu experiencia. Cada parte instalada puede tener su propia vida útil (desde Trailer 3D).</span>
+      </Panel>
+    </>
+  ));
+}
+
+export function rutasAjustes(app: App, d: Deps): void {
+  app.get("/ajustes", (c) => vista(c, d));
+  const guardar = async (c: C, id?: number) => {
+    const f = await formulario(c);
+    return accion(c, "/ajustes", async () => {
+      const rol = f.rol as RolUsuario;
+      if (!ROLES.includes(rol)) throw new ErrorNegocio("Rol no válido");
+      await guardarUsuario(d.ctx, {
+        id, nombre: f.nombre ?? "", email: f.email || null, rol, clave: f.clave || null,
+        telegramId: f.telegramId ? enteroONull(f.telegramId) : null, activo: id === undefined ? true : f.activo === "1",
+      }, c.get("usuario").id);
+      return id === undefined ? "Usuario agregado" : "Usuario actualizado";
+    });
+  };
+  app.post("/ajustes/usuario", (c) => guardar(c));
+  app.post("/ajustes/usuario/:id", (c) => guardar(c, Number(c.req.param("id"))));
+  const guardarParte = async (c: C, id?: number) => {
+    const f = await formulario(c);
+    return accion(c, "/ajustes", async () => {
+      const zona = f.zona as ZonaModelo;
+      if (!(zona in ZONAS)) throw new ErrorNegocio("Zona no válida");
+      await guardarTipoParte(d.ctx, {
+        id, nombre: f.nombre ?? "", nombreCorto: id === undefined ? (f.nombre ?? "").split("·")[0]!.trim() : undefined, zona,
+        vidaKm: enteroONull(f.vidaKm), vidaViajes: enteroONull(f.vidaViajes), vidaDias: enteroONull(f.vidaDias),
+      }, c.get("usuario").id);
+      return "Catálogo actualizado";
+    });
+  };
+  app.post("/ajustes/parte", (c) => guardarParte(c));
+  app.post("/ajustes/parte/:id", (c) => guardarParte(c, Number(c.req.param("id"))));
+}

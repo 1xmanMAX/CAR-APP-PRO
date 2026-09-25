@@ -9,10 +9,12 @@
   "scripts": {
     "test": "vitest run",
     "typecheck": "pnpm -r exec tsc --noEmit",
-    "bot": "pnpm --filter @sunatapp/bot start",
+    "bot": "tsx apps/bot/src/main.ts",
     "sembrar": "tsx packages/core/scripts/sembrar.ts",
     "demo": "tsx packages/core/scripts/demo.ts",
-    "ubigeos": "tsx packages/core/scripts/generar-ubigeos.ts"
+    "ubigeos": "tsx packages/core/scripts/generar-ubigeos.ts",
+    "web": "tsx apps/web/src/main.ts",
+    "demo:flota": "tsx packages/core/scripts/demo-flota.ts"
   },
   "devDependencies": {
     "@types/node": "^26.5.1",

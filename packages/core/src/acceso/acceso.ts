@@ -135,3 +135,8 @@ export async function necesitaConfiguracionInicial(ctx: Contexto): Promise<boole
   const [f] = await ctx.db.select({ n: sql<number>`count(*)` }).from(usuario).where(sql`${usuario.passwordHash} is not null`);
   return Number(f?.n ?? 0) === 0;
 }
+
+export async function primerUsuarioId(ctx: Contexto): Promise<number | null> {
+  const [f] = await ctx.db.select({ id: usuario.id }).from(usuario).orderBy(usuario.id).limit(1);
+  return f?.id ?? null;
+}

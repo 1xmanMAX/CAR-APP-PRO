@@ -1,6 +1,7 @@
 import {
-  ajuste, and, cotizacion, desc, eq, gasto, inArray, sql, viaje, viajePresupuesto, type CategoriaGasto,
+  ajuste, and, cotizacion, desc, empresa, eq, gasto, inArray, sql, vehiculo, viaje, viajePresupuesto, type CategoriaGasto,
 } from "@sunatapp/db";
+import { pdfPresupuesto } from "@sunatapp/pdf";
 import { ErrorNegocio } from "../errores";
 import type { Contexto } from "../infra/contexto";
 import { hoy, listarUnidades, partesConDesgaste } from "../flota/unidades";
@@ -238,4 +239,32 @@ export async function presupuestoVsReal(ctx: Contexto, fecha: string) {
     const r = real.find((x) => x.categoria === c)?.monto ?? 0;
     return { categoria: c, nombre: NOMBRE_CATEGORIA[c], presupuesto: p, real: r, pct: p > 0 ? Math.round((r / p) * 100) : null };
   }).sort((a, b) => b.real - a.real);
+}
+
+/** PDF del presupuesto guardado (se descarga en la web o se envía por Telegram). */
+export async function pdfDeCotizacion(ctx: Contexto, id: number): Promise<{ pdf: Buffer; nombre: string; texto: string }> {
+  const c = await obtenerCotizacion(ctx, id);
+  const [emp] = await ctx.db.select().from(empresa).limit(1);
+  let unidad: string | null = null;
+  if (c.vehiculoId) {
+    const [v] = await ctx.db.select({ codigo: vehiculo.codigo, placa: vehiculo.placa }).from(vehiculo).where(eq(vehiculo.id, c.vehiculoId));
+    unidad = v ? `${v.codigo ?? ""} · ${v.placa}` : null;
+  }
+  const numero = `P-${String(c.id).padStart(4, "0")}`;
+  const e = c.entrada;
+  const res = c.resultado;
+  const pdf = await pdfPresupuesto({
+    empresa: { ruc: emp?.ruc ?? "", razonSocial: emp?.razonSocial ?? "EMPRESA", direccion: emp?.direccion ?? "" },
+    numero, fecha: c.creadoEn.toISOString().slice(0, 10), ruta: c.ruta, unidad, km: e.km, toneladas: e.toneladas,
+    lineas: [
+      { concepto: `Combustible (${e.km} km ÷ ${e.rendimientoKmGal} km/gal × S/ ${e.precioGal})`, monto: res.combustible },
+      { concepto: "Peajes", monto: res.peajes },
+      { concepto: "Viáticos", monto: res.viaticos },
+      { concepto: `Desgaste de unidad (S/ ${e.desgasteSolesKm} por km)`, monto: res.desgaste },
+    ],
+    costo: res.costo, margenPct: res.margenPct, flete: res.flete, porTonelada: res.porTonelada, porKm: res.porKm,
+  });
+  const f = (n: number) => `S/ ${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const texto = `📄 PRESUPUESTO ${numero}\n${c.ruta} · ${e.km.toLocaleString("en-US")} km · ${e.toneladas} t\nCosto ${f(res.costo)} · margen ${res.margenPct}%\nFLETE SUGERIDO ${f(res.flete)}`;
+  return { pdf, nombre: `presupuesto-${numero}.pdf`, texto };
 }

@@ -3,9 +3,10 @@ package pe.controlflota.app
 import android.annotation.SuppressLint
 import android.app.DownloadManager
 import android.content.ActivityNotFoundException
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Intent
 import android.net.Uri
-import android.net.wifi.WifiManager
 import android.os.Bundle
 import android.os.Environment
 import android.os.Handler
@@ -53,7 +54,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var progreso: ProgressBar
     private lateinit var error: View
     private val servidor = Nodo.URL_LOCAL
-    private var multicast: WifiManager.MulticastLock? = null
     private val principal = Handler(Looper.getMainLooper())
     private var alElegirArchivo: ValueCallback<Array<Uri>>? = null
     private var ultimoAtras = 0L
@@ -66,7 +66,7 @@ class MainActivity : AppCompatActivity() {
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        Nodo.iniciar(this)
+        arrancarNodo()
         setContentView(R.layout.activity_main)
         aplicarBordes(findViewById(R.id.raiz))
 
@@ -136,7 +136,15 @@ class MainActivity : AppCompatActivity() {
         recargar.setOnChildScrollUpCallback { _, _ -> web.scrollY > 0 || (web.url ?: "").contains("/trailer") }
         recargar.setOnRefreshListener { web.reload() }
 
-        findViewById<Button>(R.id.reintentar).setOnClickListener { esperarYAbrir(web.url ?: "$servidor/") }
+        findViewById<Button>(R.id.reintentar).setOnClickListener {
+            arrancarNodo()
+            esperarYAbrir(web.url ?: "$servidor/")
+        }
+        findViewById<Button>(R.id.copiar).setOnClickListener {
+            val texto = findViewById<TextView>(R.id.error_detalle).text
+            (getSystemService(CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("Control Flota", texto))
+            Toast.makeText(this, R.string.copiado, Toast.LENGTH_SHORT).show()
+        }
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
@@ -152,36 +160,45 @@ class MainActivity : AppCompatActivity() {
             }
         })
 
-        // Para oír los avisos UDP de los demás dispositivos del grupo (Android los filtra si no).
-        multicast = (applicationContext.getSystemService(WIFI_SERVICE) as WifiManager)
-            .createMulticastLock("controlflota-sincro").apply { setReferenceCounted(false); acquire() }
-
         if (savedInstanceState != null) web.restoreState(savedInstanceState)
         esperarYAbrir(if (savedInstanceState != null) web.url ?: "$servidor/" else "$servidor/")
     }
 
     override fun onDestroy() {
         principal.removeCallbacksAndMessages(null)
-        multicast?.release()
         super.onDestroy()
+    }
+
+    private fun arrancarNodo() {
+        startService(Intent(this, NodoServicio::class.java))
     }
 
     /** Muestra «Abriendo…» hasta que la app interna responde y entonces carga [url]. */
     private fun esperarYAbrir(url: String) {
         error.visibility = View.VISIBLE
         findViewById<View>(R.id.reintentar).visibility = View.GONE
+        findViewById<View>(R.id.fallo).visibility = View.GONE
         findViewById<TextView>(R.id.error_titulo).text = getString(R.string.abriendo)
         findViewById<TextView>(R.id.error_texto).text = getString(R.string.abriendo_texto)
         val inicio = System.currentTimeMillis()
         Thread {
-            while (!Nodo.listo() && Nodo.error == null && System.currentTimeMillis() - inicio < 120_000) Thread.sleep(250)
+            var visto = false
+            var sinProceso = 0
+            while (!Nodo.listo() && System.currentTimeMillis() - inicio < 180_000) {
+                // Si el proceso de Node se cerró (varios vistazos seguidos), falló. Antes de verlo
+                // vivo por primera vez se le dan 20 s: en celulares lentos tarda en crearse.
+                if (Nodo.procesoVivo(this)) { visto = true; sinProceso = 0 } else sinProceso++
+                if (sinProceso >= 8 && (visto || System.currentTimeMillis() - inicio > 20_000)) break
+                Thread.sleep(250)
+            }
             val ok = Nodo.listo()
+            val detalle = if (ok) "" else Nodo.detalleDelFallo(this)
             principal.post {
                 if (isDestroyed) return@post
                 if (ok) {
                     error.visibility = View.GONE
                     if (web.url != url) web.loadUrl(url) else web.reload()
-                } else mostrarError()
+                } else mostrarError(detalle)
             }
         }.start()
     }
@@ -196,10 +213,12 @@ class MainActivity : AppCompatActivity() {
         CookieManager.getInstance().flush()
     }
 
-    private fun mostrarError() {
+    private fun mostrarError(detalle: String) {
         recargar.isRefreshing = false
         findViewById<TextView>(R.id.error_titulo).text = getString(R.string.error_titulo)
-        findViewById<TextView>(R.id.error_texto).text = Nodo.error ?: Nodo.errorAnterior?.let { getString(R.string.error_texto) + "\n\n" + it } ?: getString(R.string.error_texto)
+        findViewById<TextView>(R.id.error_texto).text = getString(R.string.error_texto)
+        findViewById<TextView>(R.id.error_detalle).text = detalle
+        findViewById<View>(R.id.fallo).visibility = View.VISIBLE
         findViewById<View>(R.id.reintentar).visibility = View.VISIBLE
         error.visibility = View.VISIBLE
     }

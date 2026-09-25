@@ -63,6 +63,41 @@
                 android:textColor="@color/suave"
                 android:textSize="13sp" />
 
+            <LinearLayout
+                android:id="@+id/fallo"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <ScrollView
+                    android:layout_width="match_parent"
+                    android:layout_height="180dp"
+                    android:background="@color/oscuro"
+                    android:padding="8dp">
+
+                    <TextView
+                        android:id="@+id/error_detalle"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="monospace"
+                        android:textColor="#D8DEE0"
+                        android:textIsSelectable="true"
+                        android:textSize="10sp" />
+                </ScrollView>
+
+                <Button
+                    android:id="@+id/copiar"
+                    android:layout_width="match_parent"
+                    android:layout_height="44dp"
+                    android:layout_marginTop="10dp"
+                    android:background="@drawable/boton_borde"
+                    android:text="@string/copiar"
+                    android:textColor="@color/texto"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
             <Button
                 android:id="@+id/reintentar"
                 android:layout_width="match_parent"

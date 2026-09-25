@@ -78,8 +78,13 @@ process.env.CF_XSD ||= join(aqui, "xsd");
 process.env.CF_PUBLICO ||= join(aqui, "public");
 process.env.CF_THREE ||= join(aqui, "three");
 // Si algo falla al arrancar, queda escrito (la app de Android lo muestra) y hay tiempo de verlo.
+// Ya en marcha, un error suelto se anota y la app sigue: mejor que cerrarse en la cara del usuario.
 const fallar = (e) => {
   const texto = (e && e.stack) || String(e);
+  if (globalThis.__controlFlotaListo) {
+    console.error("CONTROLFLOTA_AVISO", texto);
+    return;
+  }
   console.error("CONTROLFLOTA_ERROR", texto);
   try { writeFileSync(join(process.env.CF_DATOS || ".", "error-al-arrancar.txt"), texto); } catch {}
   setTimeout(() => process.exit(1), 1500);

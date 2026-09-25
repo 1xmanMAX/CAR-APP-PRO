@@ -16,7 +16,10 @@ const puerto = Number(process.env.CF_PUERTO || 3939);
 const config = cargarConfig();
 const { ctx, cerrar } = await crearContexto(config);
 ctx.log = (nivel, mensaje, detalle) => console[nivel === "error" ? "error" : "log"](mensaje, detalle ?? "");
-const detener = iniciarServidorWeb(ctx, { host: "127.0.0.1", puerto, urlPublica: null }, {}, (p) => console.log(`CONTROLFLOTA_LISTO ${p}`));
+const detener = iniciarServidorWeb(ctx, { host: "127.0.0.1", puerto, urlPublica: null }, {}, (p) => {
+  (globalThis as { __controlFlotaListo?: boolean }).__controlFlotaListo = true;
+  console.log(`CONTROLFLOTA_LISTO ${p}`);
+});
 const apagar = () => {
   detener();
   void cerrar().finally(() => process.exit(0));

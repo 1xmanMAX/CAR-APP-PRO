@@ -6,4 +6,4 @@ export { fusionarFila } from "./fusion";
 export { recalcularDerivados } from "./derivados";
 export { responder, sincronizarCon, historialSinc, OCUPADO, VERSION_PROTOCOLO, type ResultadoSinc, type Avance } from "./protocolo";
 export { TABLAS as TABLAS_SINC } from "./registro";
-export { RedSinc, direccionesLocales, PUERTO_SINC, PUERTO_AVISOS, type Vecino, type EstadoSinc } from "./red";
+export { RedSinc, direccionesLocales, buscarIpPorRuta, PUERTO_SINC, PUERTO_AVISOS, type Vecino, type EstadoSinc } from "./red";

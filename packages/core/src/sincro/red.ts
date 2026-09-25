@@ -38,10 +38,42 @@ export interface EstadoSinc {
   ultimo: { ok: boolean; texto: string; resultado?: ResultadoSinc; en: number } | null;
 }
 
+/** La IP de salida que dio el último `buscarIpPorRuta` (para cuando no se pueden leer las interfaces). */
+let ipPorRuta: string | null = null;
+
+/**
+ * Android 11+ no deja a las apps leer la lista de interfaces (`os.networkInterfaces()` lanza
+ * «uv_interface_addresses … error 13»). Un socket UDP «conectado» (no envía nada) revela la IP
+ * con la que este equipo sale a la red, que es la del Wi-Fi.
+ */
+export function buscarIpPorRuta(): Promise<string | null> {
+  return new Promise((resolve) => {
+    let s: SocketUdp;
+    try { s = createSocket("udp4"); } catch { return resolve(null); }
+    const fin = (ip: string | null) => { try { s.close(); } catch { /* ya cerrado */ } if (ip) ipPorRuta = ip; resolve(ip); };
+    s.once("error", () => fin(null));
+    try {
+      s.connect(9, "8.8.8.8", () => {
+        try { fin(s.address().address); } catch { fin(null); }
+      });
+    } catch { fin(null); }
+  });
+}
+
+function leerInterfaces(): ReturnType<typeof networkInterfaces> | null {
+  try { return networkInterfaces(); } catch { return null; }
+}
+
 /** Las IPv4 de este equipo en la red local (para enseñarlas y para calcular las difusiones). */
 export function direccionesLocales(): Array<{ ip: string; difusion: string; nombre: string }> {
   const out: Array<{ ip: string; difusion: string; nombre: string }> = [];
-  for (const [nombre, lista] of Object.entries(networkInterfaces())) {
+  const interfaces = leerInterfaces();
+  if (!interfaces) {
+    // Sin permiso para ver las interfaces: la IP de salida y su difusión suponiendo una red /24.
+    if (ipPorRuta && ipPorRuta !== "0.0.0.0") out.push({ ip: ipPorRuta, difusion: ipPorRuta.replace(/\.\d+$/, ".255"), nombre: "wifi" });
+    return out;
+  }
+  for (const [nombre, lista] of Object.entries(interfaces)) {
     for (const n of lista ?? []) {
       if (n.family !== "IPv4" || n.internal) continue;
       const ip = n.address.split(".").map(Number);
@@ -76,6 +108,7 @@ export class RedSinc {
       probar(puertoPreferido);
     });
     this.iniciarAvisos();
+    if (!leerInterfaces()) await buscarIpPorRuta();
   }
 
   private atender(s: Socket): void {
@@ -101,13 +134,14 @@ export class RedSinc {
     try {
       const udp = createSocket({ type: "udp4", reuseAddr: true });
       udp.on("error", (e) => this.log("avisos UDP", e));
-      udp.on("message", (msg, rinfo) => void this.oir(msg, rinfo.address));
+      udp.on("message", (msg, rinfo) => void this.oir(msg, rinfo.address).catch((e) => this.log("aviso recibido", e)));
       udp.bind(PUERTO_AVISOS, () => {
         try { udp.setBroadcast(true); } catch { /* sin difusión: solo con la IP a mano */ }
       });
       this.udp = udp;
-      this.temporizador = setInterval(() => void this.avisar(), CADA_MS);
-      void this.avisar();
+      const avisar = () => void this.avisar().catch((e) => this.log("avisos UDP", e));
+      this.temporizador = setInterval(avisar, CADA_MS);
+      avisar();
     } catch (e) {
       this.log("no se pudo abrir el puerto de avisos", e);
     }
@@ -116,11 +150,14 @@ export class RedSinc {
   private async avisar(): Promise<void> {
     const i = await identidad(this.ctx).catch(() => null);
     if (!i?.grupo || !this.udp || !this.puerto) return;
+    if (!leerInterfaces()) await buscarIpPorRuta();
     const msg = Buffer.from(JSON.stringify({
       cf: 1, id: i.yo.id, n: i.yo.nombre, c: codigoDispositivo(i.yo.id), e: etiquetaGrupo(claveGrupo(i.grupo)), p: this.puerto,
     }));
     const destinos = new Set(["255.255.255.255", ...direccionesLocales().map((d) => d.difusion)]);
-    for (const d of destinos) this.udp.send(msg, PUERTO_AVISOS, d, () => {});
+    for (const d of destinos) {
+      try { this.udp.send(msg, PUERTO_AVISOS, d, () => {}); } catch { /* red caída: se reintenta en el siguiente aviso */ }
+    }
   }
 
   private etiquetaCache: { grupo: string; e: string } | null = null;

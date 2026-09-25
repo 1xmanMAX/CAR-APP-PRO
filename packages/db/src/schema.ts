@@ -1,7 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
   bigint, boolean, date, integer, jsonb, numeric, pgEnum, pgTable, primaryKey, serial, text, timestamp, unique,
-  uniqueIndex,
 } from "drizzle-orm/pg-core";
 
 const creadoEn = () => timestamp("creado_en", { withTimezone: true }).notNull().defaultNow();
@@ -283,9 +282,9 @@ export const viaje = pgTable("viaje", {
   origen: origenRegistroEnum("origen").notNull().default("telegram"),
   creadoEn: creadoEn(),
   actualizadoEn: actualizadoEn(),
-}, (t) => [
-  uniqueIndex("viaje_en_curso_vehiculo").on(t.vehiculoId).where(sql`${t.estado} = 'en_curso'`),
-]);
+});
+// Sin índice único de "un viaje en curso por unidad": con varios dispositivos sincronizando, dos
+// pueden abrir viaje a la vez sin verse. La regla la cuida la lógica (y avisa la sincronización).
 
 export const viajePresupuesto = pgTable("viaje_presupuesto", {
   viajeId: integer("viaje_id").notNull().references(() => viaje.id, { onDelete: "cascade" }),
@@ -406,9 +405,7 @@ export const parteInstalada = pgTable("parte_instalada", {
   alertaNivel: integer("alerta_nivel").notNull().default(0),
   retiradaEn: date("retirada_en", { mode: "string" }),
   creadoEn: creadoEn(),
-}, (t) => [
-  uniqueIndex("parte_activa_unica").on(t.vehiculoId, t.tipoParteId, t.posicion).where(sql`${t.activa} = true`),
-]);
+});
 
 export const compraRepuesto = pgTable("compra_repuesto", {
   id: serial("id").primaryKey(),

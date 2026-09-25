@@ -5,16 +5,16 @@ import { registrarAuditoria } from "../infra/auditoria";
 import type { Contexto } from "../infra/contexto";
 
 export type Seccion =
-  | "dashboard" | "trailer" | "flota" | "inventario" | "reparaciones" | "viajes" | "finanzas" | "rentabilidad" | "telegram" | "ajustes";
+  | "dashboard" | "trailer" | "flota" | "inventario" | "reparaciones" | "viajes" | "finanzas" | "rentabilidad" | "telegram" | "ajustes" | "sincronizar";
 
 /** Qué ve cada rol (handoff §8). El chofer usa solo Telegram. */
 export const PERMISOS: Record<RolUsuario, { ve: Seccion[]; edita: Seccion[] }> = {
   dueno: {
-    ve: ["dashboard", "trailer", "flota", "inventario", "reparaciones", "viajes", "finanzas", "rentabilidad", "telegram", "ajustes"],
-    edita: ["dashboard", "trailer", "flota", "inventario", "reparaciones", "viajes", "finanzas", "rentabilidad", "telegram", "ajustes"],
+    ve: ["dashboard", "trailer", "flota", "inventario", "reparaciones", "viajes", "finanzas", "rentabilidad", "telegram", "ajustes", "sincronizar"],
+    edita: ["dashboard", "trailer", "flota", "inventario", "reparaciones", "viajes", "finanzas", "rentabilidad", "telegram", "ajustes", "sincronizar"],
   },
-  contador: { ve: ["dashboard", "viajes", "finanzas", "rentabilidad", "telegram"], edita: ["viajes", "finanzas"] },
-  taller: { ve: ["dashboard", "trailer", "flota", "inventario", "reparaciones", "telegram"], edita: ["inventario", "reparaciones", "trailer"] },
+  contador: { ve: ["dashboard", "viajes", "finanzas", "rentabilidad", "telegram", "sincronizar"], edita: ["viajes", "finanzas", "sincronizar"] },
+  taller: { ve: ["dashboard", "trailer", "flota", "inventario", "reparaciones", "telegram", "sincronizar"], edita: ["inventario", "reparaciones", "trailer", "sincronizar"] },
   chofer: { ve: [], edita: [] },
 };
 

@@ -20,6 +20,7 @@ import { rutasFinanzas } from "./paginas/finanzas";
 import { rutasRentabilidad } from "./paginas/rentabilidad";
 import { rutasTelegram } from "./paginas/telegram";
 import { rutasAjustes } from "./paginas/ajustes";
+import { rutasSincronizar } from "./paginas/sincronizar";
 
 export type { OpcionesWeb } from "./base";
 
@@ -29,7 +30,7 @@ function seccionDeRuta(ruta: string): Seccion | null {
   const mapa: Record<string, Seccion> = {
     "": "dashboard", trailer: "trailer", parte: "trailer", flota: "flota", inventario: "inventario", reparaciones: "reparaciones",
     viajes: "viajes", guias: "viajes", facturas: "viajes", cobros: "viajes", finanzas: "finanzas", rentabilidad: "rentabilidad",
-    cotizacion: "rentabilidad", telegram: "telegram", ajustes: "ajustes", archivo: "dashboard", api: "dashboard",
+    cotizacion: "rentabilidad", telegram: "telegram", ajustes: "ajustes", sincronizar: "sincronizar", archivo: "dashboard", api: "dashboard",
   };
   return mapa[primero] ?? null;
 }
@@ -40,6 +41,7 @@ export function crearWeb(ctx: Contexto, opciones: OpcionesWeb = {}): App {
     ctx,
     avisar: opciones.avisar ?? (async (texto) => encolarAviso(ctx, texto)),
     cabecera: () => datosCabecera(ctx),
+    red: opciones.red ?? null,
   };
   const origenPermitido = opciones.urlPublica ? new URL(opciones.urlPublica).origin : null;
 
@@ -183,7 +185,7 @@ export function crearWeb(ctx: Contexto, opciones: OpcionesWeb = {}): App {
     await next();
   });
 
-  for (const m of [rutasDashboard, rutasTrailer, rutasFlota, rutasInventario, rutasReparaciones, rutasViajes, rutasFinanzas, rutasRentabilidad, rutasTelegram, rutasAjustes]) {
+  for (const m of [rutasDashboard, rutasTrailer, rutasFlota, rutasInventario, rutasReparaciones, rutasViajes, rutasFinanzas, rutasRentabilidad, rutasTelegram, rutasAjustes, rutasSincronizar]) {
     m(app, deps);
   }
   return app;

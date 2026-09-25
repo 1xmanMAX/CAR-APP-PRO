@@ -54,10 +54,16 @@ importers:
       hono:
         specifier: ^4.13.9
         version: 4.13.9
+      qrcode:
+        specifier: ^1.5.4
+        version: 1.5.4
       three:
         specifier: ^0.186.1
         version: 0.186.1
     devDependencies:
+      '@types/qrcode':
+        specifier: ^1.5.6
+        version: 1.5.6
       '@types/three':
         specifier: ^0.186.0
         version: 0.186.0

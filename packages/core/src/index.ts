@@ -37,3 +37,4 @@ export * from "./rentabilidad/rentabilidad";
 export * from "./eventos/eventos";
 export * from "./acceso/acceso";
 export type { RolUsuario, EstadoUnidad, OrigenRegistro, ZonaModelo, TipoReparacion, CategoriaGasto } from "@sunatapp/db";
+export * from "./sincro/index";

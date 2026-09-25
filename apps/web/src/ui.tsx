@@ -51,6 +51,7 @@ export const NAV: Array<{ n: string; etiqueta: string; href: string; seccion: Se
   { n: "07", etiqueta: "FINANZAS", href: "/finanzas", seccion: "finanzas" },
   { n: "08", etiqueta: "RENTABILIDAD", href: "/rentabilidad", seccion: "rentabilidad" },
   { n: "09", etiqueta: "TELEGRAM", href: "/telegram", seccion: "telegram" },
+  { n: "10", etiqueta: "SINCRONIZAR", href: "/sincronizar", seccion: "sincronizar" },
 ];
 
 export interface DatosCabecera {

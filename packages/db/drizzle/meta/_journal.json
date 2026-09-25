@@ -57,6 +57,13 @@
       "when": 1790309172565,
       "tag": "0007_control_flota",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1790500000000,
+      "tag": "0008_sincronizacion",
+      "breakpoints": true
     }
   ]
 }

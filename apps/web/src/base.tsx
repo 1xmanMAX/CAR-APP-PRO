@@ -9,7 +9,7 @@ import type { Child } from "hono/jsx";
 import {
   canjearEnlaceWeb, cerrarSesion, crearSesion, encolarAviso, entrarConClave, ErrorNegocio, ErrorValidacion, estadoBot,
   fechaHoraLima, guardarUsuario, listarUnidades, obtenerEmpresa, necesitaConfiguracionInicial, puedeEditar, puedeVer, rangoMes,
-  resumenFinanciero, usuarioDeSesion, type Contexto, type Seccion, type UsuarioWeb,
+  resumenFinanciero, usuarioDeSesion, type Contexto, type RedSinc, type Seccion, type UsuarioWeb,
 } from "@sunatapp/core";
 import { Layout, PaginaSimple, type DatosCabecera } from "./ui";
 
@@ -20,6 +20,8 @@ export interface OpcionesWeb {
   avisar?: (texto: string, adjunto?: { contenido: Buffer; nombre: string }) => Promise<void>;
   /** Cookie `Secure` (cuando se sirve por HTTPS). */
   cookieSegura?: boolean;
+  /** La red de sincronización entre dispositivos (sin ella, la pantalla Sincronizar lo explica). */
+  red?: RedSinc | null;
 }
 
 export type Variables = { usuario: UsuarioWeb };
@@ -30,6 +32,7 @@ export interface Deps {
   ctx: Contexto;
   avisar: NonNullable<OpcionesWeb["avisar"]>;
   cabecera: () => Promise<DatosCabecera>;
+  red: RedSinc | null;
 }
 
 export const COOKIE = "flota_sesion";

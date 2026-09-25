@@ -5,8 +5,11 @@ import android.app.DownloadManager
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
+import android.net.wifi.WifiManager
 import android.os.Bundle
 import android.os.Environment
+import android.os.Handler
+import android.os.Looper
 import android.view.View
 import android.webkit.CookieManager
 import android.webkit.URLUtil
@@ -38,9 +41,10 @@ fun aplicarBordes(v: View) {
 }
 
 /**
- * La app es la web de Control Flota a pantalla completa: mismas pantallas, mismo login y mismos
- * datos que en la PC. Lo nativo es lo que el navegador no resuelve solo: recordar el servidor,
- * elegir fotos, descargar PDFs, el botón atrás y la pantalla de "sin conexión".
+ * La app es Control Flota completo corriendo en el celular (ver [Nodo]): mismas pantallas que en
+ * la PC, con su propia copia de los datos y sin servidor. Lo nativo es lo que el navegador no
+ * resuelve solo: elegir fotos, descargar PDFs, el botón atrás, la pantalla de arranque y dejar
+ * pasar los avisos de la red local para que la sincronización encuentre a los demás dispositivos.
  */
 class MainActivity : AppCompatActivity() {
 
@@ -48,7 +52,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var recargar: SwipeRefreshLayout
     private lateinit var progreso: ProgressBar
     private lateinit var error: View
-    private lateinit var servidor: String
+    private val servidor = Nodo.URL_LOCAL
+    private var multicast: WifiManager.MulticastLock? = null
+    private val principal = Handler(Looper.getMainLooper())
     private var alElegirArchivo: ValueCallback<Array<Uri>>? = null
     private var ultimoAtras = 0L
 
@@ -60,13 +66,7 @@ class MainActivity : AppCompatActivity() {
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val guardado = Servidor.leer(this)
-        if (guardado == null) {
-            startActivity(Intent(this, ServidorActivity::class.java))
-            finish()
-            return
-        }
-        servidor = guardado
+        Nodo.iniciar(this)
         setContentView(R.layout.activity_main)
         aplicarBordes(findViewById(R.id.raiz))
 
@@ -84,7 +84,7 @@ class MainActivity : AppCompatActivity() {
             builtInZoomControls = false
             mediaPlaybackRequiresUserGesture = false
             cacheMode = WebSettings.LOAD_DEFAULT
-            // La web usa esto para mostrar opciones propias de la app (p. ej. cambiar servidor).
+            // La web usa esto para ajustar detalles propios de la app (sin botón de instalar, etc.).
             userAgentString = "$userAgentString ControlFlotaAndroid/${BuildConfig.VERSION_NAME}"
         }
         CookieManager.getInstance().setAcceptCookie(true)
@@ -92,11 +92,7 @@ class MainActivity : AppCompatActivity() {
         web.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView, req: WebResourceRequest): Boolean {
                 val url = req.url
-                if (url.scheme == "flota-app") {
-                    if (url.host == "servidor") abrirConfiguracion()
-                    return true
-                }
-                // Lo del propio servidor se queda en la app; lo de fuera (Telegram, nodejs.org…) va al navegador.
+                // Lo de la propia app se queda aquí; lo de fuera (Telegram, SUNAT…) va al navegador.
                 if (url.host == Uri.parse(servidor).host) return false
                 abrirFuera(url)
                 return true
@@ -108,7 +104,7 @@ class MainActivity : AppCompatActivity() {
             }
 
             override fun onReceivedError(view: WebView, req: WebResourceRequest, err: WebResourceError) {
-                if (req.isForMainFrame) mostrarError(req.url.toString())
+                if (req.isForMainFrame) esperarYAbrir(req.url.toString())
             }
         }
 
@@ -140,16 +136,12 @@ class MainActivity : AppCompatActivity() {
         recargar.setOnChildScrollUpCallback { _, _ -> web.scrollY > 0 || (web.url ?: "").contains("/trailer") }
         recargar.setOnRefreshListener { web.reload() }
 
-        findViewById<Button>(R.id.reintentar).setOnClickListener {
-            error.visibility = View.GONE
-            web.reload()
-        }
-        findViewById<Button>(R.id.cambiar).setOnClickListener { abrirConfiguracion() }
+        findViewById<Button>(R.id.reintentar).setOnClickListener { esperarYAbrir(web.url ?: "$servidor/") }
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 when {
-                    error.visibility == View.VISIBLE -> { error.visibility = View.GONE; if (web.canGoBack()) web.goBack() }
+                    error.visibility == View.VISIBLE -> finish()
                     web.canGoBack() -> web.goBack()
                     System.currentTimeMillis() - ultimoAtras < 2000 -> finish()
                     else -> {
@@ -160,7 +152,38 @@ class MainActivity : AppCompatActivity() {
             }
         })
 
-        if (savedInstanceState != null) web.restoreState(savedInstanceState) else web.loadUrl("$servidor/?origen=android")
+        // Para oír los avisos UDP de los demás dispositivos del grupo (Android los filtra si no).
+        multicast = (applicationContext.getSystemService(WIFI_SERVICE) as WifiManager)
+            .createMulticastLock("controlflota-sincro").apply { setReferenceCounted(false); acquire() }
+
+        if (savedInstanceState != null) web.restoreState(savedInstanceState)
+        esperarYAbrir(if (savedInstanceState != null) web.url ?: "$servidor/" else "$servidor/")
+    }
+
+    override fun onDestroy() {
+        principal.removeCallbacksAndMessages(null)
+        multicast?.release()
+        super.onDestroy()
+    }
+
+    /** Muestra «Abriendo…» hasta que la app interna responde y entonces carga [url]. */
+    private fun esperarYAbrir(url: String) {
+        error.visibility = View.VISIBLE
+        findViewById<View>(R.id.reintentar).visibility = View.GONE
+        findViewById<TextView>(R.id.error_titulo).text = getString(R.string.abriendo)
+        findViewById<TextView>(R.id.error_texto).text = getString(R.string.abriendo_texto)
+        val inicio = System.currentTimeMillis()
+        Thread {
+            while (!Nodo.listo() && Nodo.error == null && System.currentTimeMillis() - inicio < 120_000) Thread.sleep(250)
+            val ok = Nodo.listo()
+            principal.post {
+                if (isDestroyed) return@post
+                if (ok) {
+                    error.visibility = View.GONE
+                    if (web.url != url) web.loadUrl(url) else web.reload()
+                } else mostrarError()
+            }
+        }.start()
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -173,14 +196,12 @@ class MainActivity : AppCompatActivity() {
         CookieManager.getInstance().flush()
     }
 
-    private fun mostrarError(url: String) {
+    private fun mostrarError() {
         recargar.isRefreshing = false
-        findViewById<TextView>(R.id.error_texto).text = getString(R.string.error_texto, Uri.parse(url).let { "${it.scheme}://${it.authority}" })
+        findViewById<TextView>(R.id.error_titulo).text = getString(R.string.error_titulo)
+        findViewById<TextView>(R.id.error_texto).text = Nodo.error ?: Nodo.errorAnterior?.let { getString(R.string.error_texto) + "\n\n" + it } ?: getString(R.string.error_texto)
+        findViewById<View>(R.id.reintentar).visibility = View.VISIBLE
         error.visibility = View.VISIBLE
-    }
-
-    private fun abrirConfiguracion() {
-        startActivity(Intent(this, ServidorActivity::class.java))
     }
 
     private fun abrirFuera(url: Uri) {

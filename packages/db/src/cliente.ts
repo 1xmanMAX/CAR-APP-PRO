@@ -12,7 +12,8 @@ export type Db = PgDatabase<PgQueryResultHKT, typeof schema>;
 export type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 export type Ejecutor = Db | Tx;
 
-const carpetaMigraciones = fileURLToPath(new URL("../drizzle", import.meta.url));
+// En el paquete de la app móvil todo va en un solo archivo: la carpeta se indica por variable.
+const carpetaMigraciones = process.env.CF_MIGRACIONES || fileURLToPath(new URL("../drizzle", import.meta.url));
 
 export type OpcionesDb = { tipo: "pglite"; directorio?: string } | { tipo: "postgres"; url: string };
 

@@ -47,9 +47,10 @@
             android:padding="18dp">
 
             <TextView
+                android:id="@+id/error_titulo"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="@string/error_titulo"
+                android:text="@string/abriendo"
                 android:textColor="@color/texto"
                 android:textSize="18sp"
                 android:textStyle="bold" />
@@ -70,16 +71,6 @@
                 android:background="@drawable/boton_primario"
                 android:text="@string/reintentar"
                 android:textColor="#FFFFFF"
-                android:textStyle="bold" />
-
-            <Button
-                android:id="@+id/cambiar"
-                android:layout_width="match_parent"
-                android:layout_height="48dp"
-                android:layout_marginTop="10dp"
-                android:background="@drawable/boton_borde"
-                android:text="@string/cambiar_servidor"
-                android:textColor="@color/texto"
                 android:textStyle="bold" />
         </LinearLayout>
     </LinearLayout>

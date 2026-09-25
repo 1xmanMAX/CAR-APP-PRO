@@ -1,19 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Control Flota</string>
-    <string name="servidor_titulo">Conectar con tu servidor</string>
-    <string name="servidor_explicacion">La app se conecta a la PC o servidor donde corre Control Flota.\n\n• En la misma red wifi: la IP de tu PC y el puerto, por ejemplo 192.168.1.10:3000 (la ves en Windows con el comando ipconfig).\n• Con dominio propio: https://flota.tuempresa.pe</string>
-    <string name="servidor_pista">192.168.1.10:3000</string>
-    <string name="servidor_probar">PROBAR Y GUARDAR</string>
-    <string name="servidor_sin_probar">GUARDAR SIN PROBAR</string>
-    <string name="servidor_probando">Probando la conexión…</string>
-    <string name="servidor_ok">Conectado ✔</string>
-    <string name="servidor_falla">No respondió %1$s.\n\nRevisa que INICIAR.bat esté abierto en la PC, que el celular esté en el mismo wifi y que el firewall de Windows permita el puerto 3000.</string>
-    <string name="servidor_vacia">Escribe la dirección del servidor.</string>
-    <string name="error_titulo">Sin conexión con el servidor</string>
-    <string name="error_texto">No se pudo abrir %1$s.\n\nRevisa tu internet (o que la PC con Control Flota esté encendida y en el mismo wifi).</string>
+    <string name="abriendo">Abriendo Control Flota…</string>
+    <string name="abriendo_texto">La app y sus datos están en este celular: no necesita internet ni servidor. La primera vez tarda unos segundos más.</string>
+    <string name="error_titulo">No se pudo abrir la app</string>
+    <string name="error_texto">La app interna no respondió. Toca Reintentar; si sigue igual, ciérrala y ábrela otra vez.</string>
     <string name="reintentar">REINTENTAR</string>
-    <string name="cambiar_servidor">CAMBIAR SERVIDOR</string>
     <string name="descargando">Descargando %1$s…</string>
     <string name="salir_otra_vez">Toca atrás otra vez para salir</string>
 </resources>

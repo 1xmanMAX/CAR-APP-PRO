@@ -52,10 +52,9 @@ async function vehiculoPorPlaca(db: Ejecutor, placa: string): Promise<{ id: numb
 }
 
 /**
- * El índice parcial `viaje_en_curso_vehiculo` es la verdad sobre "un solo viaje en curso por
- * tracto"; esta función solo produce el mensaje amistoso, tanto en el chequeo previo (caso común)
- * como al recuperarse de la violación de unicidad (carrera entre dos creaciones/reaperturas
- * concurrentes para el mismo vehículo).
+ * "Un solo viaje en curso por tracto" se comprueba aquí, antes de crear o reabrir. Ya no hay índice
+ * único en la base: dos celulares sin conexión pueden abrir cada uno un viaje de la misma unidad y
+ * la sincronización tiene que poder juntarlos (lo avisa `recalcularDerivados`).
  */
 async function comprobarSinViajeEnCurso(db: Ejecutor, vehiculoId: number): Promise<void> {
   const [fila] = await db

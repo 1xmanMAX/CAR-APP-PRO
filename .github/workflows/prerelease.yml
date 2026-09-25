@@ -50,11 +50,15 @@ jobs:
         with:
           gradle-version: "8.14.3"
 
+      - name: Node.js para Android y app empaquetada
+        run: node scripts/preparar-android.mjs
+
       - name: App de Android (APK)
         working-directory: android
         env:
           VERSION_CODE: ${{ github.run_number }}
         run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;27.2.12479018" "cmake;3.22.1" > /dev/null
           gradle --no-daemon assembleRelease
           cp app/build/outputs/apk/release/app-release.apk "../ControlFlota-${{ steps.zip.outputs.etiqueta }}.apk"
           ls -la ../*.apk
@@ -81,5 +85,10 @@ jobs:
             Detalles en `LEEME-PRIMERO.txt` dentro del ZIP.
 
             **Android:** descarga el `.apk` en el celular, ábrelo y permite "instalar apps de esta fuente".
-            La primera vez pide la dirección del servidor: la IP de tu PC y el puerto (ej. `192.168.1.10:3000`),
-            que muestra INICIAR-DEMO.bat al arrancar. Celular y PC en el mismo wifi.
+            La app funciona sola en el celular, sin servidor ni internet: tiene su propia copia de los datos.
+
+            **Sincronizar (sin servidor, por el Wi-Fi):** en un dispositivo abre **Sincronizar → Crear un grupo**.
+            En un celular nuevo, en la primera pantalla toca **"¿Ya usas Control Flota en otro dispositivo? Traer sus datos"**,
+            escribe el código del grupo y elige el dispositivo: se trae todo y entras con el mismo usuario.
+            Después, cada vez que quieras juntar los cambios, abre Sincronizar en los dos y toca **SINCRONIZAR**.
+            En Windows permite Node.js en redes privadas (puertos 47474 y 47475).

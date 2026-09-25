@@ -47,7 +47,7 @@ describe("siguienteCorrelativo", () => {
 });
 
 describe("viajes, gastos y lecturas", () => {
-  it("modela un viaje en curso con presupuesto, gasto y entrega, y protege la unicidad", async () => {
+  it("modela un viaje en curso con presupuesto, gasto y entrega, y admite dos en curso (los junta la sincronización)", async () => {
     const [r] = await db.insert(ruta).values({ nombre: "Arequipa - Lima", nombreNormalizado: "AREQUIPA - LIMA" }).returning();
     await db.insert(rutaPresupuesto).values({ rutaId: r!.id, categoria: "combustible", monto: 50000 });
 
@@ -68,10 +68,12 @@ describe("viajes, gastos y lecturas", () => {
       viajeId: viajeEnCurso!.id, fecha: "2026-09-02", monto: 20000, medio: "efectivo",
     });
 
+    // Sin índice único: dos dispositivos sin conexión pueden abrir cada uno un viaje de la misma
+    // unidad; la app lo impide en cada dispositivo y la sincronización avisa si pasa.
     await expect(db.insert(viaje).values({
       codigo: "V-0002", rutaId: r!.id, vehiculoId: v!.id, conductorId: c!.id,
       fechaSalida: "2026-09-03", estado: "en_curso",
-    })).rejects.toThrow();
+    })).resolves.toBeDefined();
 
     const [viajeCerrado] = await db.insert(viaje).values({
       codigo: "V-0003", rutaId: r!.id, vehiculoId: v!.id, conductorId: c!.id,

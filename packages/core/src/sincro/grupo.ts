@@ -105,6 +105,9 @@ export async function identidad(ctx: Contexto): Promise<Identidad> {
 }
 
 function nombreDePorOmision(): string {
+  // La app de Android pasa la marca y el modelo del celular.
+  const propio = process.env.CF_NOMBRE_DISPOSITIVO?.trim();
+  if (propio) return propio.slice(0, 40);
   const h = (() => { try { return hostname(); } catch { return ""; } })();
   if (process.env.ANDROID_DATA || process.platform === "android") return "Celular";
   return h ? `PC ${h}`.slice(0, 40) : "Este dispositivo";

@@ -7,10 +7,20 @@ plugins {
 val versionWeb: String = Regex("\"version\"\\s*:\\s*\"([^\"]+)\"")
     .find(rootProject.file("../package.json").readText())?.groupValues?.get(1) ?: "0.0.0"
 val codigoVersion: Int = (System.getenv("VERSION_CODE") ?: "1").toInt()
+// Procesadores incluidos. Por omisión los de los celulares (ARM); para el emulador de la PC:
+//   gradle assembleRelease -Pabis=x86_64
+val abis: List<String> = ((findProperty("abis") as String?) ?: "arm64-v8a,armeabi-v7a").split(",").map { it.trim() }
+
+// Node.js (libnode) y el programa empaquetado los deja aquí `node scripts/preparar-android.mjs`.
+val movil = file("movil")
+if (!file("movil/libnode/include/node/node.h").exists() || !file("movil/assets/app/iniciar.mjs").exists()) {
+    logger.warn("Falta android/app/movil: ejecuta primero «node scripts/preparar-android.mjs» en la raíz del repo.")
+}
 
 android {
     namespace = "pe.controlflota.app"
     compileSdk = 35
+    ndkVersion = "27.2.12479018"
 
     defaultConfig {
         applicationId = "pe.controlflota.app"
@@ -18,7 +28,30 @@ android {
         targetSdk = 35
         versionCode = codigoVersion
         versionName = versionWeb
+        ndk { abiFilters += abis }
+        externalNativeBuild { cmake { arguments += "-DANDROID_STL=c++_shared" } }
     }
+
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+            version = "3.22.1"
+        }
+    }
+
+    sourceSets["main"].apply {
+        jniLibs.srcDir(File(movil, "libnode/bin"))
+        assets.srcDir(File(movil, "assets"))
+    }
+
+    // Las migraciones de la base traen «_journal.json»: por omisión Android deja fuera los
+    // archivos que empiezan con «_», así que se quita esa regla.
+    androidResources {
+        ignoreAssetsPattern = "!.svn:!.git:!.ds_store:!*.scc:!CVS:!thumbs.db:!picasa.ini:!*~"
+    }
+
+    // libnode.so pesa ~60 MB por procesador: comprimida en el APK baja mucho la descarga.
+    packaging { jniLibs { useLegacyPackaging = true } }
 
     signingConfigs {
         // Firma de prueba (incluida en el repo) para instalar el APK a mano y poder actualizarlo

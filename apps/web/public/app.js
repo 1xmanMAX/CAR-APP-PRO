@@ -57,7 +57,7 @@
   window.addEventListener("appinstalled", () => { if (boton) boton.hidden = true; });
 })();
 
-// Dentro de la app de Android: opción para cambiar de servidor y sin botón de instalar.
+// Dentro de la app de Android: sin botón de instalar y con arreglos para WebViews viejos.
 (() => {
   if (!/ControlFlotaAndroid/.test(navigator.userAgent)) return;
   document.documentElement.classList.add("en-app");
@@ -69,6 +69,4 @@
   document.body.appendChild(d);
   if (d.scrollHeight !== 1) document.documentElement.classList.add("sin-gap");
   d.remove();
-  const b = document.getElementById("app-servidor");
-  if (b) b.hidden = false;
 })();

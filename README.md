@@ -37,6 +37,30 @@ inventario, reparaciones), chofer (solo Telegram).
 
 Diseño de referencia: `DSISEÑO DE LA APP/HANDOFF.md`.
 
+## Sincronización sin servidor (PC y celulares)
+
+Cada dispositivo tiene su propia base (PGlite) y funciona sin conexión. La pantalla **Sincronizar**
+junta los cambios entre dispositivos del mismo grupo por la red local (diseño portado de PixPin:
+`packages/core/src/sincro/`):
+
+- Cada fila lleva `sinc_uid` (código único), `sinc_disp`+`sinc_num` (dispositivo de origen y su
+  correlativo) y `sinc_creado`/`sinc_tocado` (horas); los disparadores de la migración 0008 los
+  ponen solos y dejan lápidas de lo borrado.
+- Descubrimiento por difusión UDP (47475), sincronización por TCP (47474) cifrada con AES-256-GCM
+  (clave derivada del código del grupo). Solo viajan las filas que cambiaron desde la última vez
+  con ese dispositivo; los choques se juntan campo por campo (gana el más reciente).
+- `/empezar`: en un dispositivo nuevo, unirse al grupo y traerse todo sin crear otro dueño.
+
+## App de Android (sin servidor)
+
+`android/` es una app Kotlin con Node.js dentro (libnode de nodejs-mobile 18) que corre la misma
+app web en `127.0.0.1:3939`:
+
+```bash
+node scripts/preparar-android.mjs      # descarga libnode y empaqueta la app (scripts/empaquetar-movil.mjs)
+cd android && gradle assembleRelease    # -Pabis=x86_64 para el emulador
+```
+
 ## Requisitos
 Node 22+ (LTS), pnpm 9.
 

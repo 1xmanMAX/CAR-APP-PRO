@@ -21,6 +21,7 @@ import { rutasRentabilidad } from "./paginas/rentabilidad";
 import { rutasTelegram } from "./paginas/telegram";
 import { rutasAjustes } from "./paginas/ajustes";
 import { rutasSincronizar } from "./paginas/sincronizar";
+import { rutasEmpezar } from "./paginas/empezar";
 
 export type { OpcionesWeb } from "./base";
 
@@ -114,6 +115,9 @@ export function crearWeb(ctx: Contexto, opciones: OpcionesWeb = {}): App {
           <label class="campo"><span>Contraseña{configurar ? " (mínimo 8)" : ""}</span><input name="clave" type="password" required minlength={configurar ? 8 : undefined} autocomplete={configurar ? "new-password" : "current-password"} /></label>
           <button class="btn primario" type="submit">{configurar ? "CREAR ACCESO" : "ENTRAR"}</button>
         </form>
+        {configurar ? (
+          <a class="btn" href="/empezar" style="width:100%;text-align:center">¿YA USAS CONTROL FLOTA EN OTRO DISPOSITIVO? TRAER SUS DATOS</a>
+        ) : null}
         {!configurar ? <p class="muted" style="font-size:12px">También puedes entrar con el enlace que te da el bot con <b>/web</b>.</p> : null}
       </div>
     </PaginaSimple>
@@ -159,6 +163,7 @@ export function crearWeb(ctx: Contexto, opciones: OpcionesWeb = {}): App {
       return c.html("<!doctype html>" + vistaEntrar(mensajeError(error), true).toString(), 400);
     }
   });
+  rutasEmpezar(app, deps);
   app.post("/salir", async (c) => {
     const token = getCookie(c, COOKIE);
     if (token) await cerrarSesion(ctx, token);

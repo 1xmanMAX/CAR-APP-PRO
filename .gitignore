@@ -27,3 +27,4 @@ logs/
 # Datos de demostración (pnpm demo:flota)
 data-demo/
 data-demo-b/
+dist-movil/

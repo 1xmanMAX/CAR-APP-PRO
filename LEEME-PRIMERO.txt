@@ -28,12 +28,24 @@ CONTROL FLOTA · cómo probarla en tu PC
    - Sin token de Telegram funciona solo la web; con token también el bot.
    - SUNAT queda en modo SIMULADO (sin validez tributaria) hasta configurar el certificado.
 
-6. APP DE ANDROID
+6. APP DE ANDROID (funciona sola, sin servidor)
    - Descarga ControlFlota-(versión).apk en el celular (misma página de descarga que este ZIP).
    - Ábrelo; Android pedirá permitir "instalar apps de esta fuente": acepta.
-   - Al abrir la app pide la dirección del servidor: la IP de tu PC y el puerto, por ejemplo
-     192.168.1.10:3000 (INICIAR-DEMO.bat la muestra al arrancar). Celular y PC en el mismo wifi.
-   - Si no conecta: la ventana de INICIAR-DEMO debe estar abierta y el firewall de Windows debe
-     permitir Node.js en "Redes privadas".
-   - Para cambiar de servidor: botón ⚙ SERVIDOR arriba, dentro de la app.
-   - Fuera de tu wifi (en ruta) hace falta publicar el servidor en internet con un dominio.
+   - La app lleva todo dentro: sus pantallas y su propia base de datos. No necesita la PC
+     encendida ni internet. Cada celular guarda su copia y los cambios se juntan al sincronizar.
+
+7. SINCRONIZAR DISPOSITIVOS (PC y celulares, por el Wi-Fi, sin internet)
+   - Cada dispositivo trabaja por su cuenta. Al sincronizar solo viajan LOS CAMBIOS, cifrados.
+   - Cada registro tiene tres códigos fijos (código único, dispositivo+número y hora de
+     creación): cada cambio llega siempre al registro correcto, aunque se haya creado en otro.
+     Si dos cambiaron el mismo registro se juntan campo por campo; si fue el mismo campo,
+     gana el cambio más reciente.
+   - Primera vez:
+       a) En la PC (o el primer celular): menú SINCRONIZAR -> CREAR UN GRUPO. Anota el código.
+       b) En un celular nuevo: en la primera pantalla toca "¿YA USAS CONTROL FLOTA EN OTRO
+          DISPOSITIVO? TRAER SUS DATOS", escribe el código y elige la PC en la lista.
+          Se trae todo y entras con el mismo correo y clave.
+   - Luego, cuando quieras: abre SINCRONIZAR en los dos (mismo Wi-Fi, o un celular conectado
+     al punto de acceso del otro) y toca SINCRONIZAR junto al otro dispositivo.
+   - En Windows: si no aparece la PC, permite Node.js en "Redes privadas" en el firewall
+     (puertos 47474 y 47475).

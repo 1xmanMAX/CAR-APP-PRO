@@ -37,8 +37,8 @@ export interface Deps {
 
 export const COOKIE = "flota_sesion";
 export const RAIZ = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-export const PUBLICO = join(RAIZ, "public");
-export const THREE = dirname(dirname(createRequire(import.meta.url).resolve("three")));
+export const PUBLICO = process.env.CF_PUBLICO || join(RAIZ, "public");
+export const THREE = process.env.CF_THREE || dirname(dirname(createRequire(import.meta.url).resolve("three")));
 
 const TIPOS: Record<string, string> = {
   ".css": "text/css; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".json": "application/json",

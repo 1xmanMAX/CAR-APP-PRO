@@ -1,15 +1,14 @@
 name: Prerelease para probar en la PC
 
-# Al subir una etiqueta v* (o a mano desde Actions) empaqueta la app en un ZIP listo para
-# descomprimir y abrir con INICIAR-DEMO.bat, y lo publica como prerelease.
+# Empaqueta la app en un ZIP listo para descomprimir y abrir con INICIAR-DEMO.bat, y lo publica
+# como prerelease. Corre al subir cambios a la rama de desarrollo, a main o una etiqueta v*, o a
+# mano desde Actions. La etiqueta sale de la versión de package.json (la crea la propia Action).
 on:
   push:
+    branches: ["main", "claude/**"]
     tags: ["v*"]
+    paths-ignore: ["docs/**", "**/*.md"]
   workflow_dispatch:
-    inputs:
-      etiqueta:
-        description: "Etiqueta de la prerelease (ej. v0.2.0-beta.1)"
-        required: true
 
 permissions:
   contents: write
@@ -19,8 +18,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.inputs.etiqueta || github.ref }}
 
       - uses: pnpm/action-setup@v4
 
@@ -37,7 +34,7 @@ jobs:
       - name: Empaquetar
         id: zip
         run: |
-          ETIQUETA="${{ github.event.inputs.etiqueta || github.ref_name }}"
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then ETIQUETA="${GITHUB_REF_NAME}"; else ETIQUETA="v$(node -p "require('./package.json').version")"; fi
           ARCHIVO="ControlFlota-${ETIQUETA}.zip"
           git archive --format=zip --prefix=ControlFlota/ -o "$ARCHIVO" HEAD
           echo "archivo=$ARCHIVO" >> "$GITHUB_OUTPUT"
@@ -50,6 +47,9 @@ jobs:
           tag_name: ${{ steps.zip.outputs.etiqueta }}
           name: Control Flota ${{ steps.zip.outputs.etiqueta }} (prueba)
           prerelease: true
+          make_latest: false
+          target_commitish: ${{ github.sha }}
+          overwrite_files: true
           files: ${{ steps.zip.outputs.archivo }}
           body: |
             Versión de prueba para la PC.

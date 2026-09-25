@@ -1,1 +1,5 @@
-{ "extends": "../../tsconfig.base.json", "include": ["src", "test", "../../packages/core/test/helpers.ts"] }
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": { "jsx": "react-jsx", "jsxImportSource": "hono/jsx", "lib": ["ES2023", "DOM"] },
+  "include": ["src", "test", "../../packages/core/test/helpers.ts"]
+}

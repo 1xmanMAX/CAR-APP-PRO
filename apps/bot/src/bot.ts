@@ -5,6 +5,7 @@ import type { ProveedorExtraccion } from "@sunatapp/extractor";
 import type { Logger } from "./log";
 import { registrarComandos } from "./comandos";
 import { registrarFlujoFactura } from "./flujo-factura";
+import { registrarFlujoFlota } from "./flujo-flota";
 import { registrarFlujoGuia } from "./flujo-guia";
 import { middlewareAutorizacion } from "./registro";
 import type { Sesion } from "./sesion";
@@ -19,6 +20,8 @@ export interface Dependencias {
   /** Código de 6 dígitos si al arrancar no hay dueño; se pone en null al usarse. */
   codigoRegistro: string | null;
   log: Logger;
+  /** URL pública de la web (para /web). */
+  urlWeb?: string | null;
 }
 
 export type ContextoBot = Context & SessionFlavor<Sesion>;
@@ -30,6 +33,7 @@ export function crearBot(token: string, deps: Dependencias, botInfo?: UserFromGe
   bot.command(["start", "ayuda"], (c) => c.reply(textos.ayuda));
   // El de guía termina con un `bot.on("message:text")` atrapatodo, así que va al final: los
   // comandos (incluido /cancelar, dueño de ambos flujos) y el de factura deben registrarse antes.
+  registrarFlujoFlota(bot, deps, { urlWeb: deps.urlWeb ?? null });
   registrarFlujoFactura(bot, deps);
   registrarComandos(bot, deps);
   registrarFlujoGuia(bot, deps);

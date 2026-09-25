@@ -31,6 +31,8 @@ const INTERVALO_MS = 60_000;
 export function crearTareaFondo(
   deps: Dependencias,
   notificar: (tipo: TipoDocumento, r: ResultadoEmision) => Promise<void>,
+  /** Tareas adicionales de cada pasada (latido, alertas de flota, cola de avisos de la web). */
+  extras: Array<{ nombre: string; tarea: () => Promise<unknown> }> = [],
 ): TareaFondo {
   let enCurso: Promise<void> | null = null;
 
@@ -54,6 +56,13 @@ export function crearTareaFondo(
       await avisar("factura", await procesarPendientesFacturas(deps.ctx));
     } catch (error) {
       deps.log.error("Error al procesar las facturas pendientes", error);
+    }
+    for (const e of extras) {
+      try {
+        await e.tarea();
+      } catch (error) {
+        deps.log.error(`Error en la tarea de fondo: ${e.nombre}`, error);
+      }
     }
   };
 

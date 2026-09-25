@@ -1,3 +1,4 @@
+import type { EstadoFlujoFlota } from "./flujo-flota";
 import type { Borrador, CampoGuia, DatosConductor, TransporteGuia } from "@sunatapp/core";
 
 /** Una placa o un conductor de la guía que todavía no está en la base y hay que resolver. */
@@ -46,7 +47,9 @@ export interface EstadoFlujoFactura {
 /** Estado por chat: una conversación a la vez, sea de guía o de factura. */
 export interface Sesion {
   usuarioId?: number;
-  flujo?: EstadoFlujoGuia | EstadoFlujoFactura | { tipo: string };
+  /** Última unidad con la que trabajó este chat (para no preguntarla en cada /gasto o /km). */
+  unidadId?: number;
+  flujo?: EstadoFlujoGuia | EstadoFlujoFactura | EstadoFlujoFlota | { tipo: string };
 }
 
 export function flujoGuia(s: Sesion): EstadoFlujoGuia | undefined {

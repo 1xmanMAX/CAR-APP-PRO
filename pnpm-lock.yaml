@@ -29,6 +29,9 @@ importers:
       '@sunatapp/extractor':
         specifier: workspace:*
         version: link:../../packages/extractor
+      '@sunatapp/web':
+        specifier: workspace:^
+        version: link:../web
       grammy:
         specifier: ^1.46.0
         version: 1.46.0

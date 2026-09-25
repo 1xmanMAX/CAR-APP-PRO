@@ -80,6 +80,7 @@ h1, h2, h3 { margin: 0; }
 .g-lado { grid-template-columns: minmax(0, 1fr) 340px; }
 .g-trailer { grid-template-columns: 280px minmax(0, 1fr) 330px; }
 .g-coti { grid-template-columns: 420px minmax(0, 1fr); }
+.g-tg { grid-template-columns: 420px minmax(0, 1fr) minmax(0, 1fr); }
 
 /* KPIs */
 .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); background: var(--panel); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
@@ -242,7 +243,7 @@ svg.graf { width: 100%; height: auto; display: block; }
   .g-trailer > :last-child { grid-column: 1 / -1; }
 }
 @media (max-width: 900px) {
-  .g-main, .g-lado, .g-2, .g-3, .g-trailer, .g-coti { grid-template-columns: minmax(0, 1fr); }
+  .g-main, .g-lado, .g-2, .g-3, .g-trailer, .g-coti, .g-tg { grid-template-columns: minmax(0, 1fr); }
   .g-trailer > :last-child, .g-main > :last-child { grid-column: auto; }
   .datos-visor { grid-template-columns: repeat(3, 1fr); }
   .datos-visor > div:nth-child(3) { border-right: 0; }

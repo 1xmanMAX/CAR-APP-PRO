@@ -10,8 +10,11 @@ import {
   type ResultadoEmision,
 } from "@sunatapp/core";
 import { crearExtractor } from "@sunatapp/extractor";
+import { cargarConfigWeb, iniciarServidorWeb } from "@sunatapp/web";
+import { encolarAviso, marcarLatidoBot, tomarAvisos } from "@sunatapp/core";
+import { avisarDesgaste, enviarAlerta } from "./flujo-flota";
 import { crearBot, type Dependencias } from "./bot";
-import { programarAvisoDiario, textoAvisoDiario } from "./aviso-diario";
+import { programarAvisoDiario, textoAvisoDiario, textoAvisoFlota } from "./aviso-diario";
 import { cargarConfigBot, ErrorConfiguracion, mensajeDeArranque, type ConfigBot } from "./config";
 import { notificarFactura } from "./flujo-factura";
 import { notificarGuia } from "./flujo-guia";
@@ -25,18 +28,63 @@ const config = cargarConfig();
 
 // Un TELEGRAM_BOT_TOKEN ausente o un BOT_HORA_AVISO inválido no deben morir con un volcado de
 // pila: sin base de datos abierta todavía, no hay nada que cerrar más que avisar en castellano.
+const soloWeb = !process.env.TELEGRAM_BOT_TOKEN?.trim() && process.env.APP_MODO === "todo";
 let cfgBot: ConfigBot;
 try {
-  cfgBot = cargarConfigBot();
+  cfgBot = soloWeb
+    ? { token: "", extractor: "reglas", horaAviso: "08:00", logDir: process.env.LOG_DIR?.trim() || "./logs" }
+    : cargarConfigBot();
 } catch (error) {
   crearLogger("./logs").error("el bot no pudo arrancar", error);
   console.error(mensajeDeArranque(error));
   process.exit(1);
 }
 const log = crearLogger(cfgBot.logDir);
+let cfgWeb: ReturnType<typeof cargarConfigWeb>;
+try {
+  cfgWeb = cargarConfigWeb();
+} catch (error) {
+  console.error(`Configuración de la web inválida: ${(error as Error).message}`);
+  process.exit(1);
+}
 
 const { ctx, cerrar } = await crearContexto(config);
 ctx.log = (n, m, d) => log[n](m, d);
+
+/**
+ * La web corre en el mismo proceso (pnpm app). Sus avisos al grupo de Telegram salen directo por
+ * el bot cuando está conectado; si no, quedan en cola y se envían en cuanto conecte.
+ */
+let enviarDirecto: ((texto: string, adjunto?: { contenido: Buffer; nombre: string }) => Promise<void>) | null = null;
+let detenerWeb: (() => void) | undefined;
+if (process.env.APP_MODO === "todo") {
+  detenerWeb = iniciarServidorWeb(ctx, cfgWeb, {
+    avisar: async (texto: string, adjunto?: { contenido: Buffer; nombre: string }) => {
+      if (enviarDirecto) {
+        try {
+          await enviarDirecto(texto, adjunto);
+          return;
+        } catch (error) {
+          log.error("no se pudo enviar el aviso de la web; queda en cola", error);
+        }
+      }
+      await encolarAviso(ctx, texto);
+    },
+  }, (puerto) => {
+    log.info(`Web lista en el puerto ${puerto}`);
+    console.log(`🌐 Web: ${cfgWeb.urlPublica ?? `http://localhost:${puerto}`}`);
+  });
+}
+if (soloWeb) {
+  console.log("⚠️  Falta TELEGRAM_BOT_TOKEN: arranca solo la web. Pon el token en .env y reinicia para activar el bot.");
+  const cerrarWeb = () => {
+    detenerWeb?.();
+    void cerrar().finally(() => process.exit(0));
+  };
+  process.once("SIGINT", cerrarWeb);
+  process.once("SIGTERM", cerrarWeb);
+  await new Promise(() => {});
+}
 
 /**
  * La base se suelta una sola vez, venga el apagado de donde venga (señal, fallo de arranque o
@@ -65,6 +113,7 @@ const apagar = (senal: string): void => {
   log.info(`Apagando el bot (${senal})`);
   detenerFondo?.();
   detenerAviso?.();
+  detenerWeb?.();
   apagado = (async () => {
     try {
       await detenerBot?.();
@@ -123,6 +172,7 @@ try {
     },
     codigoRegistro,
     log,
+    urlWeb: cfgWeb.urlPublica,
   };
 
   const bot = crearBot(cfgBot.token, deps);
@@ -136,7 +186,17 @@ try {
     else await notificarFactura(deps, bot.api, chatId, r);
   };
 
-  const fondo = crearTareaFondo(deps, notificarAlDueno);
+  enviarDirecto = (texto, adjunto) => enviarAlerta(bot.api, deps, texto, adjunto);
+  const fondo = crearTareaFondo(deps, notificarAlDueno, [
+    { nombre: "latido", tarea: () => marcarLatidoBot(ctx) },
+    { nombre: "alertas de desgaste", tarea: () => avisarDesgaste(bot.api, deps) },
+    {
+      nombre: "avisos en cola",
+      tarea: async () => {
+        for (const a of await tomarAvisos(ctx)) await enviarAlerta(bot.api, deps, a.texto);
+      },
+    },
+  ]);
   esperarPasada = () => fondo.esperarPasada();
   detenerFondo = fondo.iniciar();
 
@@ -145,8 +205,9 @@ try {
       const chatId = await duenoTelegramId(ctx);
       if (chatId === null) return;
       const texto = await textoAvisoDiario(ctx);
-      if (texto === null) return;
-      await bot.api.sendMessage(chatId, texto);
+      if (texto !== null) await bot.api.sendMessage(chatId, texto);
+      const flota = await textoAvisoFlota(ctx);
+      if (flota !== null) await enviarAlerta(bot.api, deps, flota);
     } catch (error) {
       log.error("no se pudo enviar el aviso diario", error);
     }
@@ -154,7 +215,14 @@ try {
 
   // `bot.stop()` hace que esto resuelva: el proceso no debe terminar antes de que el apagado
   // que lo provocó haya cerrado la base.
-  await bot.start({ onStart: () => log.info("Bot iniciado") });
+  await bot.start({
+    onStart: () => {
+      log.info("Bot iniciado");
+      console.log("🤖 Bot de Telegram en línea");
+      void marcarLatidoBot(ctx).catch(() => {});
+      void fondo.pasada();
+    },
+  });
   await apagado;
 } catch (error) {
   if (apagado) {

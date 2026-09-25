@@ -110,7 +110,7 @@ export async function crearArnes(
           document: { file_id: fileId, file_unique_id: fileId, mime_type: mime, file_size: tamano },
         },
       } as never),
-    foto: (fileId: string, userId = 111) =>
+    foto: (fileId: string, userId = 111, caption?: string) =>
       enviar({
         message: {
           message_id: updateId,
@@ -118,6 +118,7 @@ export async function crearArnes(
           chat: chat(userId),
           from: de(userId),
           photo: [{ file_id: fileId, file_unique_id: fileId, width: 1, height: 1 }],
+          ...(caption ? { caption } : {}),
         },
       } as never),
     boton: (data: string, userId = 111) =>

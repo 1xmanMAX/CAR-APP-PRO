@@ -1,4 +1,4 @@
-import { listarCobrosPendientes, type Contexto } from "@sunatapp/core";
+import { formatearSoles, listarCobrosPendientes, repuestosConStockBajo, tomarCuotasPorVencer, type Contexto } from "@sunatapp/core";
 import { lineaAviso, textos } from "./textos";
 
 const DIA_MS = 24 * 60 * 60_000;
@@ -64,4 +64,18 @@ export function programarAvisoDiario(
     cancelado = true;
     if (temporizador) clearTimeout(temporizador);
   };
+}
+
+/** Lo de la flota para el aviso diario: stock bajo y cuotas de préstamo por vencer (3 días). */
+export async function textoAvisoFlota(ctx: Contexto): Promise<string | null> {
+  const lineas: string[] = [];
+  const bajos = await repuestosConStockBajo(ctx);
+  if (bajos.length) {
+    lineas.push("📦 Stock bajo:", ...bajos.map((r) => `• ${r.codigo} ${r.nombre}: quedan ${r.stock} (mínimo ${r.stockMinimo})`));
+  }
+  const cuotas = await tomarCuotasPorVencer(ctx, 3);
+  if (cuotas.length) {
+    lineas.push("🏦 Cuotas por vencer:", ...cuotas.map((q) => `• ${q.entidad} · cuota ${q.numero} · ${formatearSoles(q.monto)} · vence ${q.vencimiento}`));
+  }
+  return lineas.length ? lineas.join("\n") : null;
 }

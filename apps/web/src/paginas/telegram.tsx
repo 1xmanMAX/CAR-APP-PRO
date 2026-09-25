@@ -26,7 +26,7 @@ async function vista(c: C, d: Deps) {
   const codigos = unidades.map((u) => u.codigo).slice(0, 6);
 
   return pagina(c, d, { titulo: "Bot de Telegram", seccion: "telegram" }, (
-    <div class="grid g-3" style="grid-template-columns:420px minmax(0,1fr) minmax(0,1fr)">
+    <div class="grid g-tg">
       <Panel titulo="ASÍ SE VE EN EL CELULAR DEL CHOFER">
         <div class="telefono" aria-label="Ejemplo de conversación con el bot">
           <div class="tcab"><b>🤖 Control Flota</b><span style="font-size:11px;color:#8FA3B5">bot · {bot.enLinea ? "en línea" : "desconectado"}</span></div>

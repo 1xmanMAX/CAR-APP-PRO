@@ -14,7 +14,8 @@
     "demo": "tsx packages/core/scripts/demo.ts",
     "ubigeos": "tsx packages/core/scripts/generar-ubigeos.ts",
     "web": "tsx apps/web/src/main.ts",
-    "demo:flota": "tsx packages/core/scripts/demo-flota.ts"
+    "demo:flota": "tsx packages/core/scripts/demo-flota.ts",
+    "app": "tsx apps/bot/src/app.ts"
   },
   "devDependencies": {
     "@types/node": "^26.5.1",

@@ -27,7 +27,8 @@ export function etiquetaEstadoGuia(estado: string): string {
 }
 
 export const textos = {
-  registroOk: "✅ Listo. Solo te atenderé a ti.",
+  registroOk: "✅ Listo. Quedas como dueño. Para sumar a tu equipo, créalos en la web (Ajustes) con su ID de Telegram.",
+  idParaRegistro: (id: number) => `👋 Todavía no estás registrado. Tu ID de Telegram es ${id}: pásaselo al dueño para que te dé acceso.`,
   errorGenerico: "😕 Algo salió mal. Ya quedó anotado; intenta de nuevo en un momento.",
   ayuda: [
     "📋 Qué puedo hacer:",
@@ -37,12 +38,23 @@ export const textos = {
     "/facturar V001-1 — facturar una guía",
     "/cobros — facturas por cobrar",
     "/pagado F001-1 [monto] — registrar un cobro",
+    "",
+    "🚛 Flota:",
+    "/viaje — sale una unidad (ruta y toneladas)",
+    "/fin — llegó: odómetro final o km",
+    "/gasto combustible 480 — gasto (con foto del voucher como pie de foto)",
+    "/km 412380 — lectura de odómetro",
+    "/cambio — cambio de una parte",
+    "/compra REP-014 6 180 — compra de repuesto",
+    "/estado T-01 — próximas partes a cambiar",
+    "/web — enlace para entrar a la web",
     "/cancelar — cancelar lo que estemos haciendo",
   ].join("\n"),
 
   // --- Flujo de guía ---
   leyendoGuia: "📄 Leyendo la guía…",
   soloPdf: "Por ahora solo leo PDF. Envíame el PDF de la guía.",
+  // Si la foto es un voucher: /gasto en el pie de foto (ver flujo-flota).
   archivoGrande: "Ese archivo pasa de 20 MB, el límite de Telegram para bots. Envíame el PDF original de SUNAT.",
   pdfSinTexto: "No pude leer texto en ese PDF. Envíame el PDF original de SUNAT.",
   guiaYaRegistrada: (serieNumero: string, estado: string) =>

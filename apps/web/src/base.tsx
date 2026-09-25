@@ -22,6 +22,29 @@ export interface OpcionesWeb {
   cookieSegura?: boolean;
   /** La red de sincronización entre dispositivos (sin ella, la pantalla Sincronizar lo explica). */
   red?: RedSinc | null;
+  /** Bot, SUNAT y ajustes de este dispositivo (los da el arranque completo: PC y Android). */
+  servicios?: ServiciosDispositivo | null;
+}
+
+/** Estado de lo que corre en este dispositivo además de la web. */
+export interface EstadoServicios {
+  plataforma: "pc" | "android";
+  /** Dónde se guardan los ajustes del dispositivo (su `.env`). */
+  archivoAjustes: string;
+  bot: { estado: "sin_token" | "conectando" | "en_linea" | "error" | "esperando_datos"; mensaje?: string; usuario?: string };
+  sunat: { modo: "simulado" | "beta" | "real"; error?: string };
+  /** Código para registrarse como dueño en el bot (solo mientras no hay dueño en Telegram). */
+  codigoRegistro: string | null;
+}
+
+export interface ServiciosDispositivo {
+  estado(): EstadoServicios;
+  /** Valores actuales del `.env` del dispositivo. */
+  ajustes(): Record<string, string>;
+  /** Guarda en el `.env` del dispositivo y vuelve a arrancar bot y SUNAT con los valores nuevos. */
+  guardarAjustes(cambios: Record<string, string | null>, certificado?: Buffer): Promise<void>;
+  /** Tras la configuración inicial: arranca lo que esperaba datos (el bot). */
+  alConfigurar(): Promise<void>;
 }
 
 export type Variables = { usuario: UsuarioWeb };
@@ -33,6 +56,7 @@ export interface Deps {
   avisar: NonNullable<OpcionesWeb["avisar"]>;
   cabecera: () => Promise<DatosCabecera>;
   red: RedSinc | null;
+  servicios: ServiciosDispositivo | null;
 }
 
 export const COOKIE = "flota_sesion";

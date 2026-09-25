@@ -51,6 +51,15 @@ junta los cambios entre dispositivos del mismo grupo por la red local (diseño p
   con ese dispositivo; los choques se juntan campo por campo (gana el más reciente).
 - `/empezar`: en un dispositivo nuevo, unirse al grupo y traerse todo sin crear otro dueño.
 
+## Arranque común (PC y Android)
+
+`apps/bot/src/arranque.ts` levanta todo en ambos: web, sincronización, tareas de fondo (reintentos
+SUNAT, alertas, cola de avisos, aviso diario) y el bot de Telegram si hay token. `pnpm app` lo usa
+en la PC (`main.ts`) y la app de Android en el celular (`movil.ts`). La configuración inicial
+(empresa, unidad, chofer, dueño) se hace en `/configurar` y los ajustes del dispositivo (bot y
+SUNAT) en **Ajustes → Este dispositivo**, que escribe el `.env` de ese dispositivo y lo aplica sin
+reiniciar.
+
 ## App de Android (sin servidor)
 
 `android/` es una app Kotlin con Node.js dentro (libnode de nodejs-mobile 18) que corre la misma

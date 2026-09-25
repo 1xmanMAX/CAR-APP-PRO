@@ -9,7 +9,7 @@ import { ErrorNegocio } from "../src/errores";
 import { crearAlmacenLocal } from "../src/infra/almacen";
 import { registrarAuditoria } from "../src/infra/auditoria";
 import { cargarConfig } from "../src/infra/config";
-import { crearContexto } from "../src/infra/contexto";
+import { crearContexto, reconfigurarSunat } from "../src/infra/contexto";
 import { sembrarDatosIniciales } from "../src/infra/sembrar";
 import { crearContextoPrueba, DATOS_INICIALES } from "./helpers";
 
@@ -119,13 +119,20 @@ describe("crearContexto", () => {
     const a = await crearContexto(config);
     cerrables.push(a.cerrar);
     expect(a.ctx.simulado).toBe(true);
-    expect(await a.ctx.almacen.leer("certificado-prueba.pfx")).toBeInstanceOf(Buffer);
+    // Sin empresa todavía: el de prueba lleva un RUC de relleno y se guarda aparte.
+    expect(await a.ctx.almacen.leer("certificado-prueba-sin-empresa.pfx")).toBeInstanceOf(Buffer);
     const subject = a.ctx.certificado.subject;
     await a.cerrar();
     cerrables.pop();
     const b = await crearContexto(config);
     cerrables.push(b.cerrar);
     expect(b.ctx.certificado.subject).toBe(subject);
+
+    // Con la empresa cargada (configuración inicial desde la app), se usa uno con su RUC.
+    await sembrarDatosIniciales(b.ctx.db, DATOS_INICIALES);
+    await reconfigurarSunat(b.ctx, config);
+    expect(await b.ctx.almacen.leer("certificado-prueba.pfx")).toBeInstanceOf(Buffer);
+    expect(b.ctx.certificado.subject).toContain(DATOS_INICIALES.empresa.ruc);
   });
 
   it("cierra la conexión si falla tras conectar, y permite reintentar sobre el mismo dataDir", async () => {
@@ -154,13 +161,13 @@ describe("crearContexto", () => {
     const storageDir = join(base, "storage");
     const almacenPrevio = crearAlmacenLocal(storageDir);
     const contenidoInvalido = Buffer.from("esto no es un pfx válido");
-    await almacenPrevio.guardar("certificado-prueba.pfx", contenidoInvalido);
+    await almacenPrevio.guardar("certificado-prueba-sin-empresa.pfx", contenidoInvalido);
 
     const config = cargarConfig({ STORAGE_DIR: storageDir, DATA_DIR: join(base, "data") });
     await expect(crearContexto(config)).rejects.toThrow();
 
     // El archivo corrupto no debe haber sido reemplazado por uno nuevo.
-    expect(await almacenPrevio.leer("certificado-prueba.pfx")).toEqual(contenidoInvalido);
+    expect(await almacenPrevio.leer("certificado-prueba-sin-empresa.pfx")).toEqual(contenidoInvalido);
   });
 
   it("en real: guías reales (no simuladas), y la factura queda marcada simulada solo si el ambiente es beta", async () => {

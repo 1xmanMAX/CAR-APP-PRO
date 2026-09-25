@@ -22,17 +22,23 @@ CONTROL FLOTA · cómo probarla en tu PC
 
 5. USO REAL CON TUS DATOS
    Doble clic en  INICIAR.bat
-   - La primera vez abre el archivo .env en el Bloc de notas: completa los datos de tu
-     empresa (EMPRESA_*), placa, conductor, tu correo y, si ya lo tienes, el
-     TELEGRAM_BOT_TOKEN. Guarda y vuelve a abrir INICIAR.bat.
-   - Sin token de Telegram funciona solo la web; con token también el bot.
-   - SUNAT queda en modo SIMULADO (sin validez tributaria) hasta configurar el certificado.
+   - La primera vez la app pide los datos de tu empresa (RUC, razón social, dirección,
+     ubigeo, registro MTC), tu primera unidad, su chofer y tu acceso de dueño.
+   - Bot de Telegram y SUNAT: en la app, AJUSTES -> ESTE DISPOSITIVO. Ahí pones el token
+     del bot (te lo da @BotFather), el modo SUNAT, tu clave SOL y el certificado .pfx.
+     Se aplica al momento, sin cerrar la app.
+   - SUNAT queda en modo SIMULADO (sin validez tributaria) hasta que lo cambies ahí.
 
 6. APP DE ANDROID (funciona sola, sin servidor)
    - Descarga ControlFlota-(versión).apk en el celular (misma página de descarga que este ZIP).
    - Ábrelo; Android pedirá permitir "instalar apps de esta fuente": acepta.
    - La app lleva todo dentro: sus pantallas y su propia base de datos. No necesita la PC
      encendida ni internet. Cada celular guarda su copia y los cambios se juntan al sincronizar.
+   - Tiene las mismas funciones que la PC: las mismas pantallas, el bot de Telegram (si le pones
+     el token en AJUSTES -> ESTE DISPOSITIVO), las tareas de fondo con SUNAT y los avisos.
+   - Primer celular sin PC: la app pide los datos de la empresa igual que en la PC.
+   - El bot de Telegram va en UN solo dispositivo (Telegram no deja conectarlo en dos a la vez):
+     el que pase más tiempo encendido y con internet.
 
 7. SINCRONIZAR DISPOSITIVOS (PC y celulares, por el Wi-Fi, sin internet)
    - Cada dispositivo trabaja por su cuenta. Al sincronizar solo viajan LOS CAMBIOS, cifrados.

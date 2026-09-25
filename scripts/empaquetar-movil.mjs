@@ -24,7 +24,7 @@ const paquete = (req, nombre) => {
 };
 
 await build({
-  entryPoints: [join(raiz, "apps/web/src/movil.ts")],
+  entryPoints: [join(raiz, "apps/bot/src/movil.ts")],
   bundle: true,
   platform: "node",
   target: "node18",
@@ -57,8 +57,14 @@ for (const f of ["build/three.module.js", "build/three.core.js", "examples/jsm/c
   mkdirSync(dirname(join(salida, "three", f)), { recursive: true });
   cpSync(join(three, f), join(salida, "three", f));
 }
-// pdfkit lee sus fuentes (AFM) de «__dirname/data».
-copiar(join(paquete(desdePdf, "pdfkit"), "js/data"), "data");
+// pdfkit lee sus fuentes (AFM) de «__dirname/data» y carga las 14 estándar con
+// require("#standard-fonts/…"), que Node resuelve con el package.json más cercano al paquete.
+const pdfkit = paquete(desdePdf, "pdfkit");
+copiar(join(pdfkit, "js/data"), "data");
+copiar(join(pdfkit, "js/standard-fonts"), "standard-fonts");
+writeFileSync(join(salida, "package.json"), JSON.stringify({
+  name: "controlflota-movil", private: true, imports: { "#standard-fonts/*": "./standard-fonts/*.cjs" },
+}, null, 2));
 for (const [req, nombre] of [[desdeDb, "@electric-sql/pglite"], [desdeSunat, "xmllint-wasm"]]) {
   const d = paquete(req, nombre);
   const destino = join(salida, "node_modules", nombre);

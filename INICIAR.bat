@@ -5,14 +5,8 @@ title Control Flota
 where node >nul 2>nul
 if errorlevel 1 goto sinnode
 
-if exist .env goto conenv
-copy .env.example .env >nul
-echo  Se creo el archivo .env. Completa los datos de tu empresa, placas, conductor y tu correo,
-echo  y el TELEGRAM_BOT_TOKEN si ya lo tienes. Luego guarda, cierra el Bloc de notas
-echo  y vuelve a abrir INICIAR.bat.
-notepad .env
-exit /b 0
-:conenv
+rem Los ajustes (bot de Telegram, SUNAT) se cambian desde la app: Ajustes - Este dispositivo.
+if not exist .env copy .env.example .env >nul
 
 if exist node_modules goto instalado
 echo  Instalando lo necesario. Solo la primera vez, tarda 1 a 3 minutos...
@@ -20,13 +14,16 @@ call npx --yes pnpm@9.12.3 install --frozen-lockfile
 if errorlevel 1 goto error
 :instalado
 
+rem Si en .env ya pusiste los datos de la empresa, se cargan; si no, la app los pide al abrirla.
 if exist data\pglite goto sembrado
+findstr /r /c:"^EMPRESA_RUC=[0-9]" .env >nul
+if errorlevel 1 goto sembrado
 echo  Cargando los datos iniciales de tu empresa...
 call npx --yes pnpm@9.12.3 sembrar
 if errorlevel 1 goto error
 :sembrado
 
-echo  Abriendo http://localhost:3000 ... La primera vez te pedira crear tu acceso de dueno.
+echo  Abriendo http://localhost:3000 ... La primera vez te pedira los datos de tu empresa y tu acceso.
 echo  Para cerrar la app: cierra esta ventana.
 echo  Desde el celular - app Android, mismo wifi - usa esta direccion:
 for /f "tokens=2 delims=:" %%a in ('ipconfig ^| findstr /c:"IPv4"') do echo     %%a:3000

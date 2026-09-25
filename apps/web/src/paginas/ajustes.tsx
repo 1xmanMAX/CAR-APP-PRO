@@ -12,8 +12,16 @@ async function vista(c: C, d: Deps) {
   const ctx = d.ctx;
   const [usuarios, tipos, emp] = await Promise.all([listarUsuarios(ctx), listarTiposParte(ctx, true), empresaActual(ctx)]);
   const yo = c.get("usuario");
+  const e = d.servicios?.estado();
   return pagina(c, d, { titulo: "Ajustes", seccion: "ajustes" }, (
     <>
+      <a href="/ajustes/dispositivo" class="panel" style="flex-direction:row;align-items:center;justify-content:space-between;gap:10px;text-decoration:none;color:inherit">
+        <span><b class="mono-t">ESTE DISPOSITIVO · BOT DE TELEGRAM Y SUNAT</b><br />
+          <span class="muted" style="font-size:12px">{e
+            ? `Bot: ${{ sin_token: "apagado", conectando: "conectando", en_linea: "en línea", error: "no conecta", esperando_datos: "esperando datos" }[e.bot.estado]} · SUNAT: ${e.sunat.modo}${e.sunat.error ? " (con aviso)" : ""}`
+            : "Token del bot, modo SUNAT, clave SOL y certificado"}</span></span>
+        <span class="btn chico">ABRIR</span>
+      </a>
       <div class="grid g-lado">
         <Panel titulo="USUARIOS Y ROLES">
           <div class="tabla-wrap"><table class="t">

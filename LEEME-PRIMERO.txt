@@ -1,0 +1,32 @@
+CONTROL FLOTA · cómo probarla en tu PC
+======================================
+
+1. Instala Node.js (versión LTS, 22 o superior) desde https://nodejs.org
+   (siguiente, siguiente, finalizar). Solo una vez.
+
+2. Descomprime este ZIP en una carpeta, por ejemplo Documentos\ControlFlota.
+
+3. PRUEBA CON DATOS DE EJEMPLO
+   Doble clic en  INICIAR-DEMO.bat  (en Linux/Mac: ./iniciar-demo.sh)
+   - La primera vez instala lo necesario (1 a 3 minutos, necesita internet).
+   - Se abre el navegador en http://localhost:3000
+   - Usuario: demo@flota.pe   Clave: demo1234
+     (también contador@flota.pe y taller@flota.pe, misma clave, para ver los roles)
+
+4. INSTALARLA COMO APP
+   En Chrome o Edge aparece el botón "⬇ INSTALAR APP" arriba a la derecha, o el ícono
+   de instalar en la barra de direcciones. Queda con su ícono en el escritorio y el menú
+   Inicio y se abre en su propia ventana.
+   La ventana negra de INICIAR-DEMO debe seguir abierta mientras usas la app:
+   es el servidor. Al cerrarla, la app muestra "Sin conexión".
+
+5. USO REAL CON TUS DATOS
+   Doble clic en  INICIAR.bat
+   - La primera vez abre el archivo .env en el Bloc de notas: completa los datos de tu
+     empresa (EMPRESA_*), placa, conductor, tu correo y, si ya lo tienes, el
+     TELEGRAM_BOT_TOKEN. Guarda y vuelve a abrir INICIAR.bat.
+   - Sin token de Telegram funciona solo la web; con token también el bot.
+   - SUNAT queda en modo SIMULADO (sin validez tributaria) hasta configurar el certificado.
+
+Desde el celular (misma red wifi): http://IP-DE-TU-PC:3000
+(para instalarla en Android como app hace falta publicarla con https: siguiente paso).

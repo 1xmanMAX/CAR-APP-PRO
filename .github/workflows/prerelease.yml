@@ -1,0 +1,61 @@
+name: Prerelease para probar en la PC
+
+# Al subir una etiqueta v* (o a mano desde Actions) empaqueta la app en un ZIP listo para
+# descomprimir y abrir con INICIAR-DEMO.bat, y lo publica como prerelease.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      etiqueta:
+        description: "Etiqueta de la prerelease (ej. v0.2.0-beta.1)"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  empaquetar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.etiqueta || github.ref }}
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Instalar y verificar tipos
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm typecheck
+
+      - name: Empaquetar
+        id: zip
+        run: |
+          ETIQUETA="${{ github.event.inputs.etiqueta || github.ref_name }}"
+          ARCHIVO="ControlFlota-${ETIQUETA}.zip"
+          git archive --format=zip --prefix=ControlFlota/ -o "$ARCHIVO" HEAD
+          echo "archivo=$ARCHIVO" >> "$GITHUB_OUTPUT"
+          echo "etiqueta=$ETIQUETA" >> "$GITHUB_OUTPUT"
+          ls -la "$ARCHIVO"
+
+      - name: Publicar prerelease
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.zip.outputs.etiqueta }}
+          name: Control Flota ${{ steps.zip.outputs.etiqueta }} (prueba)
+          prerelease: true
+          files: ${{ steps.zip.outputs.archivo }}
+          body: |
+            Versión de prueba para la PC.
+
+            1. Instala Node.js LTS (https://nodejs.org).
+            2. Descomprime el ZIP y haz doble clic en **INICIAR-DEMO.bat**.
+            3. Entra con `demo@flota.pe` / `demo1234` y pulsa **⬇ INSTALAR APP** para tenerla como app.
+
+            Detalles en `LEEME-PRIMERO.txt` dentro del ZIP.

@@ -34,3 +34,25 @@
     history.replaceState(null, "", u.pathname + (u.search || "") + u.hash);
   }
 })();
+
+// App instalable (PWA): registra el service worker y ofrece el botón "Instalar app".
+(() => {
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js").catch(() => {}));
+  }
+  let aviso = null;
+  const boton = document.getElementById("instalar-app");
+  window.addEventListener("beforeinstallprompt", (e) => {
+    e.preventDefault();
+    aviso = e;
+    if (boton) boton.hidden = false;
+  });
+  boton?.addEventListener("click", async () => {
+    if (!aviso) return;
+    aviso.prompt();
+    await aviso.userChoice.catch(() => {});
+    aviso = null;
+    boton.hidden = true;
+  });
+  window.addEventListener("appinstalled", () => { if (boton) boton.hidden = true; });
+})();

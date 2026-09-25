@@ -32,6 +32,16 @@ async function post(cookie: string, ruta: string, datos: Record<string, string>,
 }
 
 describe("web", () => {
+  it("es instalable: manifiesto y service worker públicos", async () => {
+    const m = await app.request("/manifest.webmanifest");
+    expect(m.headers.get("content-type")).toBe("application/manifest+json");
+    expect((await m.json()).display).toBe("standalone");
+    const sw = await app.request("/sw.js");
+    expect(sw.status).toBe(200);
+    expect(sw.headers.get("service-worker-allowed")).toBe("/");
+    expect((await app.request("/sin-conexion")).status).toBe(200);
+  });
+
   it("sin sesión manda a configurar la primera vez y luego a entrar", async () => {
     let r = await app.request("/");
     expect(r.headers.get("location")).toBe("/configurar");

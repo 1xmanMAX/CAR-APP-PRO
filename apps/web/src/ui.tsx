@@ -90,6 +90,12 @@ export const Layout: FC<PropsWithChildren<PropsLayout>> = (p) => (
       <link rel="preconnect" href="https://fonts.googleapis.com" />
       <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="" />
       <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Space+Mono:wght@400;700&display=swap" />
+      <link rel="manifest" href="/manifest.webmanifest" />
+      <meta name="theme-color" content="#121719" />
+      <meta name="mobile-web-app-capable" content="yes" />
+      <meta name="apple-mobile-web-app-capable" content="yes" />
+      <meta name="apple-mobile-web-app-title" content="Flota" />
+      <link rel="apple-touch-icon" href="/static/iconos/apple-touch-icon.png" />
       <link rel="stylesheet" href="/static/app.css" />
       <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='4' fill='%23121719'/%3E%3Ccircle cx='29' cy='13' r='5' fill='%23FF5AAE'/%3E%3Ccircle cx='13' cy='26' r='5' fill='%238FB4CC'/%3E%3C/svg%3E" />
       {p.importmap ? raw(`<script type="importmap">{"imports":{"three":"/vendor/three/build/three.module.js","three/addons/":"/vendor/three/examples/jsm/"}}</script>`) : null}
@@ -108,6 +114,7 @@ export const Layout: FC<PropsWithChildren<PropsLayout>> = (p) => (
             <div class="dato"><span class="lbl">MARGEN</span><b class="t-cambiar">{pct(p.cab.margenPct)}</b></div>
             <a href="/telegram" class={`bot-estado${p.cab.botEnLinea ? "" : " off"}`}>BOT TELEGRAM · {p.cab.botEnLinea ? "EN LÍNEA" : "DESCONECTADO"}</a>
             <span class="hora" data-reloj="">{p.cab.hora}</span>
+            <button type="button" class="btn chico primario" id="instalar-app" hidden>⬇ INSTALAR APP</button>
             <div class="usuario-menu">
               <span class="muted">{p.usuario.nombre}</span>
               <form method="post" action="/salir"><button class="btn chico" type="submit">SALIR</button></form>
@@ -175,7 +182,14 @@ export const PaginaSimple: FC<PropsWithChildren<{ titulo: string }>> = (p) => (
       <meta name="viewport" content="width=device-width, initial-scale=1" />
       <title>{`${p.titulo} · Control Flota`}</title>
       <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Space+Mono:wght@400;700&display=swap" />
+      <link rel="manifest" href="/manifest.webmanifest" />
+      <meta name="theme-color" content="#121719" />
+      <meta name="mobile-web-app-capable" content="yes" />
+      <meta name="apple-mobile-web-app-capable" content="yes" />
+      <meta name="apple-mobile-web-app-title" content="Flota" />
+      <link rel="apple-touch-icon" href="/static/iconos/apple-touch-icon.png" />
       <link rel="stylesheet" href="/static/app.css" />
+      <link rel="icon" type="image/svg+xml" href="/static/iconos/icono.svg" />
     </head>
     <body>
       <div class="pagina login">
@@ -185,6 +199,7 @@ export const PaginaSimple: FC<PropsWithChildren<{ titulo: string }>> = (p) => (
         </div>
         {p.children}
       </div>
+      <script src="/static/app.js" defer></script>
     </body>
   </html>
 );

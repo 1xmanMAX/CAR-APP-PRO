@@ -1,0 +1,24 @@
+{
+  "name": "Control Flota",
+  "short_name": "Flota",
+  "description": "Control de flota: desgaste de partes, viajes, inventario, reparaciones y finanzas.",
+  "lang": "es",
+  "id": "/",
+  "start_url": "/?origen=app",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#EFE9DC",
+  "theme_color": "#121719",
+  "categories": ["business", "productivity"],
+  "icons": [
+    { "src": "/static/iconos/icono-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/static/iconos/icono-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/static/iconos/icono-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Trailer 3D", "url": "/trailer", "icons": [{ "src": "/static/iconos/icono-192.png", "sizes": "192x192" }] },
+    { "name": "Registrar cambio", "url": "/reparaciones#registrar", "icons": [{ "src": "/static/iconos/icono-192.png", "sizes": "192x192" }] },
+    { "name": "Viajes", "url": "/viajes", "icons": [{ "src": "/static/iconos/icono-192.png", "sizes": "192x192" }] }
+  ]
+}

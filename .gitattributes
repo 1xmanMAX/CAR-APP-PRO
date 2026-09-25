@@ -11,3 +11,7 @@
 *.png binary
 *.jpg binary
 *.jpeg binary
+
+# Los lanzadores de Windows necesitan CRLF para que cmd.exe los lea bien.
+*.bat text eol=crlf
+*.ico binary

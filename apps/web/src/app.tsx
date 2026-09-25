@@ -54,6 +54,28 @@ export function crearWeb(ctx: Contexto, opciones: OpcionesWeb = {}): App {
   app.get("/static/*", (c) => servirArchivo(c as C, PUBLICO, c.req.path.slice("/static/".length)));
   app.get("/vendor/three/*", (c) => servirArchivo(c as C, THREE, c.req.path.slice("/vendor/three/".length), "public, max-age=86400"));
   app.get("/salud", (c) => c.json({ ok: true }));
+  // PWA: el manifiesto y el service worker van en la raíz (el alcance del SW es su carpeta).
+  app.get("/manifest.webmanifest", async (c) => {
+    const r = await servirArchivo(c as C, PUBLICO, "manifest.webmanifest", "public, max-age=3600");
+    r.headers.set("Content-Type", "application/manifest+json");
+    return r;
+  });
+  app.get("/sw.js", async (c) => {
+    const r = await servirArchivo(c as C, PUBLICO, "sw.js", "no-cache");
+    r.headers.set("Service-Worker-Allowed", "/");
+    return r;
+  });
+  app.get("/sin-conexion", (c) =>
+    c.html("<!doctype html>" + (
+      <PaginaSimple titulo="Sin conexión">
+        <div class="panel">
+          <h2 class="mono-t">Sin conexión</h2>
+          <p class="muted">No se pudo llegar al servidor de Control Flota. Revisa tu internet (o que la PC con la app esté encendida) y vuelve a intentar.</p>
+          <a class="btn primario" href="/">REINTENTAR</a>
+        </div>
+      </PaginaSimple>
+    ).toString()),
+  );
 
   // Protección CSRF: todo POST debe venir de la misma web.
   app.use("*", async (c, next) => {

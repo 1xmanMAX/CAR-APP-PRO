@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Rentabilidad y fletes</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&amp;family=Space+Mono:wght@400;700&amp;display=swap">
+<style>
+body{margin:0;font-family:'IBM Plex Mono',ui-monospace,monospace;background:#EFE9DC;color:#1E1B16}
+a{color:#B8236E}a:hover{color:#8A1651}
+</style>
+</helmet>
+<div style="width: 1280px; height: 960px; box-sizing: border-box; padding: 16px; display: flex; flex-direction: column; gap: 10px; background: #EFE9DC; font-family: 'IBM Plex Mono', ui-monospace, monospace; color: #1E1B16; font-size: 13px">
+<header style="display: flex; align-items: center; gap: 14px; background: #FAF7F0; border: 1px solid #CDBFA5; border-radius: 6px; padding: 10px 14px">
+<svg width="40" height="40" viewBox="0 0 40 40" aria-hidden="true"><rect width="40" height="40" rx="4" fill="#121719"></rect><circle cx="11" cy="13" r="3" fill="#E9E3D6"></circle><circle cx="20" cy="13" r="3" fill="#E9E3D6"></circle><circle cx="29" cy="13" r="3" fill="#FF5AAE"></circle><circle cx="11" cy="22" r="3" fill="#E9E3D6"></circle><circle cx="20" cy="22" r="3" fill="#F2C14E"></circle><circle cx="29" cy="22" r="3" fill="#E9E3D6"></circle><circle cx="13" cy="30" r="3.5" fill="#8FB4CC"></circle><circle cx="27" cy="30" r="3.5" fill="#8FB4CC"></circle></svg>
+<div style="display: flex; flex-direction: column; gap: 2px">
+<div style="font-family: 'Space Mono', monospace; font-weight: 700; font-size: 18px">[EMPRESA] · <span style="color: #B8236E">Control</span> <span style="background: #EFD27A; padding: 0 5px">Flota</span></div>
+<div style="font-size: 11px; color: #6B6254; letter-spacing: 0.06em">TRANSPORTE DE CARGA PESADA · CADA PIEZA, CADA VIAJE, BAJO CONTROL</div>
+</div>
+<div style="margin-left: auto; display: flex; gap: 22px; align-items: center">
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 10px; color: #6B6254; letter-spacing: 0.08em">UNIDADES</span><span style="font-family: 'Space Mono', monospace; font-weight: 700; font-size: 16px">5/5</span></div>
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 10px; color: #6B6254; letter-spacing: 0.08em">VIAJES MES</span><span style="font-family: 'Space Mono', monospace; font-weight: 700; font-size: 16px; color: #B8236E">[N]</span></div>
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 10px; color: #6B6254; letter-spacing: 0.08em">MARGEN</span><span style="font-family: 'Space Mono', monospace; font-weight: 700; font-size: 16px; color: #B8236E">[%]</span></div>
+<span style="font-size: 11px; font-weight: 600; padding: 4px 8px; border: 1px solid #2D5B7A; color: #2D5B7A; border-radius: 4px">BOT TELEGRAM · EN LÍNEA</span>
+<span style="font-family: 'Space Mono', monospace; font-weight: 700; font-size: 22px">[HH:MM]</span>
+</div>
+</header>
+<nav aria-label="Secciones" style="display: flex; gap: 4px; align-items: center; background: #FAF7F0; border: 1px solid #CDBFA5; border-radius: 6px; padding: 4px 6px">
+<sc-for list="{{nav}}" as="n" hint-placeholder-count="9">
+<sc-if value="{{n.active}}" hint-placeholder-val="{{false}}"><a href="{{n.href}}" style="display: flex; align-items: center; height: 40px; padding: 0 10px; border-radius: 4px; background: #B8236E; color: #FFFFFF; font-weight: 600; font-size: 12px; text-decoration: none; letter-spacing: 0.04em">{{n.label}}</a></sc-if>
+<sc-if value="{{n.inactive}}" hint-placeholder-val="{{true}}"><a href="{{n.href}}" style="display: flex; align-items: center; height: 40px; padding: 0 10px; border-radius: 4px; color: #1E1B16; font-size: 12px; text-decoration: none; letter-spacing: 0.04em">{{n.label}}</a></sc-if>
+</sc-for>
+<span style="margin-left: auto; font-size: 11px; font-weight: 600; padding: 3px 8px; background: #EFD27A; color: #4A3A00; border-radius: 3px">DATOS DE EJEMPLO</span>
+</nav>
+<div style="display: grid; grid-template-columns: 420px minmax(0, 1fr); gap: 10px; flex-grow: 1">
+<section style="background: #FAF7F0; border: 1px solid #CDBFA5; border-radius: 6px; padding: 14px; display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 12px; font-weight: 600; letter-spacing: 0.06em">COTIZADOR DE FLETE · <span style="color: #B8236E">PRESUPUESTO AL INSTANTE</span></span><span style="font-size: 11px; color: #6B6254">CAMBIA LOS VALORES Y EL PRECIO SE RECALCULA</span></div>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px">
+<label style="display: flex; flex-direction: column; gap: 4px; font-size: 11px; font-weight: 600; letter-spacing: 0.04em">RUTA<input type="text" value="Juliaca → Arequipa" style="height: 40px; border: 1px solid #CDBFA5; border-radius: 4px; padding: 0 8px; font: inherit; font-size: 13px; font-weight: 400; background: #FFFFFF"></label>
+<label style="display: flex; flex-direction: column; gap: 4px; font-size: 11px; font-weight: 600; letter-spacing: 0.04em">TRAILER<select style="height: 40px; border: 1px solid #CDBFA5; border-radius: 4px; padding: 0 6px; font: inherit; font-size: 13px; font-weight: 400; background: #FFFFFF; color: #1E1B16"><option>T-01</option><option>T-02</option></select></label>
+<sc-for list="{{fields}}" as="f" hint-placeholder-count="8">
+<label style="display: flex; flex-direction: column; gap: 4px; font-size: 11px; font-weight: 600; letter-spacing: 0.04em">{{f.label}}<input type="number" value="{{f.value}}" onChange="{{f.set}}" style="height: 40px; border: 1px solid #CDBFA5; border-radius: 4px; padding: 0 8px; font: inherit; font-size: 13px; font-weight: 400; background: #FFFFFF"></label>
+</sc-for>
+</div>
+<div style="display: flex; flex-direction: column; gap: 4px; border-top: 1px solid #CDBFA5; padding-top: 10px">
+<sc-for list="{{lines}}" as="l" hint-placeholder-count="5">
+<div style="display: grid; grid-template-columns: minmax(0, 1fr) 110px; font-size: 12px; padding: 3px 0"><span>{{l.label}}</span><span style="text-align: right">S/ {{l.v}}</span></div>
+</sc-for>
+<div style="display: grid; grid-template-columns: minmax(0, 1fr) 110px; font-size: 12px; padding: 5px 0; border-top: 1px dashed #CDBFA5; font-weight: 700"><span>COSTO DEL VIAJE</span><span style="text-align: right">S/ {{total}}</span></div>
+</div>
+<div style="background: #121719; color: #F4EFE6; border-radius: 5px; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; margin-top: auto">
+<span style="font-size: 10px; letter-spacing: 0.08em; color: #9AA5AA">FLETE SUGERIDO · MARGEN {{margin}}%</span>
+<span style="font-family: 'Space Mono', monospace; font-weight: 700; font-size: 30px; color: #FF8CC6">S/ {{price}}</span>
+<span style="font-size: 12px; color: #C9D1D4">S/ {{perTon}} por tonelada · S/ {{perKm}} por km · ganancia S/ {{profit}}</span>
+</div>
+<button type="button" style="height: 44px; border-radius: 4px; border: none; background: #B8236E; color: #FFFFFF; font: inherit; font-weight: 600; font-size: 13px">GENERAR PRESUPUESTO (PDF) · ENVIAR POR TELEGRAM</button>
+</section>
+<div style="display: flex; flex-direction: column; gap: 10px; min-width: 0">
+<section style="background: #FAF7F0; border: 1px solid #CDBFA5; border-radius: 6px; overflow: hidden">
+<div style="padding: 10px 14px; font-size: 12px; font-weight: 600; letter-spacing: 0.06em">RENTABILIDAD · <span style="color: #B8236E">POR TRAILER, ESTE MES</span></div>
+<div style="display: grid; grid-template-columns: 70px repeat(4, minmax(0, 1fr)) 150px; gap: 10px; padding: 8px 14px; background: #F2ECE0; font-size: 11px; font-weight: 600; color: #6B6254; letter-spacing: 0.05em"><span>UNIDAD</span><span>VIAJES</span><span>INGRESOS</span><span>COSTOS</span><span>S/ POR KM</span><span>MARGEN</span></div>
+<sc-for list="{{byTrailer}}" as="r" hint-placeholder-count="5">
+<div style="display: grid; grid-template-columns: 70px repeat(4, minmax(0, 1fr)) 150px; gap: 10px; padding: 8px 14px; border-top: 1px solid #E4DCCB; font-size: 12px; align-items: center">
+<span style="font-weight: 700">{{r.id}}</span><span>{{r.v}}</span><span>S/ [MONTO]</span><span>S/ [MONTO]</span><span>{{r.km}}</span>
+<span style="display: flex; align-items: center; gap: 6px"><span style="display: block; flex-grow: 1; height: 6px; background: #E4DCCB"><span style="display: block; height: 6px; width: {{r.w}}; background: {{r.c}}"></span></span><span style="font-weight: 700; color: {{r.c}}; width: 34px; text-align: right">{{r.m}}%</span></span>
+</div>
+</sc-for>
+</section>
+<div style="display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 10px; flex-grow: 1">
+<section style="background: #FAF7F0; border: 1px solid #CDBFA5; border-radius: 6px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px">
+<div style="display: flex; justify-content: space-between"><span style="font-size: 12px; font-weight: 600; letter-spacing: 0.06em">PROYECCIÓN · <span style="color: #B8236E">6 MESES</span></span><span style="font-size: 11px; color: #6B6254">■ INGRESOS ■ COSTOS · CLARO = PROYECTADO</span></div>
+<div style="display: flex; align-items: flex-end; gap: 14px; flex-grow: 1; border-bottom: 1px solid #CDBFA5; min-height: 190px">
+<sc-for list="{{proj}}" as="p" hint-placeholder-count="6">
+<div style="flex-grow: 1; display: flex; align-items: flex-end; gap: 3px; height: 100%"><div style="flex-grow: 1; height: {{p.i}}%; background: {{p.ic}}"></div><div style="flex-grow: 1; height: {{p.c}}%; background: {{p.cc}}"></div></div>
+</sc-for>
+</div>
+<div style="display: flex; gap: 14px; font-size: 11px; color: #6B6254"><sc-for list="{{proj}}" as="p" hint-placeholder-count="6"><span style="flex-grow: 1; text-align: center">{{p.m}}</span></sc-for></div>
+<div style="font-size: 11px; color: #6B6254">Se proyecta con el promedio de viajes, fletes y los cambios de repuestos que ya vienen en camino.</div>
+</section>
+<section style="background: #FAF7F0; border: 1px solid #CDBFA5; border-radius: 6px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px">
+<div style="font-size: 12px; font-weight: 600; letter-spacing: 0.06em">PRESUPUESTO VS REAL · <span style="color: #B8236E">MES</span></div>
+<sc-for list="{{budget}}" as="b" hint-placeholder-count="5">
+<div style="display: flex; flex-direction: column; gap: 3px">
+<div style="display: flex; justify-content: space-between; font-size: 12px"><span>{{b.l}}</span><span style="font-weight: 700; color: {{b.c}}">{{b.p}}%</span></div>
+<div style="position: relative; height: 8px; background: #E4DCCB"><div style="height: 8px; width: {{b.w}}; background: {{b.c}}"></div><div style="position: absolute; left: 80%; top: -3px; width: 2px; height: 14px; background: #1E1B16"></div></div>
+</div>
+</sc-for>
+<div style="font-size: 11px; color: #6B6254; margin-top: auto">LÍNEA NEGRA = 100% DEL PRESUPUESTO</div>
+</section>
+</div>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":960}}'>
+class Component extends DCLogic {
+renderVals() {
+const A = 'Rentabilidad';
+const NAV = [['01 DASHBOARD','Main'],['02 TRAILER 3D','Trailer'],['03 FLOTA','Flota'],['04 INVENTARIO','Inventario'],['05 REPARACIONES','Reparaciones'],['06 VIAJES','Facturacion'],['07 FINANZAS','Finanzas'],['08 RENTABILIDAD','Rentabilidad'],['09 TELEGRAM','Chofer']];
+const nav = NAV.map(([label, f]) => ({ label, href: f + '.dc.html', active: f === A, inactive: f !== A }));
+const D = { km: 1290, ton: 30, comb: 16.5, rend: 7, peajes: 240, viat: 350, desg: 0.42, margin: 25 };
+const st = Object.assign({}, D, this.state || {});
+const F = [['km', 'DISTANCIA (KM)'], ['ton', 'TONELADAS'], ['comb', 'COMBUSTIBLE S/ POR GAL'], ['rend', 'RENDIMIENTO KM/GAL'], ['peajes', 'PEAJES S/'], ['viat', 'VIÁTICOS CHOFER S/'], ['desg', 'DESGASTE S/ POR KM'], ['margin', 'MARGEN DESEADO %']];
+const fields = F.map(([k, label]) => ({ label, value: st[k], set: (e) => this.setState({ [k]: Number(e.target.value) || 0 }) }));
+const f2 = (n) => n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const combustible = st.rend > 0 ? (st.km / st.rend) * st.comb : 0;
+const desgaste = st.km * st.desg;
+const total = combustible + st.peajes + st.viat + desgaste;
+const m = Math.min(90, Math.max(0, st.margin)) / 100;
+const price = total / (1 - m);
+const lines = [['Combustible', combustible], ['Peajes', st.peajes], ['Viáticos chofer', st.viat], ['Desgaste repuestos (del modelo)', desgaste]].map(([label, v]) => ({ label, v: f2(v) }));
+const byTrailer = [['T-01', 9, '4.12', 31], ['T-02', 8, '3.80', 24], ['T-03', 3, '2.10', 6], ['T-04', 10, '4.35', 34], ['T-05', 7, '3.95', 27]].map(([id, v, km, mm]) => ({ id, v, km, m: mm, w: Math.round((mm / 40) * 100) + '%', c: mm < 10 ? '#B8236E' : mm < 20 ? '#7A5A00' : '#2D5B7A' }));
+const P = [['OCT', 78, 60, 0], ['NOV', 82, 64, 0], ['DIC', 90, 70, 1], ['ENE', 72, 66, 1], ['FEB', 76, 58, 1], ['MAR', 86, 62, 1]];
+const proj = P.map(([mm, i, c, f]) => ({ m: mm, i, c, ic: f ? '#9CB9CE' : '#2D5B7A', cc: f ? '#EBA6C9' : '#B8236E' }));
+const budget = [['Combustible', 96], ['Repuestos', 118], ['Peajes', 82], ['Sueldos', 100], ['Otros', 64]].map(([l, p]) => ({ l, p, w: Math.min(100, Math.round(p * 0.8)) + '%', c: p > 100 ? '#B8236E' : '#2D5B7A' }));
+return {
+nav, fields, lines, total: f2(total), price: f2(price), margin: Math.round(m * 100),
+perTon: f2(st.ton > 0 ? price / st.ton : 0), perKm: f2(st.km > 0 ? price / st.km : 0), profit: f2(price - total),
+byTrailer, proj, budget
+};
+}
+}
+</script>
+</body>
+</html>

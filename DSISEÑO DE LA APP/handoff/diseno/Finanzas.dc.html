@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Finanzas</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&amp;family=Space+Mono:wght@400;700&amp;display=swap">
+<style>
+body{margin:0;font-family:'IBM Plex Mono',ui-monospace,monospace;background:#EFE9DC;color:#1E1B16}
+a{color:#B8236E}a:hover{color:#8A1651}
+</style>
+</helmet>
+<div style="width: 1280px; height: 860px; box-sizing: border-box; padding: 16px; display: flex; flex-direction: column; gap: 10px; background: #EFE9DC; font-family: 'IBM Plex Mono', ui-monospace, monospace; color: #1E1B16; font-size: 13px">
+<header style="display: flex; align-items: center; gap: 14px; background: #FAF7F0; border: 1px solid #CDBFA5; border-radius: 6px; padding: 10px 14px">
+<svg width="40" height="40" viewBox="0 0 40 40" aria-hidden="true"><rect width="40" height="40" rx="4" fill="#121719"></rect><circle cx="11" cy="13" r="3" fill="#E9E3D6"></circle><circle cx="20" cy="13" r="3" fill="#E9E3D6"></circle><circle cx="29" cy="13" r="3" fill="#FF5AAE"></circle><circle cx="11" cy="22" r="3" fill="#E9E3D6"></circle><circle cx="20" cy="22" r="3" fill="#F2C14E"></circle><circle cx="29" cy="22" r="3" fill="#E9E3D6"></circle><circle cx="13" cy="30" r="3.5" fill="#8FB4CC"></circle><circle cx="27" cy="30" r="3.5" fill="#8FB4CC"></circle></svg>
+<div style="display: flex; flex-direction: column; gap: 2px">
+<div style="font-family: 'Space Mono', monospace; font-weight: 700; font-size: 18px">[EMPRESA] · <span style="color: #B8236E">Control</span> <span style="background: #EFD27A; padding: 0 5px">Flota</span></div>
+<div style="font-size: 11px; color: #6B6254; letter-spacing: 0.06em">TRANSPORTE DE CARGA PESADA · CADA PIEZA, CADA VIAJE, BAJO CONTROL</div>
+</div>
+<div style="margin-left: auto; display: flex; gap: 22px; align-items: center">
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 10px; color: #6B6254; letter-spacing: 0.08em">UNIDADES</span><span style="font-family: 'Space Mono', monospace; font-weight: 700; font-size: 16px">5/5</span></div>
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 10px; color: #6B6254; letter-spacing: 0.08em">VIAJES MES</span><span style="font-family: 'Space Mono', monospace; font-weight: 700; font-size: 16px; color: #B8236E">[N]</span></div>
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 10px; color: #6B6254; letter-spacing: 0.08em">MARGEN</span><span style="font-family: 'Space Mono', monospace; font-weight: 700; font-size: 16px; color: #B8236E">[%]</span></div>
+<span style="font-size: 11px; font-weight: 600; padding: 4px 8px; border: 1px solid #2D5B7A; color: #2D5B7A; border-radius: 4px">BOT TELEGRAM · EN LÍNEA</span>
+<span style="font-family: 'Space Mono', monospace; font-weight: 700; font-size: 22px">[HH:MM]</span>
+</div>
+</header>
+<nav aria-label="Secciones" style="display: flex; gap: 4px; align-items: center; background: #FAF7F0; border: 1px solid #CDBFA5; border-radius: 6px; padding: 4px 6px">
+<sc-for list="{{nav}}" as="n" hint-placeholder-count="9">
+<sc-if value="{{n.active}}" hint-placeholder-val="{{false}}"><a href="{{n.href}}" style="display: flex; align-items: center; height: 40px; padding: 0 10px; border-radius: 4px; background: #B8236E; color: #FFFFFF; font-weight: 600; font-size: 12px; text-decoration: none; letter-spacing: 0.04em">{{n.label}}</a></sc-if>
+<sc-if value="{{n.inactive}}" hint-placeholder-val="{{true}}"><a href="{{n.href}}" style="display: flex; align-items: center; height: 40px; padding: 0 10px; border-radius: 4px; color: #1E1B16; font-size: 12px; text-decoration: none; letter-spacing: 0.04em">{{n.label}}</a></sc-if>
+</sc-for>
+<span style="margin-left: auto; font-size: 11px; font-weight: 600; padding: 3px 8px; background: #EFD27A; color: #4A3A00; border-radius: 3px">DATOS DE EJEMPLO</span>
+</nav>
+<section style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); background: #FAF7F0; border: 1px solid #CDBFA5; border-radius: 6px">
+<sc-for list="{{kpis}}" as="k" hint-placeholder-count="5">
+<div style="padding: 12px 14px; display: flex; flex-direction: column; gap: 4px; border-right: 1px solid #E4DCCB"><span style="font-size: 10px; letter-spacing: 0.08em; color: #6B6254">{{k.l}}</span><span style="font-family: 'Space Mono', monospace; font-weight: 700; font-size: 22px; color: {{k.c}}">S/ [MONTO]</span></div>
+</sc-for>
+</section>
+<div style="display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 10px; flex-grow: 1">
+<div style="display: flex; flex-direction: column; gap: 10px; min-width: 0">
+<section style="background: #FAF7F0; border: 1px solid #CDBFA5; border-radius: 6px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px">
+<div style="display: flex; justify-content: space-between"><span style="font-size: 12px; font-weight: 600; letter-spacing: 0.06em">FLUJO DE CAJA · <span style="color: #B8236E">12 SEMANAS</span></span><span style="font-size: 11px; color: #6B6254">ARRIBA ENTRA · ABAJO SALE</span></div>
+<div style="display: flex; gap: 6px; height: 130px">
+<sc-for list="{{flow}}" as="f" hint-placeholder-count="12">
+<div style="flex-grow: 1; display: flex; flex-direction: column; height: 100%"><div style="flex-grow: 1; display: flex; align-items: flex-end"><div style="width: 100%; height: {{f.i}}%; background: #2D5B7A"></div></div><div style="height: 1px; background: #1E1B16"></div><div style="flex-grow: 1"><div style="width: 100%; height: {{f.o}}%; background: #B8236E"></div></div></div>
+</sc-for>
+</div>
+</section>
+<section style="background: #FAF7F0; border: 1px solid #CDBFA5; border-radius: 6px; overflow: hidden; flex-grow: 1">
+<div style="display: flex; gap: 6px; align-items: center; padding: 10px 12px">
+<span style="font-size: 12px; font-weight: 600; letter-spacing: 0.06em">MOVIMIENTOS · <span style="color: #B8236E">GASTOS, INGRESOS, REINVERSIONES</span></span>
+<button type="button" style="margin-left: auto; height: 40px; padding: 0 12px; border-radius: 4px; border: 1px solid #1E1B16; background: transparent; font: inherit; font-size: 12px; font-weight: 600; color: #1E1B16">+ REINVERSIÓN</button>
+<button type="button" style="height: 40px; padding: 0 12px; border-radius: 4px; border: none; background: #B8236E; color: #FFFFFF; font: inherit; font-size: 12px; font-weight: 600">+ GASTO</button>
+</div>
+<div style="display: grid; grid-template-columns: 70px 110px minmax(0, 1.4fr) 60px 110px 80px; gap: 8px; padding: 8px 12px; background: #F2ECE0; font-size: 10px; font-weight: 600; color: #6B6254; letter-spacing: 0.05em"><span>FECHA</span><span>TIPO</span><span>DETALLE</span><span>UNID.</span><span>MONTO</span><span>ORIGEN</span></div>
+<sc-for list="{{movs}}" as="m" hint-placeholder-count="7">
+<div style="display: grid; grid-template-columns: 70px 110px minmax(0, 1.4fr) 60px 110px 80px; gap: 8px; padding: 8px 12px; border-top: 1px solid #E4DCCB; font-size: 12px; align-items: center">
+<span style="color: #6B6254">[FECHA]</span><span style="font-weight: 700; color: {{m.c}}">{{m.t}}</span><span>{{m.d}}</span><span>{{m.u}}</span><span style="font-weight: 600">{{m.s}} S/ [MONTO]</span><span style="color: #6B6254">{{m.o}}</span>
+</div>
+</sc-for>
+</section>
+</div>
+<div style="display: flex; flex-direction: column; gap: 10px">
+<section style="background: #121719; color: #E9E3D6; border-radius: 6px; padding: 12px; display: flex; flex-direction: column; gap: 10px">
+<div style="font-size: 12px; font-weight: 600; letter-spacing: 0.06em">PRÉSTAMOS · <span style="color: #FF8CC6">CUOTAS</span></div>
+<sc-for list="{{loans}}" as="l" hint-placeholder-count="2">
+<div style="border: 1px solid #2E383D; border-radius: 4px; padding: 10px; display: flex; flex-direction: column; gap: 6px">
+<div style="display: flex; justify-content: space-between; font-size: 12px"><span style="font-weight: 600">{{l.n}}</span><span style="color: #9AA5AA">TASA [%]</span></div>
+<div style="font-family: 'Space Mono', monospace; font-weight: 700; font-size: 18px; color: #F2C14E">S/ [MONTO] <span style="font-size: 11px; color: #9AA5AA; font-family: 'IBM Plex Mono', monospace; font-weight: 400">PENDIENTE</span></div>
+<div style="display: flex; gap: 2px"><sc-for list="{{l.q}}" as="q" hint-placeholder-count="24"><span style="display: block; flex-grow: 1; height: 10px; background: {{q.c}}"></span></sc-for></div>
+<div style="display: flex; justify-content: space-between; font-size: 11px; color: #C9D1D4"><span>{{l.paid}} DE {{l.total}} CUOTAS</span><span>PRÓXIMA [FECHA]</span></div>
+</div>
+</sc-for>
+</section>
+<section style="background: #FAF7F0; border: 1px solid #CDBFA5; border-radius: 6px; padding: 12px; display: flex; flex-direction: column; gap: 6px; flex-grow: 1">
+<div style="font-size: 12px; font-weight: 600; letter-spacing: 0.06em">REINVERSIONES · <span style="color: #B8236E">ESTE AÑO</span></div>
+<sc-for list="{{reinv}}" as="r" hint-placeholder-count="4">
+<div style="display: flex; justify-content: space-between; font-size: 12px; padding: 6px 0; border-bottom: 1px dashed #D8CCB4"><span>{{r}}</span><span style="font-weight: 600">S/ [MONTO]</span></div>
+</sc-for>
+</section>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":860}}'>
+class Component extends DCLogic {
+renderVals() {
+const A = 'Finanzas';
+const NAV = [['01 DASHBOARD','Main'],['02 TRAILER 3D','Trailer'],['03 FLOTA','Flota'],['04 INVENTARIO','Inventario'],['05 REPARACIONES','Reparaciones'],['06 VIAJES','Facturacion'],['07 FINANZAS','Finanzas'],['08 RENTABILIDAD','Rentabilidad'],['09 TELEGRAM','Chofer']];
+const nav = NAV.map(([label, f]) => ({ label, href: f + '.dc.html', active: f === A, inactive: f !== A }));
+const kpis = [['INGRESOS MES', '#2D5B7A'], ['GASTOS MES', '#1E1B16'], ['GANANCIA NETA', '#B8236E'], ['REINVERTIDO AÑO', '#1E1B16'], ['DEUDA PRÉSTAMOS', '#1E1B16']].map(([l, c]) => ({ l, c }));
+const flow = [[70, 50], [85, 60], [60, 72], [90, 55], [75, 64], [50, 80], [88, 58], [92, 62], [66, 70], [80, 52], [95, 66], [72, 58]].map(([i, o]) => ({ i, o }));
+const C = { INGRESO: '#2D5B7A', GASTO: '#1E1B16', REINVERSIÓN: '#7A5A00', 'CUOTA': '#B8236E' };
+const movs = [['INGRESO', 'Flete T001-0212 · Arequipa → Lima', 'T-05', '+', 'Web'], ['GASTO', 'Combustible', 'T-01', '−', 'Telegram'], ['GASTO', 'Peaje', 'T-02', '−', 'Telegram'], ['GASTO', 'Frenos · reparación', 'T-03', '−', 'Web'], ['REINVERSIÓN', '4 llantas nuevas', 'T-02', '−', 'Telegram'], ['CUOTA', 'Préstamo [ENTIDAD] · cuota 9', '—', '−', 'Web'], ['INGRESO', 'Flete T001-0211 · Puno → Cusco', 'T-02', '+', 'Web']].map(([t, d, u, s, o]) => ({ t, d, u, s, o, c: C[t] }));
+const mk = (n, paid, total) => ({ n, paid, total, q: Array.from({ length: total }, (_, i) => ({ c: i < paid ? '#FF5AAE' : '#2E383D' })) });
+const loans = [mk('[ENTIDAD / BANCO]', 9, 24), mk('[PRESTAMISTA]', 14, 18)];
+const reinv = ['Llantas nuevas · T-02', 'Herramientas de taller', 'Motor reparado · T-03', 'GPS para la flota'];
+return { nav, kpis, flow, movs, loans, reinv };
+}
+}
+</script>
+</body>
+</html>

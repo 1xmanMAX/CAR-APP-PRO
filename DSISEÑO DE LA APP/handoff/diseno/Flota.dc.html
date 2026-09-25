@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Flota</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&amp;family=Space+Mono:wght@400;700&amp;display=swap">
+<style>
+body{margin:0;font-family:'IBM Plex Mono',ui-monospace,monospace;background:#EFE9DC;color:#1E1B16}
+a{color:#B8236E}a:hover{color:#8A1651}
+</style>
+</helmet>
+<div style="width: 1280px; height: 860px; box-sizing: border-box; padding: 16px; display: flex; flex-direction: column; gap: 10px; background: #EFE9DC; font-family: 'IBM Plex Mono', ui-monospace, monospace; color: #1E1B16; font-size: 13px">
+<header style="display: flex; align-items: center; gap: 14px; background: #FAF7F0; border: 1px solid #CDBFA5; border-radius: 6px; padding: 10px 14px">
+<svg width="40" height="40" viewBox="0 0 40 40" aria-hidden="true"><rect width="40" height="40" rx="4" fill="#121719"></rect><circle cx="11" cy="13" r="3" fill="#E9E3D6"></circle><circle cx="20" cy="13" r="3" fill="#E9E3D6"></circle><circle cx="29" cy="13" r="3" fill="#FF5AAE"></circle><circle cx="11" cy="22" r="3" fill="#E9E3D6"></circle><circle cx="20" cy="22" r="3" fill="#F2C14E"></circle><circle cx="29" cy="22" r="3" fill="#E9E3D6"></circle><circle cx="13" cy="30" r="3.5" fill="#8FB4CC"></circle><circle cx="27" cy="30" r="3.5" fill="#8FB4CC"></circle></svg>
+<div style="display: flex; flex-direction: column; gap: 2px">
+<div style="font-family: 'Space Mono', monospace; font-weight: 700; font-size: 18px">[EMPRESA] · <span style="color: #B8236E">Control</span> <span style="background: #EFD27A; padding: 0 5px">Flota</span></div>
+<div style="font-size: 11px; color: #6B6254; letter-spacing: 0.06em">TRANSPORTE DE CARGA PESADA · CADA PIEZA, CADA VIAJE, BAJO CONTROL</div>
+</div>
+<div style="margin-left: auto; display: flex; gap: 22px; align-items: center">
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 10px; color: #6B6254; letter-spacing: 0.08em">UNIDADES</span><span style="font-family: 'Space Mono', monospace; font-weight: 700; font-size: 16px">5/5</span></div>
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 10px; color: #6B6254; letter-spacing: 0.08em">VIAJES MES</span><span style="font-family: 'Space Mono', monospace; font-weight: 700; font-size: 16px; color: #B8236E">[N]</span></div>
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 10px; color: #6B6254; letter-spacing: 0.08em">MARGEN</span><span style="font-family: 'Space Mono', monospace; font-weight: 700; font-size: 16px; color: #B8236E">[%]</span></div>
+<span style="font-size: 11px; font-weight: 600; padding: 4px 8px; border: 1px solid #2D5B7A; color: #2D5B7A; border-radius: 4px">BOT TELEGRAM · EN LÍNEA</span>
+<span style="font-family: 'Space Mono', monospace; font-weight: 700; font-size: 22px">[HH:MM]</span>
+</div>
+</header>
+<nav aria-label="Secciones" style="display: flex; gap: 4px; align-items: center; background: #FAF7F0; border: 1px solid #CDBFA5; border-radius: 6px; padding: 4px 6px">
+<sc-for list="{{nav}}" as="n" hint-placeholder-count="9">
+<sc-if value="{{n.active}}" hint-placeholder-val="{{false}}"><a href="{{n.href}}" style="display: flex; align-items: center; height: 40px; padding: 0 10px; border-radius: 4px; background: #B8236E; color: #FFFFFF; font-weight: 600; font-size: 12px; text-decoration: none; letter-spacing: 0.04em">{{n.label}}</a></sc-if>
+<sc-if value="{{n.inactive}}" hint-placeholder-val="{{true}}"><a href="{{n.href}}" style="display: flex; align-items: center; height: 40px; padding: 0 10px; border-radius: 4px; color: #1E1B16; font-size: 12px; text-decoration: none; letter-spacing: 0.04em">{{n.label}}</a></sc-if>
+</sc-for>
+<span style="margin-left: auto; font-size: 11px; font-weight: 600; padding: 3px 8px; background: #EFD27A; color: #4A3A00; border-radius: 3px">DATOS DE EJEMPLO</span>
+</nav>
+<div style="display: flex; justify-content: space-between; align-items: center; padding: 4px 2px">
+<div style="font-family: 'Space Mono', monospace; font-weight: 700; font-size: 22px">FLOTA · <span style="color: #B8236E">5 UNIDADES</span></div>
+<button type="button" style="height: 44px; padding: 0 16px; border-radius: 4px; border: none; background: #1E1B16; color: #FAF7F0; font: inherit; font-weight: 600; font-size: 12px">+ AGREGAR UNIDAD</button>
+</div>
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px">
+<sc-for list="{{units}}" as="u" hint-placeholder-count="5">
+<article style="background: #FAF7F0; border: 1px solid #CDBFA5; border-radius: 6px; padding: 14px; display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; justify-content: space-between; align-items: flex-start">
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="font-family: 'Space Mono', monospace; font-weight: 700; font-size: 22px">{{u.id}}</span><span style="font-size: 11px; color: #6B6254">PLACA [PLACA] · [MARCA] [MODELO]</span></div>
+<span style="font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 3px; background: {{u.chipBg}}; color: {{u.chipFg}}">{{u.status}}</span>
+</div>
+<div style="display: flex; gap: 3px"><sc-for list="{{u.cells}}" as="c" hint-placeholder-count="9"><span style="display: block; flex-grow: 1; height: 14px; border-radius: 1px; background: {{c.c}}"></span></sc-for></div>
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; font-size: 11px">
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="color: #6B6254; letter-spacing: 0.06em">KM TOTAL</span><span style="font-weight: 600; font-size: 13px">{{u.km}}</span></div>
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="color: #6B6254; letter-spacing: 0.06em">VIAJES</span><span style="font-weight: 600; font-size: 13px">{{u.v}}</span></div>
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="color: #6B6254; letter-spacing: 0.06em">MARGEN MES</span><span style="font-weight: 600; font-size: 13px; color: {{u.mc}}">{{u.m}}%</span></div>
+</div>
+<div style="background: #121719; color: #E9E3D6; border-radius: 4px; padding: 8px 10px; font-size: 12px"><span style="color: #9AA5AA">PRÓXIMO CAMBIO · </span><span style="color: {{u.nc}}; font-weight: 600">{{u.next}}</span></div>
+<div style="display: flex; gap: 6px">
+<a href="Trailer.dc.html" style="flex-grow: 1; height: 40px; display: flex; align-items: center; justify-content: center; border-radius: 4px; background: #B8236E; color: #FFFFFF; font-size: 12px; font-weight: 600; text-decoration: none">ABRIR MODELO 3D</a>
+<a href="Facturacion.dc.html" style="flex-grow: 1; height: 40px; display: flex; align-items: center; justify-content: center; border-radius: 4px; border: 1px solid #1E1B16; color: #1E1B16; font-size: 12px; font-weight: 600; text-decoration: none">VIAJES</a>
+</div>
+</article>
+</sc-for>
+<button type="button" style="border: 2px dashed #CDBFA5; border-radius: 6px; background: transparent; font: inherit; font-size: 13px; font-weight: 600; color: #6B6254; min-height: 250px">+ AGREGAR UNIDAD</button>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":860}}'>
+class Component extends DCLogic {
+renderVals() {
+const A = 'Flota';
+const NAV = [['01 DASHBOARD','Main'],['02 TRAILER 3D','Trailer'],['03 FLOTA','Flota'],['04 INVENTARIO','Inventario'],['05 REPARACIONES','Reparaciones'],['06 VIAJES','Facturacion'],['07 FINANZAS','Finanzas'],['08 RENTABILIDAD','Rentabilidad'],['09 TELEGRAM','Chofer']];
+const nav = NAV.map(([label, f]) => ({ label, href: f + '.dc.html', active: f === A, inactive: f !== A }));
+const C = { o: '#8FB4CC', w: '#F2C14E', c: '#FF5AAE' };
+const CH = { 'EN RUTA': ['#D6E4EE', '#1F4468'], 'EN BASE': ['#E4DCCB', '#1E1B16'], 'EN TALLER': ['#EFD27A', '#4A3A00'] };
+const units = [
+['T-01', 'EN RUTA', 'cwwoooooo', '412,380', 188, 31, 'Frenos semirremolque · 2 viajes', 'c'],
+['T-02', 'EN BASE', 'woooooooo', '365,020', 171, 24, 'Llantas tracción · 5 viajes', 'w'],
+['T-03', 'EN TALLER', 'ccwoooooo', '498,110', 214, 6, 'Aceite y filtro · cambiar ya', 'c'],
+['T-04', 'EN RUTA', 'wwooooooo', '288,470', 132, 34, 'Quinta rueda · 1 viaje', 'w'],
+['T-05', 'EN RUTA', 'ooooooooo', '154,900', 71, 27, 'Batería · 120 días', 'o']
+].map(([id, status, cells, km, v, m, next, n]) => ({ id, status, km, v, m, next, chipBg: CH[status][0], chipFg: CH[status][1], mc: m < 10 ? '#B8236E' : '#2D5B7A', nc: C[n], cells: cells.split('').map((k) => ({ c: C[k] })) }));
+return { nav, units };
+}
+}
+</script>
+</body>
+</html>

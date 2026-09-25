@@ -15,3 +15,7 @@
 # Los lanzadores de Windows necesitan CRLF para que cmd.exe los lea bien.
 *.bat text eol=crlf
 *.ico binary
+
+# Fuera del ZIP de la prerelease (no hacen falta para usar la app).
+DSISE* export-ignore
+.github export-ignore

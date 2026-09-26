@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { nombrePieza, partesDePieza, pieza, PIEZAS, type Forma } from "../src/flota/componentes";
+import { nombrePieza, partesDePieza, pieza, PIEZAS, piezasDeTipo, type Forma } from "../src/flota/componentes";
 
 type Caja = { min: number[]; max: number[] };
 
@@ -70,5 +70,11 @@ describe("piezas del modelo 3D (tracto cara plana + furgón)", () => {
     expect(partesDePieza(pieza("filtro-aire")!, partes).map((p) => p.codigoTipo)).toEqual(["filtro_aire"]);
     expect(partesDePieza(pieza("suspension-t1")!, partes).map((p) => p.codigoTipo)).toEqual(["amortiguadores"]);
     expect(partesDePieza(pieza("chasis-tracto")!, partes)).toEqual([]);
+  });
+
+  it("un tipo de parte sabe en qué piezas va", () => {
+    expect(piezasDeTipo({ zona: "llantas_sr", codigo: "frenos_sr" })).toEqual(["freno-sr1", "freno-sr2", "freno-sr3"]);
+    expect(piezasDeTipo({ zona: "llantas_sr", codigo: "llantas_sr" })).toHaveLength(13); // 12 + la de repuesto
+    expect(piezasDeTipo({ zona: "motor", codigo: "aceite" })).toEqual(["motor"]);
   });
 });

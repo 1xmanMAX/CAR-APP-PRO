@@ -1,7 +1,7 @@
 /** @jsxRuntime automatic @jsxImportSource hono/jsx */
 import {
-  CATEGORIAS_REPUESTO, crearRepuesto, editarRepuesto, ErrorNegocio, listarCompras, listarRepuestos, listarTiposParte, listarUnidades,
-  parsearMonto, puedeEditar, registrarCompra, resumirInventario,
+  CATEGORIAS_REPUESTO, crearRepuesto, editarRepuesto, ErrorNegocio, GRUPOS_PIEZA, listarCompras, listarRepuestos, listarTiposParte, listarUnidades,
+  nombrePieza, parsearMonto, PIEZAS, puedeEditar, registrarCompra, resumirInventario, type GrupoPieza,
 } from "@sunatapp/core";
 import { accion, formulario, pagina, type App, type C, type Deps } from "../base";
 import { enteroONull } from "./flota";
@@ -11,6 +11,25 @@ function vidaTexto(v: { km: number | null; viajes: number | null; dias: number |
   if (!v) return "—";
   const partes = [v.km ? `${miles(v.km)} km` : null, v.viajes ? `${v.viajes} viajes` : null].filter(Boolean);
   return partes.length ? partes.join(" · ") : v.dias ? `${v.dias} días` : "—";
+}
+
+/** Lista de piezas del modelo 3D para elegir varias (en el celular sale como lista con casillas). */
+function SelectPiezas(p: { elegidas?: string[] }) {
+  const el = new Set(p.elegidas ?? []);
+  return (
+    <select name="piezas" multiple size={8} aria-label="Piezas del modelo 3D donde va">
+      {(Object.keys(GRUPOS_PIEZA) as GrupoPieza[]).map((g) => (
+        <optgroup label={GRUPOS_PIEZA[g]}>{PIEZAS.filter((x) => x.grupo === g).map((x) => <option value={x.id} selected={el.has(x.id)}>{x.nombre}</option>)}</optgroup>
+      ))}
+    </select>
+  );
+}
+
+/** «3 piezas: Frenos · semirremolque eje 1, …». */
+function textoPiezas(ids: string[]): string {
+  if (!ids.length) return "—";
+  const nombres = ids.map((i) => nombrePieza(i)!);
+  return `${ids.length} ${ids.length === 1 ? "pieza" : "piezas"}: ${nombres.slice(0, 2).join(", ")}${ids.length > 2 ? "…" : ""}`;
 }
 
 const CHIP_ESTADO: Record<string, string> = { "EN STOCK": "ok", BAJO: "proximo", INSTALADO: "oscuro", AGOTADO: "cambiar" };
@@ -54,9 +73,9 @@ async function vista(c: C, d: Deps) {
           {tipo ? <div class="aviso info">Filtrando repuestos de: <b>{tipos.find((t) => t.id === tipo)?.nombre}</b> · <a href="/inventario">quitar filtro</a></div> : null}
           <div class="tabla-wrap">
             <table class="t">
-              <thead><tr><th>Código</th><th>Repuesto</th><th>Categoría</th><th class="num">Stock</th><th class="num">Costo u.</th><th class="num">Inversión</th><th>Vida útil</th><th>Instalado en</th><th>Estado</th></tr></thead>
+              <thead><tr><th>Código</th><th>Repuesto</th><th>Categoría</th><th class="num">Stock</th><th class="num">Costo u.</th><th class="num">Inversión</th><th>Vida útil</th><th>Instalado en</th><th>Dónde va (3D)</th><th>Estado</th></tr></thead>
               <tbody>
-                {filas.length === 0 ? <tr><td colspan={9}><Vacio>No hay repuestos{q || cat || unidadId || tipo ? " con ese filtro" : ". Registra el primero abajo"}.</Vacio></td></tr> : filas.map((r) => (
+                {filas.length === 0 ? <tr><td colspan={10}><Vacio>No hay repuestos{q || cat || unidadId || tipo ? " con ese filtro" : ". Registra el primero abajo"}.</Vacio></td></tr> : filas.map((r) => (
                   <tr>
                     <td class="nowrap"><b>{r.codigo}</b></td>
                     <td>{r.nombre}{r.proveedor ? <div class="muted" style="font-size:11px">{r.proveedor}</div> : null}</td>
@@ -66,6 +85,19 @@ async function vista(c: C, d: Deps) {
                     <td class="num">{soles(r.inversion)}</td>
                     <td class="nowrap">{vidaTexto(r.vida)}</td>
                     <td>{r.instalado.length ? r.instalado.map((i) => `${i.unidad}${i.posicion ? ` (${i.posicion})` : ""}`).join(", ") : "—"}</td>
+                    <td style="min-width:170px">
+                      <span style="font-size:11px">{textoPiezas(r.piezas)}</span>
+                      {r.piezas.length ? <> <a class="lbl-12" href={`/trailer?repuesto=${r.id}`} title="Ver en el modelo 3D dónde va">VER EN 3D</a></> : null}
+                      {edita ? (
+                        <details class="plegable"><summary><span class="lbl-12" style="text-decoration:underline;cursor:pointer">{r.piezasElegidas ? "cambiar" : "elegir piezas"}</span></summary>
+                          <form method="post" action={`/inventario/repuesto/${r.id}/piezas`} class="filas" style="margin-top:6px;min-width:240px">
+                            <SelectPiezas elegidas={r.piezasElegidas ? r.piezas : []} />
+                            <span class="muted" style="font-size:11px">Sin elegir ninguna, va donde va su tipo de parte.</span>
+                            <button class="btn chico primario" type="submit">GUARDAR</button>
+                          </form>
+                        </details>
+                      ) : null}
+                    </td>
                     <td><span class={`chip ${CHIP_ESTADO[r.estado]}`}>{r.estado}</span></td>
                   </tr>
                 ))}
@@ -99,6 +131,7 @@ async function vista(c: C, d: Deps) {
                 <label class="campo"><span>Parte del modelo que reemplaza</span>
                   <select name="tipoParteId"><option value="">— ninguna —</option>{tipos.map((t) => <option value={t.id}>{t.nombre}</option>)}</select>
                 </label>
+                <label class="campo"><span>Piezas del modelo 3D donde va (opcional; si no, las de la parte)</span><SelectPiezas /></label>
                 <label class="campo"><span>Proveedor</span><input name="proveedor" /></label>
                 <button class="btn" type="submit">CREAR REPUESTO</button>
               </form>
@@ -136,6 +169,9 @@ async function vista(c: C, d: Deps) {
   ));
 }
 
+/** El formulario junta los valores repetidos con \u0001. */
+const piezasDe = (v: string | undefined) => (v ? v.split("\u0001").filter(Boolean) : null);
+
 export function rutasInventario(app: App, d: Deps): void {
   app.get("/inventario", (c) => vista(c, d));
   app.post("/inventario/repuesto", async (c) => {
@@ -143,7 +179,7 @@ export function rutasInventario(app: App, d: Deps): void {
     return accion(c, "/inventario", async () => {
       await crearRepuesto(d.ctx, {
         nombre: f.nombre ?? "", categoria: f.categoria ?? "Otros", codigo: f.codigo || undefined, stockMinimo: enteroONull(f.stockMinimo) ?? 0,
-        proveedor: f.proveedor || null, tipoParteId: f.tipoParteId ? Number(f.tipoParteId) : null,
+        proveedor: f.proveedor || null, tipoParteId: f.tipoParteId ? Number(f.tipoParteId) : null, piezas: piezasDe(f.piezas),
       }, c.get("usuario").id);
       return "Repuesto creado. Ahora registra la compra para subir el stock.";
     });
@@ -153,6 +189,13 @@ export function rutasInventario(app: App, d: Deps): void {
     return accion(c, "/inventario", async () => {
       await editarRepuesto(d.ctx, Number(c.req.param("id")), { stockMinimo: enteroONull(f.stockMinimo) ?? undefined }, c.get("usuario").id);
       return "Repuesto actualizado";
+    });
+  });
+  app.post("/inventario/repuesto/:id/piezas", async (c) => {
+    const f = await formulario(c);
+    return accion(c, "/inventario", async () => {
+      await editarRepuesto(d.ctx, Number(c.req.param("id")), { piezas: piezasDe(f.piezas) }, c.get("usuario").id);
+      return "Piezas del repuesto actualizadas";
     });
   });
   app.post("/inventario/compra", async (c) => {

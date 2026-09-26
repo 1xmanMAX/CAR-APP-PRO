@@ -134,13 +134,20 @@ const panel = {
   id: document.getElementById("pieza-id"),
   parte: document.getElementById("pieza-parte"),
   trabajo: document.getElementById("pieza-trabajo"),
+  repuestos: document.getElementById("pieza-repuestos"),
+  repuesto: document.getElementById("pieza-repuesto"),
 };
+// Opciones originales del selector de repuestos, para reordenarlas según la pieza.
+const opcionesRepuesto = panel.repuesto ? [...panel.repuesto.options].map((o) => ({ value: o.value, text: o.textContent })) : [];
 const porId = new Map(datos.piezas.map((p) => [p.id, p]));
 /** Partes controladas de la pieza, de la más gastada a la menos (la primera manda el color). */
 const partesDe = (id) => datos.partesPieza[id] ?? [];
 const estadoDe = (id) => partesDe(id)[0]?.estado;
 /** ¿La pieza lleva la parte elegida en la lista de la izquierda? */
 const llevaParteElegida = (id) => datos.parteSeleccionada !== null && partesDe(id).some((x) => x.id === datos.parteSeleccionada);
+/** Piezas de un repuesto pedido con «VER EN 3D» (?repuesto=): se resaltan todas. */
+const resaltadas = new Set(datos.resaltar?.piezas ?? []);
+const enFoco = (id) => (resaltadas.size ? resaltadas.has(id) : llevaParteElegida(id));
 
 function el(tag, props, ...hijos) {
   const e = document.createElement(tag);
@@ -175,6 +182,23 @@ function mostrarPanel(id) {
   if (panel.parte) {
     panel.parte.replaceChildren(el("option", { value: "", textContent: "— no reinicia ningún contador —" }),
       ...partes.map((x) => el("option", { value: String(x.id), textContent: `${x.nombre} · ${x.pct}% (vuelve a 0)` })));
+  }
+  const reps = datos.repuestosPieza[id] ?? [];
+  if (panel.repuestos) {
+    panel.repuestos.replaceChildren(...(reps.length ? [
+      el("span", { className: "lbl", textContent: "REPUESTOS PARA ESTA PIEZA" }),
+      ...reps.map((r) => el("a", { className: "fila-parte", href: `/inventario?q=${encodeURIComponent(r.codigo)}` },
+        el("span", { style: "font-size:12px", textContent: `${r.codigo} · ${r.nombre}` }),
+        el("b", { className: `mono-t ${r.stock > 0 ? "t-ok" : "t-cambiar"}`, textContent: r.stock > 0 ? `stock ${r.stock}` : "agotado" }))),
+    ] : []));
+  }
+  if (panel.repuesto && opcionesRepuesto.length) {
+    // Los que sirven para esta pieza van primero, marcados con ★.
+    const sirven = new Set(reps.map((r) => String(r.id)));
+    const orden = [...opcionesRepuesto].sort((a, b) => Number(!a.value) - Number(!b.value) || Number(sirven.has(b.value)) - Number(sirven.has(a.value)));
+    panel.repuesto.replaceChildren(...orden.map((o) => el("option", { value: o.value, textContent: sirven.has(o.value) ? `★ ${o.text}` : o.text })));
+    const primero = orden.find((o) => sirven.has(o.value));
+    panel.repuesto.value = primero ? primero.value : "";
   }
   if (panel.trabajo && !panel.trabajo.value) panel.trabajo.placeholder = p.grupo === "llantas" ? "Cambio de llanta, rotación, parchado…" : "Qué pasó o qué se hizo";
 }
@@ -244,12 +268,15 @@ function iniciar() {
       const estado = estadoDe(id);
       const m = o.material;
       const borde = o.children[0].material;
-      if (id === seleccion) {
+      if (id === seleccion || (!seleccion && resaltadas.has(id))) {
         m.color.set(RESALTE); m.size = 0.11; m.opacity = 1;
         borde.color.set(RESALTE); borde.opacity = 0.9;
+      } else if (!seleccion && resaltadas.size) {
+        m.color.set(estado ? COLOR[estado] : GRIS); m.size = id === encima ? 0.12 : 0.075; m.opacity = id === encima ? 0.8 : 0.16;
+        borde.color.copy(m.color); borde.opacity = id === encima ? 0.6 : 0.08;
       } else {
         m.color.set(estado ? COLOR[estado] : GRIS);
-        const enZona = !seleccion && llevaParteElegida(id);
+        const enZona = !seleccion && enFoco(id);
         m.size = id === encima ? 0.12 : enZona ? 0.11 : estado ? 0.085 : 0.075;
         m.opacity = seleccion ? (id === encima ? 0.8 : 0.18) : id === encima ? 1 : estado ? 0.9 : 0.45;
         borde.color.copy(m.color);
@@ -349,7 +376,14 @@ function iniciar() {
   if (verTodo) verTodo.addEventListener("click", () => {
     aislar = false;
     despieceObjetivo = 0;
-    if (btnDespiece) { btnDespiece.classList.remove("on"); btnDespiece.setAttribute("aria-pressed", "false"); } objetivo.set(0, 1.9, 0); acercarA = 24; volando = true; elegir(null, { mover: false }); });
+    if (btnDespiece) { btnDespiece.classList.remove("on"); btnDespiece.setAttribute("aria-pressed", "false"); }
+    if (resaltadas.size) {
+      resaltadas.clear();
+      centroZona = null;
+      try { const u = new URL(location.href); u.searchParams.delete("repuesto"); history.replaceState(null, "", u.pathname + u.search); } catch {}
+    }
+    objetivo.set(0, 1.9, 0); acercarA = 24; volando = true; elegir(null, { mover: false });
+  });
 
   const ajustar = () => {
     const w = canvas.clientWidth, h = canvas.clientHeight;
@@ -361,10 +395,14 @@ function iniciar() {
   ajustar();
 
   // Etiqueta flotante: la pieza elegida o, si no, la zona de la parte elegida en la lista.
+  if (etiqueta && datos.resaltar) {
+    etiqueta.replaceChildren(el("span", { className: "lbl", style: "color:var(--dark-muted)", textContent: "REPUESTO" }), el("br"),
+      `${datos.resaltar.titulo} · va en ${resaltadas.size} ${resaltadas.size === 1 ? "pieza" : "piezas"}`);
+  }
   const textoZona = etiqueta ? etiqueta.innerHTML : "";
-  const centroZona = (() => {
+  let centroZona = (() => {
     const b = new THREE.Box3();
-    for (const o of objetos) if (llevaParteElegida(o.userData.id)) b.union(o.geometry.boundingBox);
+    for (const o of objetos) if (enFoco(o.userData.id)) b.union(o.geometry.boundingBox);
     return b.isEmpty() ? null : b.getCenter(new THREE.Vector3());
   })();
 
@@ -373,6 +411,7 @@ function iniciar() {
   if (!reducirMovimiento && datos.autogiro && !seleccion) girarBtn.click();
   pintar();
   if (seleccion) { mostrarPanel(seleccion); enfocar(seleccion); }
+  else if (resaltadas.size && centroZona) { objetivo.copy(centroZona); volando = true; }
 
   let etiquetaDe = undefined;
   function cuadro() {
@@ -412,8 +451,8 @@ function iniciar() {
         const x = (v.x * 0.5 + 0.5) * canvas.clientWidth, y = (-v.y * 0.5 + 0.5) * canvas.clientHeight;
         const fuera = v.z > 1 || x < 0 || y < 0 || x > canvas.clientWidth || y > canvas.clientHeight;
         etiqueta.hidden = fuera;
-        const izq = x > canvas.clientWidth - 240;
-        etiqueta.style.left = `${izq ? x - 240 : x}px`;
+        const izq = x > canvas.clientWidth - 280;
+        etiqueta.style.left = `${izq ? x - 280 : x}px`;
         etiqueta.style.top = `${y}px`;
       } else etiqueta.hidden = true;
     }

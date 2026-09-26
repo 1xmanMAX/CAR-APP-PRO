@@ -4,6 +4,7 @@ import {
 import { ErrorNegocio } from "../errores";
 import { registrarAuditoria } from "../infra/auditoria";
 import type { Contexto } from "../infra/contexto";
+import { leerPiezas, piezasDeTipo } from "../flota/componentes";
 import { hoy } from "../flota/unidades";
 
 export interface Repuesto {
@@ -22,6 +23,9 @@ export interface Repuesto {
   inversion: number;
   instalado: Array<{ unidad: string; posicion: string; parte: string }>;
   valorInstalado: number;
+  /** Piezas del modelo 3D donde va: las elegidas o, si no se eligieron, las de su tipo de parte. */
+  piezas: string[];
+  piezasElegidas: boolean;
   estado: "EN STOCK" | "BAJO" | "INSTALADO" | "AGOTADO";
 }
 
@@ -61,6 +65,8 @@ export async function listarRepuestos(
       inversion: f.stock * f.costoUnitario + valorInstalado,
       instalado: inst.map((i) => ({ unidad: i.codigo ?? "", posicion: i.posicion, parte: i.parte })),
       valorInstalado, estado,
+      piezas: f.piezas !== null ? leerPiezas(f.piezas) : t ? piezasDeTipo(t) : [],
+      piezasElegidas: f.piezas !== null,
     });
   }
   return r;
@@ -90,6 +96,15 @@ export interface EntradaRepuesto {
   costoUnitario?: number;
   proveedor?: string | null;
   tipoParteId?: number | null;
+  /** Piezas del modelo 3D donde va; null o vacío = las de su tipo de parte. */
+  piezas?: string[] | null;
+}
+
+function textoPiezas(piezas: string[] | null | undefined): string | null {
+  if (!piezas?.length) return null;
+  const validas = leerPiezas(piezas.join(","));
+  if (validas.length !== new Set(piezas).size) throw new ErrorNegocio("Alguna de las piezas elegidas no existe en el modelo");
+  return validas.join(",");
 }
 
 export async function crearRepuesto(ctx: Contexto, e: EntradaRepuesto, usuarioId?: number): Promise<number> {
@@ -101,7 +116,7 @@ export async function crearRepuesto(ctx: Contexto, e: EntradaRepuesto, usuarioId
     if (dup) throw new ErrorNegocio(`El código ${codigo} ya existe`);
     const [f] = await tx.insert(repuesto).values({
       codigo, nombre: e.nombre.trim(), categoria: e.categoria.trim(), stockMinimo: e.stockMinimo ?? 0,
-      costoUnitario: e.costoUnitario ?? 0, proveedor: e.proveedor ?? null, tipoParteId: e.tipoParteId ?? null,
+      costoUnitario: e.costoUnitario ?? 0, proveedor: e.proveedor ?? null, tipoParteId: e.tipoParteId ?? null, piezas: textoPiezas(e.piezas),
     }).returning({ id: repuesto.id });
     await registrarAuditoria(tx, { usuarioId, accion: "repuesto_creado", entidad: "repuesto", entidadId: f!.id, detalle: { ...e, codigo } });
     return f!.id;
@@ -115,6 +130,7 @@ export async function editarRepuesto(ctx: Contexto, id: number, e: Partial<Entra
   if (e.stockMinimo !== undefined) cambios.stockMinimo = e.stockMinimo;
   if (e.proveedor !== undefined) cambios.proveedor = e.proveedor;
   if (e.tipoParteId !== undefined) cambios.tipoParteId = e.tipoParteId;
+  if (e.piezas !== undefined) cambios.piezas = textoPiezas(e.piezas);
   const [f] = await ctx.db.update(repuesto).set(cambios).where(eq(repuesto.id, id)).returning({ id: repuesto.id });
   if (!f) throw new ErrorNegocio("El repuesto no existe");
   await registrarAuditoria(ctx.db, { usuarioId, accion: "repuesto_editado", entidad: "repuesto", entidadId: id, detalle: e });
@@ -198,4 +214,9 @@ export async function totalCompras(ctx: Contexto, desde: string, hasta: string):
 
 export async function repuestosConStockBajo(ctx: Contexto) {
   return ctx.db.select().from(repuesto).where(and(eq(repuesto.activo, true), sql`${repuesto.stockMinimo} > 0`, sql`${repuesto.stock} <= ${repuesto.stockMinimo}`));
+}
+
+/** Los repuestos que sirven para una pieza del modelo, los que tienen stock primero. */
+export function repuestosDePieza(repuestos: Repuesto[], piezaId: string): Repuesto[] {
+  return repuestos.filter((r) => r.piezas.includes(piezaId)).sort((a, b) => Number(b.stock > 0) - Number(a.stock > 0) || a.codigo.localeCompare(b.codigo));
 }

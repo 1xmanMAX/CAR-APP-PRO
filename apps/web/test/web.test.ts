@@ -93,6 +93,24 @@ describe("web", () => {
       expect(rep).toContain("Llanta semirremolque eje 2 · derecha exterior");
     });
 
+    it("cada repuesto dice en qué piezas va y se ve en el 3D", async () => {
+      const cookie = await entrar();
+      let r = await post(cookie, "/inventario/repuesto", { nombre: "Luna de retrovisor", categoria: "Otros", piezas: "retrovisor-izq" });
+      expect(aviso(r)).toContain("ok=");
+      const inv = await (await app.request("/inventario", { headers: { cookie } })).text();
+      expect(inv).toContain("1 pieza: Retrovisor · izquierda");
+      expect(inv).toMatch(/href="\/trailer\?repuesto=\d+"/);
+      const id = Number(/\/trailer\?repuesto=(\d+)/.exec(inv)![1]);
+      // Cambiar a los dos retrovisores (varios valores del mismo campo).
+      const cuerpo = new URLSearchParams([["piezas", "retrovisor-izq"], ["piezas", "retrovisor-der"]]);
+      r = await app.request(`/inventario/repuesto/${id}/piezas`, { method: "POST", headers: { cookie, origin: ORIGEN }, body: cuerpo });
+      expect(aviso(r)).toContain("ok=");
+      const pag = await (await app.request(`/trailer/1?repuesto=${id}`, { headers: { cookie } })).text();
+      const datos = JSON.parse(pag.match(/<script[^>]*id="datos-visor"[^>]*>([\s\S]*?)<\/script>/)![1]!);
+      expect(datos.resaltar).toEqual({ titulo: expect.stringContaining("Luna de retrovisor"), piezas: ["retrovisor-izq", "retrovisor-der"] });
+      expect(datos.repuestosPieza["retrovisor-der"]).toEqual([expect.objectContaining({ id, stock: 0 })]);
+    });
+
     it("contraseña incorrecta no entra", async () => {
       const r = await app.request("/entrar", { method: "POST", headers: { origin: ORIGEN }, body: new URLSearchParams({ email: "dueno@demo.pe", clave: "mala" }) });
       expect(r.status).toBe(401);

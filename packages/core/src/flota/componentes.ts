@@ -212,3 +212,13 @@ export function partesDePieza<T extends { zona: ZonaModelo; codigoTipo: string }
   const mia = p.grupo === "frenos" ? "frenos" : p.grupo === "llantas" ? "llantas" : "otra";
   return partes.filter((x) => x.zona === p.zona && clase(x.codigoTipo) === mia);
 }
+
+/** Piezas donde va un tipo de parte (ej. «Pastillas de freno · semirremolque» → frenos de sus 3 ejes). */
+export function piezasDeTipo(t: { zona: ZonaModelo; codigo: string }): string[] {
+  return PIEZAS.filter((p) => partesDePieza(p, [{ zona: t.zona, codigoTipo: t.codigo }]).length > 0).map((p) => p.id);
+}
+
+/** «a,b, c» → ids válidos, sin repetir. */
+export function leerPiezas(texto: string | null | undefined): string[] {
+  return [...new Set((texto ?? "").split(",").map((x) => x.trim()).filter((x) => PORID.has(x)))];
+}

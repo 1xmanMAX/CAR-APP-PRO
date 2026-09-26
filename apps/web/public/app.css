@@ -194,7 +194,7 @@ svg.graf { width: 100%; height: auto; display: block; }
 .visor .btn:hover { background: #1F2A2E; color: var(--white); }
 .visor .btn.on { background: var(--dark-text); color: var(--dark); }
 .visor .btn:disabled { opacity: .4; cursor: not-allowed; }
-.visor .etiqueta { position: absolute; pointer-events: none; background: rgba(18, 23, 25, .92); border: 1px dashed var(--amber-dark); border-radius: 4px; padding: 6px 8px; color: var(--dark-text); font-size: 11px; transform: translate(18px, -170%); white-space: nowrap; }
+.visor .etiqueta { position: absolute; pointer-events: none; background: rgba(18, 23, 25, .92); border: 1px dashed var(--amber-dark); border-radius: 4px; padding: 6px 8px; color: var(--dark-text); font-size: 11px; transform: translate(18px, -120%); white-space: normal; max-width: 260px; }
 .visor .etiqueta b { font-family: var(--f-title); color: var(--amber-dark); font-size: 16px; }
 .visor .pie { position: absolute; bottom: 10px; left: 12px; right: 12px; display: flex; gap: 14px; font-size: 11px; color: var(--dark-muted); pointer-events: none; flex-wrap: wrap; }
 .visor .pie i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 5px; }

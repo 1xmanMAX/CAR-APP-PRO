@@ -95,13 +95,17 @@ describe("comandos de flota", () => {
 
     await a.texto("/cambio T-01");
     await a.boton(a.botones().find((b) => b.text.startsWith("FRENOS"))!.callback_data);
+    // Los frenos del semirremolque están en 3 ejes: pregunta cuál, para marcarlo en el modelo 3D.
+    expect(a.ultimoTexto()).toMatch(/^¿Cuál exactamente\?/);
+    expect(a.botones().map((b) => b.text)).toEqual(["Eje 1", "Eje 2", "Eje 3", "No sé / varias"]);
+    await a.boton(a.botones().find((b) => b.text === "Eje 2")!.callback_data);
     await a.boton(a.botones().find((b) => b.text.startsWith("REP-001"))!.callback_data);
     await a.texto("6");
     await a.texto("150 Taller Juliaca");
     expect(a.textosEnviados().some((t) => t.includes("CAMBIO REGISTRADO · T-01"))).toBe(true);
     expect((await obtenerRepuesto(a.ctx, rep)).stock).toBe(4);
     const [r] = await listarReparaciones(a.ctx);
-    expect(r).toMatchObject({ costoTotal: 6 * 18000 + 15000, taller: "Taller Juliaca", origen: "telegram" });
+    expect(r).toMatchObject({ costoTotal: 6 * 18000 + 15000, taller: "Taller Juliaca", origen: "telegram", componente: "freno-sr2" });
     expect((await partesDeUnidad(a.ctx, t01.id))[0]!.uso.dias).toBe(0);
   });
 

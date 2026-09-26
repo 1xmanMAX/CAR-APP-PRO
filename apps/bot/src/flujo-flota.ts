@@ -1,6 +1,6 @@
 import {
   buscarRepuestoPorCodigo, buscarUnidad, categoriaDesdeTexto, chatAlertas, crearEnlaceWeb, duenoTelegramId, ErrorNegocio,
-  finalizarViajeFlota, formatearSoles, guardarChatAlertas, listarRepuestos, listarUnidades, NOMBRE_CATEGORIA, parsearMonto,
+  finalizarViajeFlota, formatearSoles, guardarChatAlertas, listarRepuestos, listarUnidades, NOMBRE_CATEGORIA, nombrePieza, parsearMonto, piezasDeTipo,
   partesDeUnidad, registrarCambio, registrarCompra, registrarEvento, registrarGasto, registrarLecturaOdometro,
   registrarViajeFlota, tomarAlertasDesgaste, viajeEnCursoDeUnidad, type Unidad,
 } from "@sunatapp/core";
@@ -13,7 +13,11 @@ export type EstadoFlujoFlota =
   | { tipo: "fin"; paso: "unidad" | "km"; viajeId?: number; vehiculoId?: number }
   | { tipo: "gasto"; paso: "unidad"; categoria: string; monto: number; nota: string | null; rutaFoto: string | null }
   | { tipo: "km"; paso: "unidad"; km: number }
-  | { tipo: "cambio"; paso: "unidad" | "parte" | "repuesto" | "cantidad" | "mano"; vehiculoId?: number; parteId?: number; repuestoId?: number | null; cantidad?: number };
+  | {
+    tipo: "cambio"; paso: "unidad" | "parte" | "pieza" | "repuesto" | "cantidad" | "mano"; vehiculoId?: number; parteId?: number;
+    /** La pieza exacta del modelo 3D (cuál de las 12 llantas, por ejemplo). */
+    componente?: string; repuestoId?: number | null; cantidad?: number;
+  };
 
 type CtxTexto = Filter<ContextoBot, "message:text">;
 type CtxBoton = Filter<ContextoBot, "callback_query:data">;
@@ -311,10 +315,21 @@ async function pasoCambio(c: ContextoBot, deps: Dependencias): Promise<void> {
     for (const p of partes.slice(0, 12)) k.text(`${p.nombreCorto} ${p.pct}%`, `t:cp:${p.id}`).row();
     k.text("Reparación general (sin parte)", "t:cp:0");
     await c.reply("¿Qué parte se cambió?", { reply_markup: k });
+  } else if (f.paso === "pieza") {
+    const parte = (await partesDeUnidad(deps.ctx, f.vehiculoId!)).find((p) => p.id === f.parteId)!;
+    const k = new InlineKeyboard();
+    piezasDeTipo({ zona: parte.zona, codigo: parte.codigoTipo }).slice(0, 24).forEach((id, i) => {
+      // «Llanta semirremolque eje 2 · derecha exterior» → «Eje 2 · derecha exterior» (cabe en el botón).
+      const corto = nombrePieza(id)!.replace(/^(Llanta|Frenos ·)\s*(semirremolque|tracción)?\s*/i, "");
+      k.text(corto.charAt(0).toUpperCase() + corto.slice(1), `t:cz:${id}`);
+      if (i % 2 === 1) k.row();
+    });
+    k.row().text("No sé / varias", "t:cz:-");
+    await c.reply(`¿Cuál exactamente? (${parte.nombreCorto.toLowerCase()}) Queda marcada en el modelo 3D.`, { reply_markup: k });
   } else if (f.paso === "repuesto") {
     const parte = f.parteId ? (await partesDeUnidad(deps.ctx, f.vehiculoId!)).find((p) => p.id === f.parteId) : undefined;
-    const reps = (await listarRepuestos(deps.ctx)).filter((r) => r.stock > 0)
-      .sort((a, b) => Number(b.tipoParteId === parte?.tipoParteId) - Number(a.tipoParteId === parte?.tipoParteId)).slice(0, 10);
+    const puntaje = (r: { tipoParteId: number | null; piezas: string[] }) => (f.componente && r.piezas.includes(f.componente) ? 2 : 0) + (r.tipoParteId === parte?.tipoParteId ? 1 : 0);
+    const reps = (await listarRepuestos(deps.ctx)).filter((r) => r.stock > 0).sort((a, b) => puntaje(b) - puntaje(a)).slice(0, 10);
     const k = new InlineKeyboard();
     for (const r of reps) k.text(`${r.codigo} ${r.nombre.slice(0, 22)} (${r.stock})`, `t:cr:${r.id}`).row();
     k.text("Sin repuesto del almacén", "t:cr:0");
@@ -337,7 +352,7 @@ async function terminarCambio(c: ContextoBot, deps: Dependencias, texto: string)
   delete c.session.flujo;
   try {
     const r = await registrarCambio(deps.ctx, {
-      vehiculoId: f.vehiculoId!, parteInstaladaId: f.parteId || null, tipo: "preventivo",
+      vehiculoId: f.vehiculoId!, parteInstaladaId: f.parteId || null, componente: f.componente ?? null, tipo: "preventivo",
       repuestos: f.repuestoId ? [{ repuestoId: f.repuestoId, cantidad: f.cantidad ?? 1 }] : [], manoObra: mano,
       taller: resto.join(" ") || null, origen: "telegram", usuarioId: c.session.usuarioId,
     });
@@ -410,6 +425,14 @@ async function manejarBoton(c: CtxBoton, deps: Dependencias): Promise<void> {
     await pasoCambio(c, deps);
   } else if (accion === "cp" && f?.tipo === "cambio" && f.paso === "parte") {
     f.parteId = id;
+    const parte = id ? (await partesDeUnidad(deps.ctx, f.vehiculoId!)).find((p) => p.id === id) : undefined;
+    const piezas = parte ? piezasDeTipo({ zona: parte.zona, codigo: parte.codigoTipo }) : [];
+    if (piezas.length === 1) f.componente = piezas[0];
+    f.paso = piezas.length > 1 ? "pieza" : "repuesto";
+    await pasoCambio(c, deps);
+  } else if (accion === "cz" && f?.tipo === "cambio" && f.paso === "pieza") {
+    const pz = c.callbackQuery.data.slice("t:cz:".length);
+    if (pz !== "-") f.componente = pz;
     f.paso = "repuesto";
     await pasoCambio(c, deps);
   } else if (accion === "cr" && f?.tipo === "cambio" && f.paso === "repuesto") {

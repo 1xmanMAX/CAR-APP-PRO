@@ -1,0 +1,1 @@
+ALTER TABLE "repuesto" ADD COLUMN "piezas" text;

@@ -1,7 +1,7 @@
 /** @jsxRuntime automatic @jsxImportSource hono/jsx */
 import {
   ajustarVidaParte, ErrorNegocio, GRUPOS_PIEZA, hoy, instalarParte, listarReparaciones, listarRepuestos, listarTiposParte,
-  listarUnidades, listarViajesFlota, parsearMonto, partesDePieza, partesDeUnidad, pieza, PIEZAS, puedeEditar, registrarCambio, TIPOS_REPARACION, viajesDesde, ZONAS,
+  listarUnidades, listarViajesFlota, parsearMonto, partesDePieza, repuestosDePieza, partesDeUnidad, pieza, PIEZAS, puedeEditar, registrarCambio, TIPOS_REPARACION, viajesDesde, ZONAS,
   type GrupoPieza, type ParteConDesgaste, type TipoReparacion,
 } from "@sunatapp/core";
 import { raw } from "hono/html";
@@ -52,9 +52,10 @@ async function vista(c: C, d: Deps) {
   const faltantes = tipos.filter((t) => !partes.some((p) => p.tipoParteId === t.id));
 
   const piezaSel = pieza(c.req.query("pieza"));
+  const idRepuestoVer = Number(c.req.query("repuesto")) || null;
   const [historial, repuestos] = await Promise.all([
     listarReparaciones(ctx, { vehiculoId: unidad.id, conPieza: true, limite: 400 }),
-    puedeEditarTaller ? listarRepuestos(ctx) : Promise.resolve([]),
+    listarRepuestos(ctx),
   ]);
   const porPieza: Record<string, Array<{ fecha: string; trabajo: string; tipo: string; km: string; costo: string | null; taller: string | null }>> = {};
   for (const h of historial) {
@@ -70,6 +71,7 @@ async function vista(c: C, d: Deps) {
     if (suyas.length) partesPieza[pz.id] = suyas.map((p) => ({ id: p.id, nombre: p.nombre, pct: p.pct, estado: p.estado, url: `/trailer/${unidad.id}?parte=${p.id}` }));
   }
 
+  const repuestoVer = idRepuestoVer ? repuestos.find((r) => r.id === idRepuestoVer) ?? null : null;
   const datosVisor = {
     parteSeleccionada: piezaSel ? null : sel?.id ?? null,
     piezaSeleccionada: piezaSel?.id ?? null,
@@ -78,6 +80,9 @@ async function vista(c: C, d: Deps) {
     piezas: PIEZAS,
     historial: porPieza,
     partesPieza,
+    // Qué repuestos sirven para cada pieza (con su stock), y el repuesto que se pidió ver (?repuesto=).
+    repuestosPieza: Object.fromEntries(PIEZAS.map((pz) => [pz.id, repuestosDePieza(repuestos, pz.id).map((r) => ({ id: r.id, codigo: r.codigo, nombre: r.nombre, stock: r.stock }))]).filter(([, rs]) => rs!.length)),
+    resaltar: repuestoVer ? { titulo: `${repuestoVer.codigo} · ${repuestoVer.nombre}`, piezas: repuestoVer.piezas } : null,
   };
   const grupos = Object.keys(GRUPOS_PIEZA) as GrupoPieza[];
   const conHistorial = new Set(Object.keys(porPieza));
@@ -139,12 +144,9 @@ async function vista(c: C, d: Deps) {
                 <span class="lbl" style="color:var(--dark-muted)">ÁNGULO <span id="angulo">0</span>°</span>
               </div>
             </div>
-            {sel ? (
-              <div class="etiqueta" hidden>
-                <span class="lbl" style="color:var(--dark-muted)">PARTE SELECCIONADA</span><br />
-                {sel.nombreCorto} · DESGASTE <b>{sel.pct}%</b>
-              </div>
-            ) : null}
+            <div class="etiqueta" hidden>
+              {sel ? <><span class="lbl" style="color:var(--dark-muted)">PARTE SELECCIONADA</span><br />{sel.nombreCorto} · DESGASTE <b>{sel.pct}%</b></> : null}
+            </div>
             <div class="pie"><span><i style="background:#FFE08A"></i>SELECCIONADA</span><span><i class="d-ok"></i>OK</span><span><i class="d-proximo"></i>PRÓXIMO (70%+)</span><span><i class="d-cambiar"></i>CAMBIAR (90%+)</span><span><i style="background:#E9E3D6;opacity:.5"></i>SIN CONTROL</span></div>
             {raw(`<script>setTimeout(function(){if(!window.__visor3d){var e=document.querySelector("#visor .sin-webgl");if(e)e.hidden=false;}},6000)</script>`)}
             <div class="sin-webgl" hidden>Este navegador no puede mostrar el modelo 3D (WebGL o navegador desactualizado: actualiza "Android System WebView" o Chrome). La lista de partes funciona igual.</div>
@@ -190,6 +192,7 @@ async function vista(c: C, d: Deps) {
                 <span id="pieza-zona" class="muted" style="font-size:11px"></span>
               </div>
               <div id="pieza-partes" class="filas"></div>
+              <div id="pieza-repuestos" class="filas"></div>
               <span class="lbl">HISTORIAL DE ESTA PIEZA</span>
               <div id="pieza-historial" class="filas"></div>
               {puedeEditarTaller ? (
@@ -211,7 +214,7 @@ async function vista(c: C, d: Deps) {
                     </div>
                     <div class="linea">
                       <label class="campo" style="flex:3"><span>Repuesto usado (sale del inventario)</span>
-                        <select name="repuestoId"><option value="">— ninguno —</option>{repuestos.filter((r) => r.stock > 0).map((r) => <option value={r.id}>{r.codigo} · {r.nombre} (stock {r.stock})</option>)}</select>
+                        <select name="repuestoId" id="pieza-repuesto"><option value="">— ninguno —</option>{repuestos.filter((r) => r.stock > 0).map((r) => <option value={r.id}>{r.codigo} · {r.nombre} (stock {r.stock})</option>)}</select>
                       </label>
                       <label class="campo" style="flex:1"><span>Cant.</span><input name="cantidad" inputmode="numeric" value="1" /></label>
                     </div>

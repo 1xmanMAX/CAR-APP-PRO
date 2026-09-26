@@ -383,6 +383,8 @@ export const repuesto = pgTable("repuesto", {
   costoUnitario: centimos("costo_unitario").notNull().default(0),
   proveedor: text("proveedor"),
   tipoParteId: integer("tipo_parte_id").references(() => tipoParte.id),
+  /** Piezas del modelo 3D donde va, separadas por coma; null = las de su tipo de parte. */
+  piezas: text("piezas"),
   activo: boolean("activo").notNull().default(true),
   creadoEn: creadoEn(),
 });

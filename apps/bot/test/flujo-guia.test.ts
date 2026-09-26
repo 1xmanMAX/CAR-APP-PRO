@@ -165,7 +165,7 @@ describe("flujo de guía: preguntas", () => {
     await a.texto("/cancelar");
     expect(a.ultimoTexto()).toBe("Cancelado.");
     await a.texto("hola");
-    expect(a.ultimoTexto()).toBe("Envíame el PDF de la guía del remitente o escribe /ayuda.");
+    expect(a.ultimoTexto()).toBe("Envíame el PDF de la guía del remitente, la foto de una boleta (o escribe el gasto: «grifo 350»), o /ayuda.");
   });
 });
 
@@ -278,7 +278,7 @@ describe("flujo de guía: envío a SUNAT", () => {
     // Resuelta la guía, el flujo caduca: los botones vuelven a atenderse (la Task 10 manda los
     // suyos desde el proceso de fondo, justo cuando el flujo sigue en "emitiendo").
     await a.boton("g:corregir");
-    expect(a.ultimoTexto()).toBe("Envíame el PDF de la guía del remitente o escribe /ayuda.");
+    expect(a.ultimoTexto()).toBe("Envíame el PDF de la guía del remitente, la foto de una boleta (o escribe el gasto: «grifo 350»), o /ayuda.");
   });
 
   it("no emite el resumen anterior si mientras tanto llegó otro PDF", async () => {
@@ -346,7 +346,7 @@ describe("flujo de guía: lo que el núcleo no admite", () => {
 
     rechazar = false;
     await a.texto("hola");
-    expect(a.ultimoTexto()).toBe("Envíame el PDF de la guía del remitente o escribe /ayuda.");
+    expect(a.ultimoTexto()).toBe("Envíame el PDF de la guía del remitente, la foto de una boleta (o escribe el gasto: «grifo 350»), o /ayuda.");
   });
 
   it("no reabre una guía que ya no se puede corregir", async () => {
@@ -422,10 +422,10 @@ describe("flujo de guía: avisos que no se repiten ni se pierden", () => {
 });
 
 describe("flujo de guía: archivos que no sirven", () => {
-  it("rechaza una foto", async () => {
+  it("una foto suelta no es una guía: se lee como boleta (ver flujo-lectura)", async () => {
     const a = await arnes();
     await a.foto("foto1");
-    expect(a.ultimoTexto()).toBe("Por ahora solo leo PDF. Envíame el PDF de la guía.");
+    expect(a.textosEnviados()[0]).toBe("👀 Leyendo…");
   });
 
   it("rechaza un PDF que pasa de 20 MB", async () => {

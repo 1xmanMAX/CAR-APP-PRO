@@ -24,7 +24,7 @@ function flujoFlota(c: ContextoBot): EstadoFlujoFlota | undefined {
   return c.session.flujo && TIPOS_FLOTA.has(c.session.flujo.tipo) ? (c.session.flujo as EstadoFlujoFlota) : undefined;
 }
 
-const autor = (c: Context) => [c.from?.first_name, c.from?.last_name].filter(Boolean).join(" ") || "Telegram";
+export const autor = (c: Context) => [c.from?.first_name, c.from?.last_name].filter(Boolean).join(" ") || "Telegram";
 
 function error(e: unknown): string {
   if (e instanceof ErrorNegocio) return `⚠️ ${e.message}`;
@@ -32,7 +32,7 @@ function error(e: unknown): string {
 }
 
 /** Teclado con las unidades activas. */
-function tecladoUnidades(unidades: Unidad[], prefijo: string): InlineKeyboard {
+export function tecladoUnidades(unidades: Unidad[], prefijo: string): InlineKeyboard {
   const k = new InlineKeyboard();
   unidades.forEach((u, i) => {
     k.text(u.codigo, `${prefijo}${u.id}`);
@@ -45,7 +45,7 @@ function tecladoUnidades(unidades: Unidad[], prefijo: string): InlineKeyboard {
  * La unidad con la que trabaja quien escribe: la que nombró ("T-02" en el texto), la que usó por
  * última vez, la única de la flota o la que tiene su viaje en curso. null = hay que preguntar.
  */
-async function unidadImplicita(c: ContextoBot, deps: Dependencias, texto?: string): Promise<Unidad | null> {
+export async function unidadImplicita(c: ContextoBot, deps: Dependencias, texto?: string): Promise<Unidad | null> {
   const m = texto ? /\b(T-?\d{1,3})\b/i.exec(texto) : null;
   if (m) return buscarUnidad(deps.ctx, m[1]!);
   const unidades = await listarUnidades(deps.ctx);
@@ -56,7 +56,7 @@ async function unidadImplicita(c: ContextoBot, deps: Dependencias, texto?: strin
   return enRuta.length === 1 ? enRuta[0]! : null;
 }
 
-function recordarUnidad(c: ContextoBot, id: number): void {
+export function recordarUnidad(c: ContextoBot, id: number): void {
   c.session.unidadId = id;
 }
 

@@ -39,6 +39,8 @@ export interface EstadoServicios {
   archivoAjustes: string;
   bot: { estado: "sin_token" | "conectando" | "en_linea" | "error" | "esperando_datos"; mensaje?: string; usuario?: string };
   sunat: { modo: "simulado" | "beta" | "real"; error?: string };
+  /** Lector de boletas por Telegram: «reglas» (sin internet) o «deepseek», y si hay notas de voz. */
+  ia: { lector: "reglas" | "deepseek"; voz: boolean; error?: string };
   /** Código para registrarse como dueño en el bot (solo mientras no hay dueño en Telegram). */
   codigoRegistro: string | null;
 }

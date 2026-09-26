@@ -1,6 +1,7 @@
 import { mkdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { crearDb, empresa, type Db } from "@sunatapp/db";
+import type { ProveedorIA, Transcriptor } from "@sunatapp/ia";
 import {
   cargarPfx, generarCertificadoPrueba, SunatMixto, SunatReal, SunatSimulado, type Certificado, type SunatGateway,
 } from "@sunatapp/sunat";
@@ -27,6 +28,9 @@ export interface Contexto {
    * la factura no: cada documento debe llevar el sello "DOCUMENTO SIMULADO" según corresponda.
    */
   facturaSimulada: boolean;
+  /** Lector de boletas (IA o reglas) y transcriptor de notas de voz; sin ellos no se leen mensajes. */
+  ia?: ProveedorIA;
+  transcriptor?: Transcriptor;
   /** Hook opcional para observabilidad del bot: se invoca en los catches que silencian errores. */
   log?: (nivel: NivelLog, mensaje: string, detalle?: unknown) => void;
 }

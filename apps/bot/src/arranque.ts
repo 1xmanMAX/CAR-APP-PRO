@@ -3,8 +3,9 @@ import { join, resolve } from "node:path";
 import { GrammyError, HttpError, type Bot } from "grammy";
 import {
   cargarConfig, crearContexto, duenoTelegramId, encolarAviso, guardarEnv, hayDueno, hayUsuarios, leerEnv, marcarLatidoBot,
-  obtenerUbigeo, reconfigurarSunat, tomarAvisos, validarRuc, type Config, type Contexto, type ResultadoEmision,
+  obtenerUbigeo, procesarLecturasPendientes, reconfigurarSunat, tomarAvisos, validarRuc, type Config, type Contexto, type ResultadoEmision,
 } from "@sunatapp/core";
+import { cargarConfigIa, crearLectorReglas, crearProveedorIA, crearTranscriptor } from "@sunatapp/ia";
 import { crearExtractor } from "@sunatapp/extractor";
 import { cargarConfigWeb, iniciarServidorWeb, type ConfigWeb, type EstadoServicios, type ServiciosDispositivo } from "@sunatapp/web";
 import { programarAvisoDiario, textoAvisoDiario, textoAvisoFlota } from "./aviso-diario";
@@ -12,6 +13,7 @@ import { crearBot, type ContextoBot, type Dependencias } from "./bot";
 import { notificarFactura } from "./flujo-factura";
 import { avisarDesgaste, enviarAlerta } from "./flujo-flota";
 import { notificarGuia } from "./flujo-guia";
+import { notificarLectura } from "./flujo-lectura";
 import { crearTareaFondo, type TipoDocumento } from "./fondo";
 import { crearLogger, type Logger } from "./log";
 import { generarCodigoRegistro } from "./registro";
@@ -41,7 +43,7 @@ export interface AppEnMarcha {
 
 const REINTENTO_BOT_MS = 60_000;
 /** Claves que se cambian desde Ajustes → Este dispositivo: las del `.env` mandan sobre el entorno. */
-const AJUSTABLES = /^(TELEGRAM_|SUNAT_|EXTRACTOR$|BOT_HORA_AVISO$)/;
+const AJUSTABLES = /^(TELEGRAM_|SUNAT_|EXTRACTOR$|BOT_HORA_AVISO$|IA_|DEEPSEEK_|WHISPER_|FFMPEG_)/;
 
 /** El motivo, en castellano, por el que el bot no conecta. */
 function motivoBot(error: unknown): { mensaje: string; reintentar: boolean } {
@@ -78,7 +80,22 @@ export async function arrancarApp(o: OpcionesArranque): Promise<AppEnMarcha> {
     archivoAjustes: archivoEnv,
     bot: { estado: "sin_token" },
     sunat: { modo: "simulado" },
+    ia: { lector: "reglas", voz: false },
     codigoRegistro: null,
+  };
+
+  /** Lector de boletas y notas de voz según el `.env` (sin clave: el lector por reglas, sin internet). */
+  const aplicarIa = (ctx: Contexto): void => {
+    try {
+      const cfg = cargarConfigIa();
+      ctx.ia = crearProveedorIA(cfg);
+      ctx.transcriptor = crearTranscriptor(cfg);
+      estado.ia = { lector: cfg.proveedor, voz: ctx.transcriptor.disponible };
+    } catch (e) {
+      ctx.ia = crearLectorReglas();
+      ctx.transcriptor = crearTranscriptor(cargarConfigIa({}));
+      estado.ia = { lector: "reglas", voz: false, error: `${(e as Error).message}. Mientras tanto, lector por reglas.` };
+    }
   };
 
   /** La configuración de SUNAT pedida y, si no es válida, la simulada (con el motivo en `estado`). */
@@ -119,6 +136,7 @@ export async function arrancarApp(o: OpcionesArranque): Promise<AppEnMarcha> {
 
   const iniciarNegocio = async (): Promise<void> => {
     let parado = false;
+    aplicarIa(ctx);
     const token = process.env.TELEGRAM_BOT_TOKEN?.trim() ?? "";
     const horaAviso = /^([01]\d|2[0-3]):[0-5]\d$/.test(process.env.BOT_HORA_AVISO?.trim() ?? "") ? process.env.BOT_HORA_AVISO!.trim() : "08:00";
     let extractor;
@@ -164,6 +182,14 @@ export async function arrancarApp(o: OpcionesArranque): Promise<AppEnMarcha> {
     const fondo = crearTareaFondo(deps, notificarAlDueno, [
       { nombre: "latido", tarea: async () => { if (enLinea()) await marcarLatidoBot(ctx, { usuario: estado.bot.usuario }); } },
       { nombre: "alertas de desgaste", tarea: async () => { if (enLinea()) await avisarDesgaste(bot!.api, deps); } },
+      {
+        // Boletas que quedaron en cola porque la IA no respondía: se reintentan y se avisa el resumen.
+        nombre: "lecturas en cola",
+        tarea: async () => {
+          if (!enLinea()) return;
+          for (const r of await procesarLecturasPendientes(ctx)) if (r.telegramChatId !== null) await notificarLectura(bot!.api, r.telegramChatId, r);
+        },
+      },
       {
         nombre: "avisos en cola",
         tarea: async () => {
@@ -255,7 +281,7 @@ export async function arrancarApp(o: OpcionesArranque): Promise<AppEnMarcha> {
   };
 
   const servicios: ServiciosDispositivo = {
-    estado: () => ({ ...estado, bot: { ...estado.bot }, sunat: { ...estado.sunat } }),
+    estado: () => ({ ...estado, bot: { ...estado.bot }, sunat: { ...estado.sunat }, ia: { ...estado.ia } }),
     ajustes: () => leerEnv(archivoEnv),
     async guardarAjustes(cambios, certificado) {
       if (certificado) {

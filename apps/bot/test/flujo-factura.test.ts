@@ -150,7 +150,7 @@ describe("flujo de factura: camino feliz", () => {
 
     // El flujo se quedó en "emitiendo": debe caducar solo, sin que nadie toque la sesión de fuera.
     await a.texto("hola");
-    expect(a.ultimoTexto()).toBe("Envíame el PDF de la guía del remitente o escribe /ayuda.");
+    expect(a.ultimoTexto()).toBe("Envíame el PDF de la guía del remitente, la foto de una boleta (o escribe el gasto: «grifo 350»), o /ayuda.");
   });
 
   it("avisa al dueño si el envío en segundo plano revienta", async () => {
@@ -199,7 +199,7 @@ describe("flujo de factura: el dueño se equivoca", () => {
     expect(a.ultimoTexto()).toBe("Cancelado.");
 
     await a.texto("2500");
-    expect(a.ultimoTexto()).toBe("Envíame el PDF de la guía del remitente o escribe /ayuda.");
+    expect(a.ultimoTexto()).toBe("Envíame el PDF de la guía del remitente, la foto de una boleta (o escribe el gasto: «grifo 350»), o /ayuda.");
   });
 
   it("rechaza un RUC que no está registrado", async () => {

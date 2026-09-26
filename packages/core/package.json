@@ -8,6 +8,7 @@
   },
   "dependencies": {
     "@sunatapp/db": "workspace:*",
+    "@sunatapp/ia": "workspace:*",
     "@sunatapp/pdf": "workspace:*",
     "@sunatapp/sunat": "workspace:*",
     "zod": "^4.6.4"

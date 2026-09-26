@@ -142,6 +142,20 @@ desde tu cuenta: quedas como dueño y a partir de ahí solo te responde a ti. El
 Además, sin que se lo pidas: reintenta cada minuto lo que quedó a medias con SUNAT (y te avisa del
 desenlace) y a la hora de `BOT_HORA_AVISO` te manda lo vencido y lo que vence hoy.
 
+### Boletas y gastos por Telegram
+El chofer manda la **foto de la boleta**, un **texto** («grifo 350», «peaje 28.50», «me yapearon 500») o una
+**nota de voz**. El bot responde con lo que entendió (categoría, monto, proveedor, comprobante, fecha) y
+tres botones: **✅ Correcto** (se guarda como gasto de la unidad y de su viaje en curso, o como dinero
+entregado para el viaje), **✏️ Corregir** («eran 305», «era peaje») y **❌ Descartar**. Nada se guarda sin ✅.
+
+- Sin clave de IA funciona el lector por reglas: entiende los textos y las fotos se completan con botones
+  (categoría y monto). La foto queda guardada con el gasto.
+- Con una clave de [DeepSeek](https://platform.deepseek.com) (Ajustes → Este dispositivo) también lee las
+  fotos. Cada lectura anota tokens y costo (menos de un centavo de dólar por boleta).
+- Si la IA no responde, el mensaje queda en cola, se reintenta (1, 5, 15 y 60 min) y el bot avisa.
+- Notas de voz: solo en la PC con whisper.cpp y ffmpeg (`WHISPER_BIN`, `WHISPER_MODELO`); sin ellos el bot
+  pide que lo escriban.
+
 ### Prueba manual
 Con `SUNAT_MODO=simulado`: envíale el PDF de una guía real del remitente → confirma el borrador →
 recibes la GRE-T simulada en PDF → responde "Sí" a facturar el flete → emite la factura →

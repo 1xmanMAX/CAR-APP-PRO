@@ -1,5 +1,6 @@
 import type { Update, UserFromGetMe } from "grammy/types";
 import { crearExtractor } from "@sunatapp/extractor";
+import { crearLectorReglas } from "@sunatapp/ia";
 import { obtenerUbigeo, validarRuc, type Contexto } from "@sunatapp/core";
 import { crearContextoPrueba, DATOS_INICIALES } from "../../../packages/core/test/helpers";
 import { crearBot, type Dependencias } from "../src/bot";
@@ -46,6 +47,8 @@ export async function crearArnes(
         ...(o.sinDueno ? { datos: { ...DATOS_INICIALES, usuario: { nombre: "Dueño", email: "d@x.pe" } } } : {}),
       });
   const ctx = o.ctx ?? creado!.ctx;
+  // Lector de boletas por reglas (sin red), como en un dispositivo sin clave de IA.
+  ctx.ia ??= crearLectorReglas();
   const llamadas: Llamada[] = [];
   const tareas: Promise<void>[] = [];
   let mensajeId = 1000;
@@ -119,6 +122,16 @@ export async function crearArnes(
           from: de(userId),
           photo: [{ file_id: fileId, file_unique_id: fileId, width: 1, height: 1 }],
           ...(caption ? { caption } : {}),
+        },
+      } as never),
+    voz: (fileId: string, userId = 111) =>
+      enviar({
+        message: {
+          message_id: updateId,
+          date: 0,
+          chat: chat(userId),
+          from: de(userId),
+          voice: { file_id: fileId, file_unique_id: fileId, duration: 3, mime_type: "audio/ogg" },
         },
       } as never),
     boton: (data: string, userId = 111) =>

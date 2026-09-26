@@ -108,6 +108,37 @@ async function vista(c: C, d: Deps) {
             <span class="muted" style="font-size:11px">Las claves vacías no se cambian. Emite los documentos reales desde un solo dispositivo para que la numeración no se cruce.</span>
           </Panel>
         </div>
+        <Panel titulo="LECTURA DE BOLETAS POR TELEGRAM">
+          <div class="filas" style="gap:4px">
+            <span>
+              <span class={`chip ${e.ia.lector === "deepseek" ? "ok" : "neutro"}`}>{e.ia.lector === "deepseek" ? "IA DEEPSEEK · LEE FOTOS" : "REGLAS · SOLO TEXTO"}</span>{" "}
+              <span class={`chip ${e.ia.voz ? "ok" : "neutro"}`}>{e.ia.voz ? "NOTAS DE VOZ ACTIVAS" : "SIN NOTAS DE VOZ"}</span>
+            </span>
+            {e.ia.error ? <div class="aviso error">{e.ia.error}</div> : null}
+          </div>
+          <span class="muted" style="font-size:12px">El chofer manda la foto de la boleta, un texto («grifo 350») o una nota de voz, y el bot le pide confirmar antes de guardar el gasto.
+            Sin clave de IA se entienden los textos y las fotos se completan con botones. Con DeepSeek también se leen las fotos (cuesta menos de un centavo de dólar por boleta).</span>
+          <div class="linea">
+            <label class="campo" style="flex:1"><span>Lector</span>
+              <select name="IA_PROVEEDOR">
+                <option value="reglas" selected={e.ia.lector === "reglas"}>Reglas (sin internet, gratis)</option>
+                <option value="deepseek" selected={e.ia.lector === "deepseek"}>DeepSeek (lee fotos)</option>
+              </select>
+            </label>
+            <label class="campo" style="flex:2"><span>Clave de DeepSeek ({oculto(a.DEEPSEEK_API_KEY)}) · platform.deepseek.com</span>
+              <input name="DEEPSEEK_API_KEY" type="password" autocomplete="off" placeholder={a.DEEPSEEK_API_KEY ? "déjalo vacío para no cambiarla" : "sk-…"} />
+            </label>
+          </div>
+          {a.DEEPSEEK_API_KEY ? (
+            <label class="campo" style="flex-direction:row;gap:6px;align-items:center"><input type="checkbox" name="quitarClaveIa" value="1" style="width:auto;min-height:0" /><span style="text-transform:none">Quitar la clave de DeepSeek</span></label>
+          ) : null}
+          {e.plataforma === "pc" ? (
+            <div class="linea">
+              <label class="campo" style="flex:1"><span>whisper.cpp (ruta del programa, opcional)</span><input name="WHISPER_BIN" value={a.WHISPER_BIN ?? ""} placeholder="C:\whisper\main.exe" autocomplete="off" /></label>
+              <label class="campo" style="flex:1"><span>Modelo de whisper (.bin)</span><input name="WHISPER_MODELO" value={a.WHISPER_MODELO ?? ""} placeholder="ggml-small.bin" autocomplete="off" /></label>
+            </div>
+          ) : null}
+        </Panel>
         <button class="btn primario" type="submit" style="margin-top:10px">GUARDAR Y APLICAR</button>
       </form>
     </>
@@ -125,11 +156,15 @@ export function rutasDispositivo(app: App, d: Deps): void {
       const actual = s.ajustes();
       const cambios: Record<string, string | null> = {};
       // Claves: vacío = no cambiar.
-      for (const k of ["TELEGRAM_BOT_TOKEN", "SUNAT_SOL_CLAVE", "SUNAT_GRE_CLIENT_SECRET", "SUNAT_CERT_PASSWORD"]) if (f[k]) cambios[k] = f[k]!;
+      for (const k of ["TELEGRAM_BOT_TOKEN", "SUNAT_SOL_CLAVE", "SUNAT_GRE_CLIENT_SECRET", "SUNAT_CERT_PASSWORD", "DEEPSEEK_API_KEY"]) if (f[k]) cambios[k] = f[k]!;
       if (f.quitarToken === "1") cambios.TELEGRAM_BOT_TOKEN = null;
+      if (f.quitarClaveIa === "1") cambios.DEEPSEEK_API_KEY = null;
+      if (f.IA_PROVEEDOR && !["reglas", "deepseek"].includes(f.IA_PROVEEDOR)) throw new ErrorNegocio("Lector de boletas no válido");
+      const claveIa = cambios.DEEPSEEK_API_KEY === undefined ? actual.DEEPSEEK_API_KEY : cambios.DEEPSEEK_API_KEY;
+      if (f.IA_PROVEEDOR === "deepseek" && !claveIa) throw new ErrorNegocio("Para leer fotos con DeepSeek pega la clave (empieza con sk-)");
       if (cambios.TELEGRAM_BOT_TOKEN && !/^\d+:[\w-]{20,}$/.test(cambios.TELEGRAM_BOT_TOKEN)) throw new ErrorNegocio("El token no tiene la forma que da @BotFather (números:letras)");
       if (f.BOT_HORA_AVISO && !/^([01]\d|2[0-3]):[0-5]\d$/.test(f.BOT_HORA_AVISO)) throw new ErrorNegocio("La hora del aviso debe ser HH:MM");
-      for (const k of ["BOT_HORA_AVISO", "EXTRACTOR", "SUNAT_MODO", "SUNAT_AMBIENTE_FACTURA", "SUNAT_SOL_USUARIO", "SUNAT_GRE_CLIENT_ID"]) if (k in f) cambios[k] = f[k] || null;
+      for (const k of ["BOT_HORA_AVISO", "EXTRACTOR", "SUNAT_MODO", "SUNAT_AMBIENTE_FACTURA", "SUNAT_SOL_USUARIO", "SUNAT_GRE_CLIENT_ID", "IA_PROVEEDOR", "WHISPER_BIN", "WHISPER_MODELO"]) if (k in f) cambios[k] = f[k] || null;
       if (!["simulado", "beta", "real"].includes(f.SUNAT_MODO ?? "simulado")) throw new ErrorNegocio("Modo SUNAT no válido");
       const cert = archivos.certificado ? Buffer.from(await archivos.certificado.arrayBuffer()) : undefined;
       if (f.SUNAT_MODO === "real") {

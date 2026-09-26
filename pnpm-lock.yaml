@@ -32,6 +32,9 @@ importers:
       '@sunatapp/extractor':
         specifier: workspace:*
         version: link:../../packages/extractor
+      '@sunatapp/ia':
+        specifier: workspace:*
+        version: link:../../packages/ia
       '@sunatapp/web':
         specifier: workspace:^
         version: link:../web
@@ -76,6 +79,9 @@ importers:
       '@sunatapp/db':
         specifier: workspace:*
         version: link:../db
+      '@sunatapp/ia':
+        specifier: workspace:*
+        version: link:../ia
       '@sunatapp/pdf':
         specifier: workspace:*
         version: link:../pdf
@@ -118,6 +124,12 @@ importers:
       '@sunatapp/core':
         specifier: workspace:*
         version: link:../core
+
+  packages/ia:
+    dependencies:
+      zod:
+        specifier: ^4.6.4
+        version: 4.6.4
 
   packages/pdf:
     dependencies:

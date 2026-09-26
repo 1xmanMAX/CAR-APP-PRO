@@ -56,8 +56,11 @@ export interface EntradaGasto {
   viajeId?: number | null;
   nota?: string | null;
   proveedorNombre?: string | null;
+  proveedorRuc?: string | null;
   comprobante?: string | null;
   rutaFoto?: string | null;
+  /** Mensaje de Telegram del que salió (foto, texto o voz leído). */
+  documentoId?: number | null;
   origen: OrigenRegistro;
   usuarioId?: number;
 }
@@ -87,8 +90,8 @@ export async function registrarGasto(ctx: Contexto, e: EntradaGasto): Promise<{ 
   }
   const [g] = await ctx.db.insert(gasto).values({
     categoria: e.categoria, monto: e.monto, fecha: e.fecha ?? hoy(ctx), vehiculoId, viajeId, nota: e.nota ?? null,
-    proveedorNombre: e.proveedorNombre ?? null, comprobante: e.comprobante ?? null, rutaFoto: e.rutaFoto ?? null,
-    origen: e.origen, usuarioId: e.usuarioId ?? null,
+    proveedorNombre: e.proveedorNombre ?? null, proveedorRuc: e.proveedorRuc ?? null, comprobante: e.comprobante ?? null, rutaFoto: e.rutaFoto ?? null,
+    documentoId: e.documentoId ?? null, origen: e.origen, usuarioId: e.usuarioId ?? null,
   }).returning({ id: gasto.id });
   await registrarAuditoria(ctx.db, { usuarioId: e.usuarioId, accion: "gasto_registrado", entidad: "gasto", entidadId: g!.id, detalle: { ...e, vehiculoId, viajeId } });
   return { id: g!.id, viajeCodigo };

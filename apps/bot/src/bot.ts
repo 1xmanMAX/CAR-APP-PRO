@@ -7,6 +7,7 @@ import { registrarComandos } from "./comandos";
 import { registrarFlujoFactura } from "./flujo-factura";
 import { registrarFlujoFlota } from "./flujo-flota";
 import { registrarFlujoGuia } from "./flujo-guia";
+import { registrarFlujoLectura } from "./flujo-lectura";
 import { middlewareAutorizacion } from "./registro";
 import type { Sesion } from "./sesion";
 import { textos } from "./textos";
@@ -36,6 +37,7 @@ export function crearBot(token: string, deps: Dependencias, botInfo?: UserFromGe
   registrarFlujoFlota(bot, deps, { urlWeb: deps.urlWeb ?? null });
   registrarFlujoFactura(bot, deps);
   registrarComandos(bot, deps);
+  registrarFlujoLectura(bot, deps);
   registrarFlujoGuia(bot, deps);
   bot.catch((e) => {
     deps.log.error("error en manejador", e.error);

@@ -9,6 +9,7 @@
   "dependencies": {
     "@sunatapp/core": "workspace:*",
     "@sunatapp/extractor": "workspace:*",
+    "@sunatapp/ia": "workspace:*",
     "@sunatapp/web": "workspace:^",
     "grammy": "^1.46.0"
   },

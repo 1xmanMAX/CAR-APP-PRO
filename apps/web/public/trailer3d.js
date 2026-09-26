@@ -34,7 +34,7 @@ function muestrearCaja(f, P) {
   const dx = x1 - x0, dy = y1 - y0, dz = z1 - z0;
   const areas = [dy * dz, dy * dz, dx * dz, dx * dz, dx * dy, dx * dy];
   const total = areas.reduce((a, b) => a + b, 0) || 1;
-  const n = cuantos(total, 50, 1900);
+  const n = cuantos(total, 120, 1900);
   for (let i = 0; i < n; i++) {
     let r = rnd() * total, cara = 0;
     while (cara < 5 && r > areas[cara]) r -= areas[cara++];
@@ -53,7 +53,7 @@ function ubicar(c, eje, a, u, v, P) {
 
 function muestrearCilindro(f, P) {
   const lateral = 2 * Math.PI * f.r * f.largo, tapa = Math.PI * f.r * f.r;
-  const n = cuantos(lateral + 2 * tapa, 60, 900);
+  const n = cuantos(lateral + 2 * tapa, 110, 900);
   for (let i = 0; i < n; i++) {
     const ang = rnd() * Math.PI * 2;
     if (rnd() < lateral / (lateral + 2 * tapa)) {
@@ -80,6 +80,37 @@ function muestrearLlanta(f, P) {
       P.push(cx + c * rr, cy + s * rr, cz + exterior * 0.4 * f.ancho);
     }
   }
+}
+
+/** Contorno de cada forma (aristas de las cajas, bordes de cilindros y llantas): une visualmente la nube. */
+function contornoDe(pieza) {
+  const L = [];
+  const seg = (a, b) => L.push(a[0], a[1], a[2], b[0], b[1], b[2]);
+  const circulo = (punto, n = 24) => {
+    for (let i = 0; i < n; i++) seg(punto((i / n) * Math.PI * 2), punto(((i + 1) / n) * Math.PI * 2));
+  };
+  for (const f of pieza.formas) {
+    if (f.t === "caja") {
+      const [x0, y0, z0] = f.min, [x1, y1, z1] = f.max;
+      const v = [[x0, y0, z0], [x1, y0, z0], [x1, y1, z0], [x0, y1, z0], [x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1]];
+      for (const [a, b] of [[0, 1], [1, 2], [2, 3], [3, 0], [4, 5], [5, 6], [6, 7], [7, 4], [0, 4], [1, 5], [2, 6], [3, 7]]) seg(v[a], v[b]);
+    } else if (f.t === "cil") {
+      for (const lado of [-0.5, 0.5]) {
+        circulo((ang) => {
+          const P = [];
+          ubicar(f.c, f.eje, lado * f.largo, Math.cos(ang) * f.r, Math.sin(ang) * f.r, P);
+          return P;
+        });
+      }
+    } else {
+      for (const lado of [-0.5, 0.5]) {
+        for (const r of [f.r, f.r * 0.6]) circulo((ang) => [f.c[0] + Math.cos(ang) * r, f.c[1] + Math.sin(ang) * r, f.c[2] + lado * f.ancho]);
+      }
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.Float32BufferAttribute(L, 3));
+  return g;
 }
 
 function nubeDe(pieza) {
@@ -187,7 +218,12 @@ function iniciar() {
     g.computeBoundingBox();
     const m = new THREE.PointsMaterial({ size: 0.1, transparent: true, sizeAttenuation: true, depthWrite: false });
     const o = new THREE.Points(g, m);
-    o.userData = { id: p.id, zona: p.zona, puntos: g.attributes.position.count, centro: g.boundingBox.getCenter(new THREE.Vector3()) };
+    const borde = new THREE.LineSegments(contornoDe(p), new THREE.LineBasicMaterial({ transparent: true, depthWrite: false }));
+    o.add(borde);
+    const centro = g.boundingBox.getCenter(new THREE.Vector3());
+    // Hacia dónde se aparta en el despiece: poco a lo largo, más hacia arriba y hacia los lados.
+    const desplazo = new THREE.Vector3((centro.x - 0.5) * 0.1, (centro.y - 1.4) * 0.7, centro.z * 1.3);
+    o.userData = { id: p.id, zona: p.zona, puntos: g.attributes.position.count, centro, desplazo };
     escena.add(o);
     objetos.push(o);
   }
@@ -196,24 +232,39 @@ function iniciar() {
   escena.add(caja);
 
   let seleccion = porId.has(datos.piezaSeleccionada) ? datos.piezaSeleccionada : null;
+  // «Solo esta pieza» muestra únicamente la elegida; «Despiece» separa todas para verlas una a una.
+  let aislar = false;
+  let despiece = 0, despieceObjetivo = 0;
+  const btnAislar = document.getElementById("btn-aislar");
+  const btnDespiece = document.getElementById("btn-despiece");
   let encima = null;
   const pintar = () => {
     for (const o of objetos) {
       const { id } = o.userData;
       const estado = estadoDe(id);
       const m = o.material;
+      const borde = o.children[0].material;
       if (id === seleccion) {
-        m.color.set(RESALTE); m.size = 0.13; m.opacity = 1;
+        m.color.set(RESALTE); m.size = 0.11; m.opacity = 1;
+        borde.color.set(RESALTE); borde.opacity = 0.9;
       } else {
         m.color.set(estado ? COLOR[estado] : GRIS);
         const enZona = !seleccion && llevaParteElegida(id);
-        m.size = id === encima ? 0.14 : enZona ? 0.13 : estado ? 0.1 : 0.085;
-        m.opacity = seleccion ? (id === encima ? 0.8 : 0.22) : id === encima ? 1 : estado ? 0.95 : 0.45;
+        m.size = id === encima ? 0.12 : enZona ? 0.11 : estado ? 0.085 : 0.075;
+        m.opacity = seleccion ? (id === encima ? 0.8 : 0.18) : id === encima ? 1 : estado ? 0.9 : 0.45;
+        borde.color.copy(m.color);
+        borde.opacity = seleccion ? (id === encima ? 0.6 : 0.1) : id === encima ? 0.9 : estado ? 0.45 : 0.28;
       }
     }
     const o = objetos.find((x) => x.userData.id === seleccion);
     caja.visible = !!o;
-    if (o) caja.box.copy(o.geometry.boundingBox).expandByScalar(0.08);
+    if (o) caja.box.copy(o.geometry.boundingBox).translate(o.position).expandByScalar(0.08);
+    for (const x of objetos) x.visible = !aislar || !seleccion || x.userData.id === seleccion;
+    if (btnAislar) {
+      btnAislar.disabled = !seleccion;
+      btnAislar.classList.toggle("on", aislar && !!seleccion);
+      btnAislar.setAttribute("aria-pressed", String(aislar && !!seleccion));
+    }
   };
 
   // Al elegir una pieza la cámara la pone al centro (sin girar).
@@ -223,7 +274,7 @@ function iniciar() {
   const enfocar = (id) => {
     const o = objetos.find((x) => x.userData.id === id);
     if (!o) return;
-    objetivo.copy(o.userData.centro);
+    objetivo.copy(o.userData.centro).add(o.position);
     acercarA = Math.max(4, Math.min(11, o.geometry.boundingBox.getSize(new THREE.Vector3()).length() * 1.6 + 3.5));
     volando = true;
   };
@@ -245,7 +296,7 @@ function iniciar() {
     const r = canvas.getBoundingClientRect();
     puntero.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
     raycaster.setFromCamera(puntero, camara);
-    const hits = raycaster.intersectObjects(objetos, false);
+    const hits = raycaster.intersectObjects(objetos.filter((o) => o.visible), false);
     if (!hits.length) return null;
     const cerca = hits.filter((h) => h.distance < hits[0].distance + 0.5);
     cerca.sort((a, b) => a.object.userData.puntos - b.object.userData.puntos);
@@ -284,7 +335,21 @@ function iniciar() {
     girarBtn.setAttribute("aria-pressed", String(controles.autoRotate));
   });
   const verTodo = document.getElementById("btn-todo");
-  if (verTodo) verTodo.addEventListener("click", () => { objetivo.set(0, 1.9, 0); acercarA = 24; volando = true; elegir(null, { mover: false }); });
+  if (btnAislar) btnAislar.addEventListener("click", () => {
+    if (!seleccion) return;
+    aislar = !aislar;
+    pintar();
+    enfocar(seleccion);
+  });
+  if (btnDespiece) btnDespiece.addEventListener("click", () => {
+    despieceObjetivo = despieceObjetivo ? 0 : 1;
+    btnDespiece.classList.toggle("on", !!despieceObjetivo);
+    btnDespiece.setAttribute("aria-pressed", String(!!despieceObjetivo));
+  });
+  if (verTodo) verTodo.addEventListener("click", () => {
+    aislar = false;
+    despieceObjetivo = 0;
+    if (btnDespiece) { btnDespiece.classList.remove("on"); btnDespiece.setAttribute("aria-pressed", "false"); } objetivo.set(0, 1.9, 0); acercarA = 24; volando = true; elegir(null, { mover: false }); });
 
   const ajustar = () => {
     const w = canvas.clientWidth, h = canvas.clientHeight;
@@ -303,7 +368,7 @@ function iniciar() {
     return b.isEmpty() ? null : b.getCenter(new THREE.Vector3());
   })();
 
-  const v = new THREE.Vector3();
+  const v = new THREE.Vector3(), v2 = new THREE.Vector3();
   const reducirMovimiento = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   if (!reducirMovimiento && datos.autogiro && !seleccion) girarBtn.click();
   pintar();
@@ -311,6 +376,14 @@ function iniciar() {
 
   let etiquetaDe = undefined;
   function cuadro() {
+    if (despiece !== despieceObjetivo) {
+      despiece += (despieceObjetivo - despiece) * (reducirMovimiento ? 1 : 0.12);
+      if (Math.abs(despiece - despieceObjetivo) < 0.002) despiece = despieceObjetivo;
+      for (const o of objetos) o.position.copy(o.userData.desplazo).multiplyScalar(despiece);
+      pintar();
+      const o = seleccion && objetos.find((x) => x.userData.id === seleccion);
+      if (o) { objetivo.copy(o.userData.centro).add(o.position); volando = true; }
+    }
     if (volando) {
       const antes = controles.target.clone();
       controles.target.lerp(objetivo, reducirMovimiento ? 1 : 0.12);
@@ -325,7 +398,8 @@ function iniciar() {
       if (controles.target.distanceTo(objetivo) < 0.01 && acercarA === null) volando = false;
     }
     controles.update();
-    const anclaSel = seleccion ? objetos.find((o) => o.userData.id === seleccion).userData.centro : centroZona;
+    const oSel = seleccion && objetos.find((o) => o.userData.id === seleccion);
+    const anclaSel = oSel ? v2.copy(oSel.userData.centro).add(oSel.position) : centroZona;
     if (etiqueta) {
       if (etiquetaDe !== seleccion) {
         etiquetaDe = seleccion;

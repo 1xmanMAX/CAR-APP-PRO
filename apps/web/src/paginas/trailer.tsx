@@ -128,11 +128,13 @@ async function vista(c: C, d: Deps) {
           <div class="visor" id="visor">
             <canvas aria-label={`Modelo 3D de ${unidad.codigo}: cada pieza (llantas, retrovisores, faros, puertas…) va por separado y su color es el desgaste. Arrastra para girar, pellizca o usa la rueda para acercar, toca una pieza para resaltarla y ver su historial.`} role="img"></canvas>
             <div class="cab">
-              <span class="lbl-12" style="color:var(--dark-text)"><b>{unidad.codigo} · MODELO DE PUNTOS · {PIEZAS.length} PIEZAS</b><br /><span style="color:var(--dark-muted)">TOCA UNA PIEZA PARA RESALTARLA · EL COLOR ES SU DESGASTE</span></span>
+              <span class="lbl-12" style="color:var(--dark-text)"><b>{unidad.codigo} · TRACTO CARA PLANA + FURGÓN · {PIEZAS.length} PIEZAS</b><br /><span style="color:var(--dark-muted)">TOCA UNA PIEZA PARA RESALTARLA · EL COLOR ES SU DESGASTE</span></span>
               <div class="der">
                 <button class="btn chico" id="btn-izq" type="button" aria-label="Girar a la izquierda">&lt;</button>
                 <button class="btn chico" id="btn-der" type="button" aria-label="Girar a la derecha">&gt;</button>
                 <button class="btn chico" id="btn-girar" type="button" aria-pressed="false">GIRAR</button>
+                <button class="btn chico" id="btn-aislar" type="button" aria-pressed="false" disabled title="Elige una pieza y mírala sola">SOLO ESTA PIEZA</button>
+                <button class="btn chico" id="btn-despiece" type="button" aria-pressed="false" title="Separa las piezas para verlas una por una">DESPIECE</button>
                 <button class="btn chico" id="btn-todo" type="button">VER TODO</button>
                 <span class="lbl" style="color:var(--dark-muted)">ÁNGULO <span id="angulo">0</span>°</span>
               </div>

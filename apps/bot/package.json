@@ -3,14 +3,17 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "scripts": { "start": "tsx src/main.ts" },
+  "scripts": {
+    "start": "tsx src/main.ts"
+  },
   "dependencies": {
     "@sunatapp/core": "workspace:*",
     "@sunatapp/extractor": "workspace:*",
+    "@sunatapp/web": "workspace:^",
     "grammy": "^1.46.0"
   },
   "devDependencies": {
-    "pdfkit": "^0.20.2",
-    "@types/pdfkit": "^0.17.6"
+    "@types/pdfkit": "^0.17.6",
+    "pdfkit": "^0.20.2"
   }
 }

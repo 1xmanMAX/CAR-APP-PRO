@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Bot de Telegram · chofer</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&amp;family=Space+Mono:wght@400;700&amp;display=swap">
+<style>
+body{margin:0;font-family:'IBM Plex Mono',ui-monospace,monospace;background:#EFE9DC;color:#1E1B16}
+a{color:#B8236E}a:hover{color:#8A1651}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; display: flex; flex-direction: column; background: #EFE9DC; font-family: 'IBM Plex Mono', ui-monospace, monospace; color: #1E1B16; font-size: 12px; box-sizing: border-box">
+<header style="background: #121719; color: #F4EFE6; padding: 18px 16px 14px; display: flex; align-items: center; gap: 10px">
+<svg width="36" height="36" viewBox="0 0 40 40" aria-hidden="true"><rect width="40" height="40" rx="20" fill="#B8236E"></rect><circle cx="14" cy="17" r="3" fill="#FAF7F0"></circle><circle cx="26" cy="17" r="3" fill="#FAF7F0"></circle><circle cx="14" cy="27" r="2.5" fill="#F2C14E"></circle><circle cx="20" cy="27" r="2.5" fill="#F2C14E"></circle><circle cx="26" cy="27" r="2.5" fill="#F2C14E"></circle></svg>
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="font-family: 'Space Mono', monospace; font-weight: 700; font-size: 15px">@[TU_BOT]</span><span style="font-size: 11px; color: #8FB4CC">bot · control de flota</span></div>
+</header>
+<main style="flex-grow: 1; display: flex; flex-direction: column; gap: 8px; padding: 12px; overflow: hidden">
+<div style="align-self: flex-start; max-width: 86%; background: #121719; color: #F4EFE6; border-radius: 10px 10px 10px 2px; padding: 8px 10px; display: flex; flex-direction: column; gap: 3px">
+<span style="font-weight: 700; color: #FF8CC6">ALERTA · T-01</span>
+<span>Pastillas de freno al 92%. Quedan ≈ 2 viajes. Programa el cambio.</span>
+</div>
+<div style="align-self: flex-end; max-width: 80%; background: #F7D3E5; border-radius: 10px 10px 2px 10px; padding: 8px 10px; font-weight: 600">/viaje inicio</div>
+<div style="align-self: flex-start; max-width: 86%; background: #FAF7F0; border: 1px solid #CDBFA5; border-radius: 10px 10px 10px 2px; padding: 8px 10px; display: flex; flex-direction: column; gap: 6px">
+<span>¿Qué unidad sale?</span>
+<div style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px">
+<button type="button" style="height: 36px; border-radius: 4px; border: none; background: #B8236E; color: #FFFFFF; font: inherit; font-size: 11px; font-weight: 600">T-01</button>
+<button type="button" style="height: 36px; border-radius: 4px; border: 1px solid #CDBFA5; background: #FFFFFF; font: inherit; font-size: 11px; color: #1E1B16">T-02</button>
+<button type="button" style="height: 36px; border-radius: 4px; border: 1px solid #CDBFA5; background: #FFFFFF; font: inherit; font-size: 11px; color: #1E1B16">T-03</button>
+<button type="button" style="height: 36px; border-radius: 4px; border: 1px solid #CDBFA5; background: #FFFFFF; font: inherit; font-size: 11px; color: #1E1B16">T-04</button>
+<button type="button" style="height: 36px; border-radius: 4px; border: 1px solid #CDBFA5; background: #FFFFFF; font: inherit; font-size: 11px; color: #1E1B16">T-05</button>
+</div>
+</div>
+<div style="align-self: flex-end; max-width: 80%; background: #F7D3E5; border-radius: 10px 10px 2px 10px; padding: 8px 10px">Juliaca → Arequipa · 30 ton</div>
+<div style="align-self: flex-start; max-width: 86%; background: #FAF7F0; border: 1px solid #CDBFA5; border-radius: 10px 10px 10px 2px; padding: 8px 10px; display: flex; flex-direction: column; gap: 3px">
+<span style="font-weight: 700; color: #2D5B7A">VIAJE REGISTRADO</span>
+<span>Guía T001-0214 · T-01. Se suma 1 viaje a cada parte de la unidad.</span>
+</div>
+<div style="align-self: flex-end; width: 62%; display: flex; flex-direction: column; gap: 4px; background: #F7D3E5; border-radius: 10px 10px 2px 10px; padding: 6px">
+<div style="height: 80px; border-radius: 6px; border: 1px dashed #B8236E; display: flex; align-items: center; justify-content: center; font-size: 11px; color: #8A1651">[FOTO DEL VOUCHER]</div>
+<span style="padding: 0 4px 2px; font-weight: 600">/gasto combustible [MONTO]</span>
+</div>
+<div style="align-self: flex-start; max-width: 86%; background: #FAF7F0; border: 1px solid #CDBFA5; border-radius: 10px 10px 10px 2px; padding: 8px 10px; display: flex; flex-direction: column; gap: 3px">
+<span style="font-weight: 700; color: #2D5B7A">GASTO GUARDADO</span>
+<span>T-01 · Combustible · S/ [MONTO]. Ya aparece en Finanzas.</span>
+</div>
+<div style="align-self: flex-end; max-width: 80%; background: #F7D3E5; border-radius: 10px 10px 2px 10px; padding: 8px 10px; font-weight: 600">/km 412380</div>
+<div style="align-self: flex-start; max-width: 86%; background: #FAF7F0; border: 1px solid #CDBFA5; border-radius: 10px 10px 10px 2px; padding: 8px 10px">Odómetro de T-01 actualizado: +1,290 km a frenos, llantas y aceite.</div>
+</main>
+<footer style="background: #FAF7F0; border-top: 1px solid #CDBFA5; padding: 10px 10px 18px; display: flex; flex-direction: column; gap: 6px">
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px">
+<sc-for list="{{cmds}}" as="c" hint-placeholder-count="6">
+<button type="button" style="height: 44px; border-radius: 6px; border: 1px solid #CDBFA5; background: #FFFFFF; font: inherit; font-size: 12px; font-weight: 600; color: #1E1B16">{{c}}</button>
+</sc-for>
+</div>
+<label style="display: flex; align-items: center; gap: 8px; height: 44px; border: 1px solid #CDBFA5; border-radius: 22px; padding: 0 14px; background: #FFFFFF"><span style="color: #6B6254">&gt;_</span><input type="text" placeholder="escribe un comando" style="border: none; outline: none; font: inherit; font-size: 13px; flex-grow: 1; background: transparent"></label>
+</footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() {
+return { cmds: ['/viaje', '/gasto', '/km', '/cambio', '/compra', '/estado'] };
+}
+}
+</script>
+</body>
+</html>

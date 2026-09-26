@@ -1,0 +1,57 @@
+CONTROL FLOTA · cómo probarla en tu PC
+======================================
+
+1. Instala Node.js (versión LTS, 22 o superior) desde https://nodejs.org
+   (siguiente, siguiente, finalizar). Solo una vez.
+
+2. Descomprime este ZIP en una carpeta, por ejemplo Documentos\ControlFlota.
+
+3. PRUEBA CON DATOS DE EJEMPLO
+   Doble clic en  INICIAR-DEMO.bat  (en Linux/Mac: ./iniciar-demo.sh)
+   - La primera vez instala lo necesario (1 a 3 minutos, necesita internet).
+   - Se abre el navegador en http://localhost:3000
+   - Usuario: demo@flota.pe   Clave: demo1234
+     (también contador@flota.pe y taller@flota.pe, misma clave, para ver los roles)
+
+4. INSTALARLA COMO APP
+   En Chrome o Edge aparece el botón "⬇ INSTALAR APP" arriba a la derecha, o el ícono
+   de instalar en la barra de direcciones. Queda con su ícono en el escritorio y el menú
+   Inicio y se abre en su propia ventana.
+   La ventana negra de INICIAR-DEMO debe seguir abierta mientras usas la app:
+   es el servidor. Al cerrarla, la app muestra "Sin conexión".
+
+5. USO REAL CON TUS DATOS
+   Doble clic en  INICIAR.bat
+   - La primera vez la app pide los datos de tu empresa (RUC, razón social, dirección,
+     ubigeo, registro MTC), tu primera unidad, su chofer y tu acceso de dueño.
+   - Bot de Telegram y SUNAT: en la app, AJUSTES -> ESTE DISPOSITIVO. Ahí pones el token
+     del bot (te lo da @BotFather), el modo SUNAT, tu clave SOL y el certificado .pfx.
+     Se aplica al momento, sin cerrar la app.
+   - SUNAT queda en modo SIMULADO (sin validez tributaria) hasta que lo cambies ahí.
+
+6. APP DE ANDROID (funciona sola, sin servidor)
+   - Descarga ControlFlota-(versión).apk en el celular (misma página de descarga que este ZIP).
+   - Ábrelo; Android pedirá permitir "instalar apps de esta fuente": acepta.
+   - La app lleva todo dentro: sus pantallas y su propia base de datos. No necesita la PC
+     encendida ni internet. Cada celular guarda su copia y los cambios se juntan al sincronizar.
+   - Tiene las mismas funciones que la PC: las mismas pantallas, el bot de Telegram (si le pones
+     el token en AJUSTES -> ESTE DISPOSITIVO), las tareas de fondo con SUNAT y los avisos.
+   - Primer celular sin PC: la app pide los datos de la empresa igual que en la PC.
+   - El bot de Telegram va en UN solo dispositivo (Telegram no deja conectarlo en dos a la vez):
+     el que pase más tiempo encendido y con internet.
+
+7. SINCRONIZAR DISPOSITIVOS (PC y celulares, por el Wi-Fi, sin internet)
+   - Cada dispositivo trabaja por su cuenta. Al sincronizar solo viajan LOS CAMBIOS, cifrados.
+   - Cada registro tiene tres códigos fijos (código único, dispositivo+número y hora de
+     creación): cada cambio llega siempre al registro correcto, aunque se haya creado en otro.
+     Si dos cambiaron el mismo registro se juntan campo por campo; si fue el mismo campo,
+     gana el cambio más reciente.
+   - Primera vez:
+       a) En la PC (o el primer celular): menú SINCRONIZAR -> CREAR UN GRUPO. Anota el código.
+       b) En un celular nuevo: en la primera pantalla toca "¿YA USAS CONTROL FLOTA EN OTRO
+          DISPOSITIVO? TRAER SUS DATOS", escribe el código y elige la PC en la lista.
+          Se trae todo y entras con el mismo correo y clave.
+   - Luego, cuando quieras: abre SINCRONIZAR en los dos (mismo Wi-Fi, o un celular conectado
+     al punto de acceso del otro) y toca SINCRONIZAR junto al otro dispositivo.
+   - En Windows: si no aparece la PC, permite Node.js en "Redes privadas" en el firewall
+     (puertos 47474 y 47475).

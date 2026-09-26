@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Tema.Flota" parent="Theme.AppCompat.Light.NoActionBar">
+        <item name="colorPrimary">@color/oscuro</item>
+        <item name="colorPrimaryDark">@color/oscuro</item>
+        <item name="colorAccent">@color/acento</item>
+        <item name="android:windowBackground">@color/fondo</item>
+        <item name="android:statusBarColor">@color/oscuro</item>
+        <item name="android:navigationBarColor">@color/oscuro</item>
+        <item name="android:fontFamily">monospace</item>
+    </style>
+</resources>

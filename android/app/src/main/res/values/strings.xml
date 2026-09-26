@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Control Flota</string>
+    <string name="abriendo">Abriendo Control Flota…</string>
+    <string name="abriendo_texto">La app y sus datos están en este celular: no necesita internet ni servidor. La primera vez tarda unos segundos más.</string>
+    <string name="abriendo_lento">Sigue abriendo… La primera vez prepara la base de datos y puede tardar unos minutos. No cierres la app.</string>
+    <string name="error_titulo">No se pudo abrir la app</string>
+    <string name="error_texto">La parte interna de la app se detuvo. Toca Reintentar. Si vuelve a pasar, toca «Copiar detalle» y envíalo a soporte.</string>
+    <string name="copiar">COPIAR DETALLE</string>
+    <string name="copiado">Detalle copiado</string>
+    <string name="reintentar">REINTENTAR</string>
+    <string name="descargando">Descargando %1$s…</string>
+    <string name="salir_otra_vez">Toca atrás otra vez para salir</string>
+</resources>

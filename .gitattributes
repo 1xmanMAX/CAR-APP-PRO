@@ -1,0 +1,23 @@
+# Normaliza los archivos de texto a LF en el árbol de trabajo, sin importar el SO en el que se
+# haga el checkout. Sin esto, un checkout en Windows convierte los fixtures de texto a CRLF y
+# rompe pruebas que hacen comparación/`.replace()` de línea contra literales con "\n".
+* text=auto eol=lf
+
+# Binarios: nunca se les debe tocar el fin de línea.
+*.pdf binary
+*.pfx binary
+*.p12 binary
+*.zip binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+
+# Los lanzadores de Windows necesitan CRLF para que cmd.exe los lea bien.
+*.bat text eol=crlf
+*.ico binary
+
+# Fuera del ZIP de la prerelease (no hacen falta para usar la app).
+DSISE* export-ignore
+.github export-ignore
+*.jks binary
+android export-ignore

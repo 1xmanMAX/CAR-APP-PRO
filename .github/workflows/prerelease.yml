@@ -1,0 +1,98 @@
+name: Prerelease para probar en la PC
+
+# Empaqueta la app en un ZIP listo para descomprimir y abrir con INICIAR-DEMO.bat, y lo publica
+# como prerelease. Corre al subir cambios a la rama de desarrollo, a main o una etiqueta v*, o a
+# mano desde Actions. La etiqueta sale de la versión de package.json (la crea la propia Action).
+on:
+  push:
+    branches: ["main", "claude/**"]
+    tags: ["v*"]
+    paths-ignore: ["docs/**", "**/*.md", "LEEME-PRIMERO.txt"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  empaquetar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Instalar y verificar tipos
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm typecheck
+
+      - name: Empaquetar
+        id: zip
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then ETIQUETA="${GITHUB_REF_NAME}"; else ETIQUETA="v$(node -p "require('./package.json').version")"; fi
+          ARCHIVO="ControlFlota-${ETIQUETA}.zip"
+          git archive --format=zip --prefix=ControlFlota/ -o "$ARCHIVO" HEAD
+          echo "archivo=$ARCHIVO" >> "$GITHUB_OUTPUT"
+          echo "etiqueta=$ETIQUETA" >> "$GITHUB_OUTPUT"
+          ls -la "$ARCHIVO"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.14.3"
+
+      - name: Node.js para Android y app empaquetada
+        run: node scripts/preparar-android.mjs arm64-v8a,armeabi-v7a
+
+      - name: App de Android (APK)
+        working-directory: android
+        env:
+          VERSION_CODE: ${{ github.run_number }}
+        run: |
+          # Uno por procesador para no bajar el doble: 64 bits (todos los celulares actuales) y 32 bits (antiguos).
+          gradle --no-daemon assembleRelease -Pabis=arm64-v8a
+          cp app/build/outputs/apk/release/app-release.apk "../ControlFlota-${{ steps.zip.outputs.etiqueta }}.apk"
+          gradle --no-daemon assembleRelease -Pabis=armeabi-v7a
+          cp app/build/outputs/apk/release/app-release.apk "../ControlFlota-${{ steps.zip.outputs.etiqueta }}-32bits.apk"
+          ls -la ../*.apk
+
+      - name: Publicar prerelease
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.zip.outputs.etiqueta }}
+          name: Control Flota ${{ steps.zip.outputs.etiqueta }} (prueba)
+          prerelease: true
+          make_latest: false
+          target_commitish: ${{ github.sha }}
+          overwrite_files: true
+          files: |
+            ${{ steps.zip.outputs.archivo }}
+            ControlFlota-${{ steps.zip.outputs.etiqueta }}.apk
+            ControlFlota-${{ steps.zip.outputs.etiqueta }}-32bits.apk
+          body: |
+            Versión de prueba para la PC.
+
+            1. Instala Node.js LTS (https://nodejs.org).
+            2. Descomprime el ZIP y haz doble clic en **INICIAR-DEMO.bat**.
+            3. Entra con `demo@flota.pe` / `demo1234` y pulsa **⬇ INSTALAR APP** para tenerla como app.
+
+            Detalles en `LEEME-PRIMERO.txt` dentro del ZIP.
+
+            **Android:** descarga `ControlFlota-….apk` en el celular, ábrelo y permite "instalar apps de esta fuente".
+            (Solo para celulares antiguos de 32 bits: el que termina en `-32bits.apk`.)
+            La app funciona sola en el celular, sin servidor ni internet: tiene su propia copia de los datos.
+
+            **Sincronizar (sin servidor, por el Wi-Fi):** en un dispositivo abre **Sincronizar → Crear un grupo**.
+            En un celular nuevo, en la primera pantalla toca **"¿Ya usas Control Flota en otro dispositivo? Traer sus datos"**,
+            escribe el código del grupo y elige el dispositivo: se trae todo y entras con el mismo usuario.
+            Después, cada vez que quieras juntar los cambios, abre Sincronizar en los dos y toca **SINCRONIZAR**.
+            En Windows permite Node.js en redes privadas (puertos 47474 y 47475).

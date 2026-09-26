@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Reparaciones y cambios</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&amp;family=Space+Mono:wght@400;700&amp;display=swap">
+<style>
+body{margin:0;font-family:'IBM Plex Mono',ui-monospace,monospace;background:#EFE9DC;color:#1E1B16}
+a{color:#B8236E}a:hover{color:#8A1651}
+</style>
+</helmet>
+<div style="width: 1280px; height: 900px; box-sizing: border-box; padding: 16px; display: flex; flex-direction: column; gap: 10px; background: #EFE9DC; font-family: 'IBM Plex Mono', ui-monospace, monospace; color: #1E1B16; font-size: 13px">
+<header style="display: flex; align-items: center; gap: 14px; background: #FAF7F0; border: 1px solid #CDBFA5; border-radius: 6px; padding: 10px 14px">
+<svg width="40" height="40" viewBox="0 0 40 40" aria-hidden="true"><rect width="40" height="40" rx="4" fill="#121719"></rect><circle cx="11" cy="13" r="3" fill="#E9E3D6"></circle><circle cx="20" cy="13" r="3" fill="#E9E3D6"></circle><circle cx="29" cy="13" r="3" fill="#FF5AAE"></circle><circle cx="11" cy="22" r="3" fill="#E9E3D6"></circle><circle cx="20" cy="22" r="3" fill="#F2C14E"></circle><circle cx="29" cy="22" r="3" fill="#E9E3D6"></circle><circle cx="13" cy="30" r="3.5" fill="#8FB4CC"></circle><circle cx="27" cy="30" r="3.5" fill="#8FB4CC"></circle></svg>
+<div style="display: flex; flex-direction: column; gap: 2px">
+<div style="font-family: 'Space Mono', monospace; font-weight: 700; font-size: 18px">[EMPRESA] · <span style="color: #B8236E">Control</span> <span style="background: #EFD27A; padding: 0 5px">Flota</span></div>
+<div style="font-size: 11px; color: #6B6254; letter-spacing: 0.06em">TRANSPORTE DE CARGA PESADA · CADA PIEZA, CADA VIAJE, BAJO CONTROL</div>
+</div>
+<div style="margin-left: auto; display: flex; gap: 22px; align-items: center">
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 10px; color: #6B6254; letter-spacing: 0.08em">UNIDADES</span><span style="font-family: 'Space Mono', monospace; font-weight: 700; font-size: 16px">5/5</span></div>
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 10px; color: #6B6254; letter-spacing: 0.08em">VIAJES MES</span><span style="font-family: 'Space Mono', monospace; font-weight: 700; font-size: 16px; color: #B8236E">[N]</span></div>
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 10px; color: #6B6254; letter-spacing: 0.08em">MARGEN</span><span style="font-family: 'Space Mono', monospace; font-weight: 700; font-size: 16px; color: #B8236E">[%]</span></div>
+<span style="font-size: 11px; font-weight: 600; padding: 4px 8px; border: 1px solid #2D5B7A; color: #2D5B7A; border-radius: 4px">BOT TELEGRAM · EN LÍNEA</span>
+<span style="font-family: 'Space Mono', monospace; font-weight: 700; font-size: 22px">[HH:MM]</span>
+</div>
+</header>
+<nav aria-label="Secciones" style="display: flex; gap: 4px; align-items: center; background: #FAF7F0; border: 1px solid #CDBFA5; border-radius: 6px; padding: 4px 6px">
+<sc-for list="{{nav}}" as="n" hint-placeholder-count="9">
+<sc-if value="{{n.active}}" hint-placeholder-val="{{false}}"><a href="{{n.href}}" style="display: flex; align-items: center; height: 40px; padding: 0 10px; border-radius: 4px; background: #B8236E; color: #FFFFFF; font-weight: 600; font-size: 12px; text-decoration: none; letter-spacing: 0.04em">{{n.label}}</a></sc-if>
+<sc-if value="{{n.inactive}}" hint-placeholder-val="{{true}}"><a href="{{n.href}}" style="display: flex; align-items: center; height: 40px; padding: 0 10px; border-radius: 4px; color: #1E1B16; font-size: 12px; text-decoration: none; letter-spacing: 0.04em">{{n.label}}</a></sc-if>
+</sc-for>
+<span style="margin-left: auto; font-size: 11px; font-weight: 600; padding: 3px 8px; background: #EFD27A; color: #4A3A00; border-radius: 3px">DATOS DE EJEMPLO</span>
+</nav>
+<div style="display: grid; grid-template-columns: 500px minmax(0, 1fr); gap: 10px; flex-grow: 1">
+<section style="background: #FAF7F0; border: 1px solid #CDBFA5; border-radius: 6px; padding: 14px; display: flex; flex-direction: column; gap: 12px">
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 12px; font-weight: 600; letter-spacing: 0.06em">REGISTRAR CAMBIO · <span style="color: #B8236E">REINICIA EL CONTADOR DE LA PARTE</span></span><span style="font-size: 11px; color: #6B6254">TAMBIÉN SE PUEDE ENVIAR DESDE TELEGRAM CON /cambio</span></div>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px">
+<label style="display: flex; flex-direction: column; gap: 4px; font-size: 11px; font-weight: 600; letter-spacing: 0.04em">TRAILER<select style="height: 40px; border: 1px solid #CDBFA5; border-radius: 4px; padding: 0 6px; font: inherit; font-size: 13px; font-weight: 400; background: #FFFFFF; color: #1E1B16"><option>T-01 · [PLACA]</option></select></label>
+<label style="display: flex; flex-direction: column; gap: 4px; font-size: 11px; font-weight: 600; letter-spacing: 0.04em">PARTE DEL MODELO<select style="height: 40px; border: 1px solid #CDBFA5; border-radius: 4px; padding: 0 6px; font: inherit; font-size: 13px; font-weight: 400; background: #FFFFFF; color: #1E1B16"><option>Frenos semirremolque</option></select></label>
+<label style="display: flex; flex-direction: column; gap: 4px; font-size: 11px; font-weight: 600; letter-spacing: 0.04em">ODÓMETRO ACTUAL (KM)<input type="text" value="412,380" style="height: 40px; border: 1px solid #CDBFA5; border-radius: 4px; padding: 0 8px; font: inherit; font-size: 13px; font-weight: 400; background: #FFFFFF; box-sizing: border-box"></label>
+<label style="display: flex; flex-direction: column; gap: 4px; font-size: 11px; font-weight: 600; letter-spacing: 0.04em">FECHA<input type="text" value="[FECHA]" style="height: 40px; border: 1px solid #CDBFA5; border-radius: 4px; padding: 0 8px; font: inherit; font-size: 13px; font-weight: 400; background: #FFFFFF; box-sizing: border-box"></label>
+</div>
+<fieldset style="border: none; margin: 0; padding: 0; display: flex; gap: 6px">
+<legend style="font-size: 11px; font-weight: 600; letter-spacing: 0.04em; padding: 0; margin-bottom: 4px">TIPO</legend>
+<label style="display: flex; align-items: center; gap: 6px; height: 40px; padding: 0 12px; border: 2px solid #B8236E; border-radius: 4px; font-size: 12px; font-weight: 600"><input type="radio" name="tipo" checked> PREVENTIVO</label>
+<label style="display: flex; align-items: center; gap: 6px; height: 40px; padding: 0 12px; border: 1px solid #CDBFA5; border-radius: 4px; font-size: 12px"><input type="radio" name="tipo"> CORRECTIVO</label>
+<label style="display: flex; align-items: center; gap: 6px; height: 40px; padding: 0 12px; border: 1px solid #CDBFA5; border-radius: 4px; font-size: 12px"><input type="radio" name="tipo"> FALLA EN RUTA</label>
+</fieldset>
+<div style="display: flex; flex-direction: column; gap: 6px">
+<div style="font-size: 11px; font-weight: 600; letter-spacing: 0.04em">REPUESTOS USADOS · SALEN DEL INVENTARIO</div>
+<div style="border: 1px solid #CDBFA5; border-radius: 4px">
+<div style="display: grid; grid-template-columns: 70px minmax(0, 1fr) 50px 100px; gap: 8px; padding: 6px 10px; background: #F2ECE0; font-size: 10px; font-weight: 600; color: #6B6254"><span>CÓDIGO</span><span>REPUESTO</span><span>CANT.</span><span>SUBTOTAL</span></div>
+<div style="display: grid; grid-template-columns: 70px minmax(0, 1fr) 50px 100px; gap: 8px; padding: 8px 10px; border-top: 1px solid #E4DCCB; font-size: 12px"><span style="color: #6B6254">REP-014</span><span>Pastillas de freno</span><span>6</span><span>S/ [MONTO]</span></div>
+<div style="display: grid; grid-template-columns: 70px minmax(0, 1fr) 50px 100px; gap: 8px; padding: 8px 10px; border-top: 1px solid #E4DCCB; font-size: 12px"><span style="color: #6B6254">REP-015</span><span>Zapatas de freno</span><span>2</span><span>S/ [MONTO]</span></div>
+</div>
+<button type="button" style="align-self: flex-start; height: 40px; padding: 0 12px; border: 1px dashed #B8236E; border-radius: 4px; background: transparent; color: #B8236E; font: inherit; font-size: 12px; font-weight: 600">+ AGREGAR REPUESTO</button>
+</div>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px">
+<label style="display: flex; flex-direction: column; gap: 4px; font-size: 11px; font-weight: 600; letter-spacing: 0.04em">MANO DE OBRA S/<input type="text" placeholder="0.00" style="height: 40px; border: 1px solid #CDBFA5; border-radius: 4px; padding: 0 8px; font: inherit; font-size: 13px; font-weight: 400; background: #FFFFFF; box-sizing: border-box"></label>
+<label style="display: flex; flex-direction: column; gap: 4px; font-size: 11px; font-weight: 600; letter-spacing: 0.04em">TALLER / MECÁNICO<input type="text" placeholder="nombre" style="height: 40px; border: 1px solid #CDBFA5; border-radius: 4px; padding: 0 8px; font: inherit; font-size: 13px; font-weight: 400; background: #FFFFFF; box-sizing: border-box"></label>
+</div>
+<div style="background: #121719; color: #E9E3D6; border-radius: 5px; padding: 12px; display: flex; flex-direction: column; gap: 6px; margin-top: auto">
+<span style="font-size: 10px; letter-spacing: 0.08em; color: #9AA5AA">AL GUARDAR</span>
+<span style="font-size: 12px"><span style="color: #FF8CC6">01</span> contador de la parte vuelve a 0 km · 0 viajes · 0 días</span>
+<span style="font-size: 12px"><span style="color: #FF8CC6">02</span> stock se descuenta del inventario</span>
+<span style="font-size: 12px"><span style="color: #FF8CC6">03</span> costo S/ [MONTO] entra como gasto de T-01</span>
+<span style="font-size: 12px"><span style="color: #FF8CC6">04</span> aviso al grupo de Telegram</span>
+</div>
+<button type="button" style="height: 44px; border-radius: 4px; border: none; background: #B8236E; color: #FFFFFF; font: inherit; font-weight: 600; font-size: 13px">GUARDAR CAMBIO</button>
+</section>
+<div style="display: flex; flex-direction: column; gap: 10px; min-width: 0">
+<section style="background: #FAF7F0; border: 1px solid #CDBFA5; border-radius: 6px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px">
+<div style="display: flex; justify-content: space-between"><span style="font-size: 12px; font-weight: 600; letter-spacing: 0.06em">¿SE CAMBIÓ A TIEMPO? · <span style="color: #B8236E">DESGASTE AL MOMENTO DEL CAMBIO</span></span><span style="font-size: 11px; color: #6B6254">META: CAMBIAR ENTRE 80% Y 95%</span></div>
+<sc-for list="{{timing}}" as="t" hint-placeholder-count="6">
+<div style="display: grid; grid-template-columns: 50px minmax(0, 1fr) minmax(0, 1.4fr) 110px; gap: 10px; align-items: center; font-size: 12px">
+<span style="font-weight: 700">{{t.u}}</span><span>{{t.p}}</span>
+<span style="position: relative; display: block; height: 10px; background: #E4DCCB"><span style="position: absolute; left: 80%; width: 15%; top: 0; bottom: 0; background: #D6E4EE"></span><span style="position: absolute; left: 0; top: 0; bottom: 0; width: {{t.w}}; background: {{t.c}}"></span></span>
+<span style="font-weight: 700; color: {{t.c}}">{{t.pct}}% · {{t.lbl}}</span>
+</div>
+</sc-for>
+</section>
+<section style="background: #FAF7F0; border: 1px solid #CDBFA5; border-radius: 6px; overflow: hidden; flex-grow: 1">
+<div style="display: flex; justify-content: space-between; padding: 10px 14px"><span style="font-size: 12px; font-weight: 600; letter-spacing: 0.06em">HISTORIAL · <span style="color: #B8236E">TODAS LAS UNIDADES</span></span><select aria-label="Filtrar" style="height: 36px; border: 1px solid #CDBFA5; border-radius: 4px; padding: 0 6px; font: inherit; font-size: 12px; background: #FFFFFF; color: #1E1B16"><option>TODOS</option></select></div>
+<div style="display: grid; grid-template-columns: 70px 50px minmax(0, 1.4fr) 100px 90px 90px 90px; gap: 8px; padding: 8px 14px; background: #F2ECE0; font-size: 10px; font-weight: 600; color: #6B6254; letter-spacing: 0.06em"><span>FECHA</span><span>UNID.</span><span>TRABAJO</span><span>TIPO</span><span>ODÓMETRO</span><span>COSTO</span><span>ORIGEN</span></div>
+<sc-for list="{{hist}}" as="h" hint-placeholder-count="7">
+<div style="display: grid; grid-template-columns: 70px 50px minmax(0, 1.4fr) 100px 90px 90px 90px; gap: 8px; padding: 9px 14px; border-top: 1px solid #E4DCCB; font-size: 12px; align-items: center">
+<span style="color: #6B6254">[FECHA]</span><span style="font-weight: 700">{{h.u}}</span><span>{{h.w}}</span><span style="font-weight: 600; color: {{h.c}}">{{h.t}}</span><span>{{h.km}}</span><span>S/ [MONTO]</span><span style="color: #6B6254">{{h.o}}</span>
+</div>
+</sc-for>
+</section>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":900}}'>
+class Component extends DCLogic {
+renderVals() {
+const A = 'Reparaciones';
+const NAV = [['01 DASHBOARD','Main'],['02 TRAILER 3D','Trailer'],['03 FLOTA','Flota'],['04 INVENTARIO','Inventario'],['05 REPARACIONES','Reparaciones'],['06 VIAJES','Facturacion'],['07 FINANZAS','Finanzas'],['08 RENTABILIDAD','Rentabilidad'],['09 TELEGRAM','Chofer']];
+const nav = NAV.map(([label, f]) => ({ label, href: f + '.dc.html', active: f === A, inactive: f !== A }));
+const timing = [['T-02', 'Filtro de aire', 86], ['T-04', 'Aceite y filtro', 92], ['T-01', 'Llantas delanteras', 64], ['T-03', 'Frenos', 108], ['T-05', 'Amortiguadores', 81], ['T-02', 'Batería', 101]].map(([u, p, pct]) => {
+const lbl = pct > 100 ? 'TARDE' : pct < 80 ? 'MUY PRONTO' : 'A TIEMPO';
+return { u, p, pct, lbl, w: Math.min(100, pct) + '%', c: pct > 100 ? '#B8236E' : pct < 80 ? '#7A5A00' : '#2D5B7A' };
+});
+const hist = [['T-02', 'Cambio filtro de aire', 'PREVENTIVO', '364,900', 'Telegram'], ['T-04', 'Aceite y filtro de motor', 'PREVENTIVO', '288,100', 'Web'], ['T-03', 'Frenos · falla en ruta', 'FALLA EN RUTA', '497,800', 'Telegram'], ['T-01', 'Llantas delanteras', 'PREVENTIVO', '382,300', 'Web'], ['T-05', 'Amortiguadores', 'CORRECTIVO', '153,200', 'Telegram'], ['T-02', 'Batería 12V', 'CORRECTIVO', '361,450', 'Telegram'], ['T-01', 'Engrase quinta rueda', 'PREVENTIVO', '408,180', 'Telegram']].map(([u, w, t, km, o]) => ({ u, w, t, km, o, c: t === 'PREVENTIVO' ? '#2D5B7A' : '#B8236E' }));
+return { nav, timing, hist };
+}
+}
+</script>
+</body>
+</html>

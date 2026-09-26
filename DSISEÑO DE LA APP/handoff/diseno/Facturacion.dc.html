@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Viajes, guías y facturas</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&amp;family=Space+Mono:wght@400;700&amp;display=swap">
+<style>
+body{margin:0;font-family:'IBM Plex Mono',ui-monospace,monospace;background:#EFE9DC;color:#1E1B16}
+a{color:#B8236E}a:hover{color:#8A1651}
+</style>
+</helmet>
+<div style="width: 1280px; height: 860px; box-sizing: border-box; padding: 16px; display: flex; flex-direction: column; gap: 10px; background: #EFE9DC; font-family: 'IBM Plex Mono', ui-monospace, monospace; color: #1E1B16; font-size: 13px">
+<header style="display: flex; align-items: center; gap: 14px; background: #FAF7F0; border: 1px solid #CDBFA5; border-radius: 6px; padding: 10px 14px">
+<svg width="40" height="40" viewBox="0 0 40 40" aria-hidden="true"><rect width="40" height="40" rx="4" fill="#121719"></rect><circle cx="11" cy="13" r="3" fill="#E9E3D6"></circle><circle cx="20" cy="13" r="3" fill="#E9E3D6"></circle><circle cx="29" cy="13" r="3" fill="#FF5AAE"></circle><circle cx="11" cy="22" r="3" fill="#E9E3D6"></circle><circle cx="20" cy="22" r="3" fill="#F2C14E"></circle><circle cx="29" cy="22" r="3" fill="#E9E3D6"></circle><circle cx="13" cy="30" r="3.5" fill="#8FB4CC"></circle><circle cx="27" cy="30" r="3.5" fill="#8FB4CC"></circle></svg>
+<div style="display: flex; flex-direction: column; gap: 2px">
+<div style="font-family: 'Space Mono', monospace; font-weight: 700; font-size: 18px">[EMPRESA] · <span style="color: #B8236E">Control</span> <span style="background: #EFD27A; padding: 0 5px">Flota</span></div>
+<div style="font-size: 11px; color: #6B6254; letter-spacing: 0.06em">TRANSPORTE DE CARGA PESADA · CADA PIEZA, CADA VIAJE, BAJO CONTROL</div>
+</div>
+<div style="margin-left: auto; display: flex; gap: 22px; align-items: center">
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 10px; color: #6B6254; letter-spacing: 0.08em">UNIDADES</span><span style="font-family: 'Space Mono', monospace; font-weight: 700; font-size: 16px">5/5</span></div>
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 10px; color: #6B6254; letter-spacing: 0.08em">VIAJES MES</span><span style="font-family: 'Space Mono', monospace; font-weight: 700; font-size: 16px; color: #B8236E">[N]</span></div>
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 10px; color: #6B6254; letter-spacing: 0.08em">MARGEN</span><span style="font-family: 'Space Mono', monospace; font-weight: 700; font-size: 16px; color: #B8236E">[%]</span></div>
+<span style="font-size: 11px; font-weight: 600; padding: 4px 8px; border: 1px solid #2D5B7A; color: #2D5B7A; border-radius: 4px">BOT TELEGRAM · EN LÍNEA</span>
+<span style="font-family: 'Space Mono', monospace; font-weight: 700; font-size: 22px">[HH:MM]</span>
+</div>
+</header>
+<nav aria-label="Secciones" style="display: flex; gap: 4px; align-items: center; background: #FAF7F0; border: 1px solid #CDBFA5; border-radius: 6px; padding: 4px 6px">
+<sc-for list="{{nav}}" as="n" hint-placeholder-count="9">
+<sc-if value="{{n.active}}" hint-placeholder-val="{{false}}"><a href="{{n.href}}" style="display: flex; align-items: center; height: 40px; padding: 0 10px; border-radius: 4px; background: #B8236E; color: #FFFFFF; font-weight: 600; font-size: 12px; text-decoration: none; letter-spacing: 0.04em">{{n.label}}</a></sc-if>
+<sc-if value="{{n.inactive}}" hint-placeholder-val="{{true}}"><a href="{{n.href}}" style="display: flex; align-items: center; height: 40px; padding: 0 10px; border-radius: 4px; color: #1E1B16; font-size: 12px; text-decoration: none; letter-spacing: 0.04em">{{n.label}}</a></sc-if>
+</sc-for>
+<span style="margin-left: auto; font-size: 11px; font-weight: 600; padding: 3px 8px; background: #EFD27A; color: #4A3A00; border-radius: 3px">DATOS DE EJEMPLO</span>
+</nav>
+<section style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); background: #FAF7F0; border: 1px solid #CDBFA5; border-radius: 6px">
+<div style="padding: 12px 14px; display: flex; flex-direction: column; gap: 4px; border-right: 1px solid #E4DCCB"><span style="font-size: 10px; letter-spacing: 0.08em; color: #6B6254">VIAJES DEL MES</span><span style="font-family: 'Space Mono', monospace; font-weight: 700; font-size: 22px">[N]</span></div>
+<div style="padding: 12px 14px; display: flex; flex-direction: column; gap: 4px; border-right: 1px solid #E4DCCB"><span style="font-size: 10px; letter-spacing: 0.08em; color: #6B6254">KM RECORRIDOS</span><span style="font-family: 'Space Mono', monospace; font-weight: 700; font-size: 22px">[KM]</span></div>
+<div style="padding: 12px 14px; display: flex; flex-direction: column; gap: 4px; border-right: 1px solid #E4DCCB"><span style="font-size: 10px; letter-spacing: 0.08em; color: #6B6254">FLETE PROMEDIO</span><span style="font-family: 'Space Mono', monospace; font-weight: 700; font-size: 22px">S/ [MONTO]</span></div>
+<div style="padding: 12px 14px; display: flex; flex-direction: column; gap: 4px; background: #121719; color: #F4EFE6; border-radius: 0 5px 5px 0"><span style="font-size: 10px; letter-spacing: 0.08em; color: #9AA5AA">POR COBRAR</span><span style="font-family: 'Space Mono', monospace; font-weight: 700; font-size: 22px; color: #FF8CC6">S/ [MONTO]</span></div>
+</section>
+<div style="display: grid; grid-template-columns: minmax(0, 1fr) 290px; gap: 10px; flex-grow: 1">
+<section style="background: #FAF7F0; border: 1px solid #CDBFA5; border-radius: 6px; overflow: hidden">
+<div style="display: flex; gap: 6px; align-items: center; padding: 10px 12px">
+<span style="font-size: 12px; font-weight: 600; letter-spacing: 0.06em">VIAJES · <span style="color: #B8236E">CADA GUÍA SUMA KM Y VIAJES A LAS PARTES</span></span>
+<button type="button" style="margin-left: auto; height: 40px; padding: 0 12px; border-radius: 4px; border: 1px solid #1E1B16; background: transparent; font: inherit; font-size: 12px; font-weight: 600; color: #1E1B16">+ GUÍA</button>
+<button type="button" style="height: 40px; padding: 0 12px; border-radius: 4px; border: none; background: #B8236E; color: #FFFFFF; font: inherit; font-size: 12px; font-weight: 600">+ FACTURA</button>
+</div>
+<div style="display: grid; grid-template-columns: 86px 44px minmax(0, 1.5fr) 60px 44px 84px 84px 56px 84px 70px; gap: 8px; padding: 8px 12px; background: #F2ECE0; font-size: 10px; font-weight: 600; color: #6B6254; letter-spacing: 0.05em"><span>GUÍA</span><span>UNID.</span><span>RUTA</span><span>KM</span><span>TON</span><span>FLETE</span><span>COSTO</span><span>MARG.</span><span>FACTURA</span><span>ORIGEN</span></div>
+<sc-for list="{{trips}}" as="t" hint-placeholder-count="10">
+<div style="display: grid; grid-template-columns: 86px 44px minmax(0, 1.5fr) 60px 44px 84px 84px 56px 84px 70px; gap: 8px; padding: 9px 12px; border-top: 1px solid #E4DCCB; font-size: 12px; align-items: center">
+<span style="font-weight: 600">{{t.g}}</span><span style="font-weight: 700">{{t.u}}</span><span>{{t.r}}</span><span>{{t.km}}</span><span>{{t.ton}}</span><span>S/ [MONTO]</span><span>S/ [MONTO]</span><span style="font-weight: 700; color: {{t.mc}}">{{t.m}}%</span>
+<span style="font-size: 10px; font-weight: 700; padding: 3px 6px; border-radius: 3px; text-align: center; background: {{t.fb}}; color: {{t.ff}}">{{t.f}}</span>
+<span style="color: #6B6254">{{t.o}}</span>
+</div>
+</sc-for>
+</section>
+<section style="background: #121719; color: #E9E3D6; border-radius: 6px; padding: 12px; display: flex; flex-direction: column; gap: 6px">
+<div style="font-size: 12px; font-weight: 600; letter-spacing: 0.06em">POR COBRAR · <span style="color: #FF8CC6">ANTIGÜEDAD</span></div>
+<sc-for list="{{debt}}" as="d" hint-placeholder-count="5">
+<div style="display: flex; flex-direction: column; gap: 4px; padding: 8px 0; border-bottom: 1px solid #242D31">
+<div style="display: flex; justify-content: space-between; font-size: 12px"><span style="font-weight: 600">F001-[N°]</span><span>S/ [MONTO]</span></div>
+<div style="display: flex; justify-content: space-between; font-size: 11px"><span style="color: #9AA5AA">[CLIENTE]</span><span style="color: {{d.c}}; font-weight: 700">{{d.days}} DÍAS</span></div>
+<div style="height: 4px; background: #242D31"><div style="height: 4px; width: {{d.w}}; background: {{d.c}}"></div></div>
+</div>
+</sc-for>
+<button type="button" style="margin-top: auto; height: 44px; border-radius: 4px; border: 1px solid #FF8CC6; background: transparent; color: #FF8CC6; font: inherit; font-size: 12px; font-weight: 600">RECORDAR COBRO POR TELEGRAM</button>
+</section>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":860}}'>
+class Component extends DCLogic {
+renderVals() {
+const A = 'Facturacion';
+const NAV = [['01 DASHBOARD','Main'],['02 TRAILER 3D','Trailer'],['03 FLOTA','Flota'],['04 INVENTARIO','Inventario'],['05 REPARACIONES','Reparaciones'],['06 VIAJES','Facturacion'],['07 FINANZAS','Finanzas'],['08 RENTABILIDAD','Rentabilidad'],['09 TELEGRAM','Chofer']];
+const nav = NAV.map(([label, f]) => ({ label, href: f + '.dc.html', active: f === A, inactive: f !== A }));
+const F = { PAGADA: ['#D6E4EE', '#1F4468'], PENDIENTE: ['#EFD27A', '#4A3A00'], VENCIDA: ['#B8236E', '#FFFFFF'], 'SIN FACTURA': ['#E4DCCB', '#1E1B16'] };
+const trips = [
+['T001-0214', 'T-01', 'Juliaca → Arequipa', '1,290', 30, 29, 'PENDIENTE', 'Telegram'],
+['T001-0213', 'T-04', 'Juliaca → Arequipa', '1,290', 28, 33, 'SIN FACTURA', 'Telegram'],
+['T001-0212', 'T-05', 'Arequipa → Lima', '2,020', 30, 26, 'PAGADA', 'Web'],
+['T001-0211', 'T-02', 'Puno → Cusco', '780', 25, 18, 'PAGADA', 'Telegram'],
+['T001-0210', 'T-01', 'Arequipa → Juliaca', '1,290', 12, 8, 'VENCIDA', 'Telegram'],
+['T001-0209', 'T-01', 'Puno → Lima', '3,050', 30, 35, 'PAGADA', 'Web'],
+['T001-0208', 'T-04', 'Juliaca → Tacna', '1,480', 29, 31, 'PAGADA', 'Telegram'],
+['T001-0207', 'T-03', 'Juliaca → Arequipa', '1,290', 18, 4, 'PENDIENTE', 'Telegram'],
+['T001-0206', 'T-02', 'Cusco → Arequipa', '1,020', 27, 22, 'PAGADA', 'Web'],
+['T001-0205', 'T-05', 'Lima → Arequipa', '2,020', 26, 21, 'PAGADA', 'Telegram']
+].map(([g, u, r, km, ton, m, f, o]) => ({ g, u, r, km, ton, m, f, o, fb: F[f][0], ff: F[f][1], mc: m < 10 ? '#B8236E' : m < 20 ? '#7A5A00' : '#2D5B7A' }));
+const debt = [48, 32, 21, 12, 5].map((days) => ({ days, w: Math.min(100, Math.round((days / 60) * 100)) + '%', c: days > 30 ? '#FF5AAE' : days > 15 ? '#F2C14E' : '#8FB4CC' }));
+return { nav, trips, debt };
+}
+}
+</script>
+</body>
+</html>

@@ -32,6 +32,7 @@ export interface Contexto {
 }
 
 const PFX_PRUEBA = "certificado-prueba.pfx";
+const PFX_PRUEBA_SIN_EMPRESA = "certificado-prueba-sin-empresa.pfx";
 const CLAVE_PRUEBA = "prueba";
 
 function esArchivoNoEncontrado(error: unknown): boolean {
@@ -40,14 +41,17 @@ function esArchivoNoEncontrado(error: unknown): boolean {
 
 async function obtenerCertificado(config: Config, almacen: Almacen, db: Db): Promise<Certificado> {
   if (config.sunatModo === "real") return cargarPfx(await readFile(config.certPath!), config.certPassword!);
+  const [emp] = await db.select().from(empresa).limit(1);
+  // Sin empresa todavía (app recién instalada) el de prueba lleva un RUC de relleno: se guarda
+  // aparte para no seguir usándolo cuando ya se cargaron los datos de la empresa.
+  const archivo = emp ? PFX_PRUEBA : PFX_PRUEBA_SIN_EMPRESA;
   let pfxExistente: Buffer;
   try {
-    pfxExistente = await almacen.leer(PFX_PRUEBA);
+    pfxExistente = await almacen.leer(archivo);
   } catch (error) {
     if (!esArchivoNoEncontrado(error)) throw error;
-    const [emp] = await db.select().from(empresa).limit(1);
     const pfx = generarCertificadoPrueba({ ruc: emp?.ruc ?? "20000000001", razonSocial: emp?.razonSocial ?? "EMPRESA DE PRUEBA", password: CLAVE_PRUEBA });
-    await almacen.guardar(PFX_PRUEBA, pfx);
+    await almacen.guardar(archivo, pfx);
     return cargarPfx(pfx, CLAVE_PRUEBA);
   }
   return cargarPfx(pfxExistente, CLAVE_PRUEBA);
@@ -71,6 +75,20 @@ async function crearGateway(config: Config, db: Db): Promise<SunatGateway> {
   });
 }
 
+/**
+ * Pone en [ctx] la conexión con SUNAT que pide [config] (modo, credenciales, certificado). Se usa
+ * al arrancar y al cambiar los ajustes del dispositivo sin reiniciar la app. Si falla, [ctx]
+ * queda como estaba.
+ */
+export async function reconfigurarSunat(ctx: Contexto, config: Config): Promise<void> {
+  const gateway = await crearGateway(config, ctx.db);
+  const certificado = await obtenerCertificado(config, ctx.almacen, ctx.db);
+  ctx.gateway = gateway;
+  ctx.certificado = certificado;
+  ctx.simulado = config.sunatModo !== "real";
+  ctx.facturaSimulada = config.sunatModo !== "real" || config.sunatAmbienteFactura === "beta";
+}
+
 export async function crearContexto(config: Config): Promise<{ ctx: Contexto; cerrar: () => Promise<void> }> {
   let db: Db;
   let cerrar: () => Promise<void>;
@@ -84,16 +102,8 @@ export async function crearContexto(config: Config): Promise<{ ctx: Contexto; ce
   }
   const almacen = crearAlmacenLocal(config.storageDir);
   try {
-    const ctx: Contexto = {
-      db,
-      almacen,
-      gateway: await crearGateway(config, db),
-      certificado: await obtenerCertificado(config, almacen, db),
-      reloj: () => new Date(),
-      dormir: (ms) => new Promise((r) => setTimeout(r, ms)),
-      simulado: config.sunatModo !== "real",
-      facturaSimulada: config.sunatModo !== "real" || config.sunatAmbienteFactura === "beta",
-    };
+    const ctx = { db, almacen, reloj: () => new Date(), dormir: (ms: number) => new Promise<void>((r) => setTimeout(r, ms)) } as Contexto;
+    await reconfigurarSunat(ctx, config);
     return { ctx, cerrar };
   } catch (error) {
     // Si falla el gateway o el certificado, no dejar la conexión/handle de PGlite abierto:

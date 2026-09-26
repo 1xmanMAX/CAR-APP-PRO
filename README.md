@@ -1,9 +1,78 @@
-# SUNATAPP
+# SUNATAPP · Control Flota
 
-App para empresa de transporte: guía de remisión transportista, factura del flete y cobros, conectada a SUNAT.
+App para empresa de transporte: control de flota (desgaste de cada parte de cada trailer con modelo 3D,
+inventario, reparaciones, viajes, finanzas y rentabilidad), guía de remisión transportista, factura
+del flete y cobros conectados a SUNAT, y un bot de Telegram para registrar todo desde el celular.
+
+## Arranque rápido
+```bash
+pnpm install
+cp .env.example .env      # completa EMPRESA_*, VEHICULO_*, CONDUCTOR_*, USUARIO_*
+pnpm sembrar              # datos iniciales (una sola vez)
+pnpm app                  # bot + web + tareas de fondo en un solo proceso
+```
+Abre `http://localhost:3000`: la primera vez te pide crear el acceso del dueño (correo y contraseña).
+Sin `TELEGRAM_BOT_TOKEN`, `pnpm app` arranca solo la web; al poner el token y reiniciar se activa el bot.
+
+### Probar con datos de ejemplo
+```bash
+pnpm demo:flota                                            # crea ./data-demo (5 trailers, 4 meses de viajes…)
+DATA_DIR=./data-demo STORAGE_DIR=./data-demo/storage pnpm web
+```
+Entra con `demo@flota.pe` / `demo1234` (también `contador@flota.pe` y `taller@flota.pe` para ver los roles).
+
+## Web · pantallas
+01 Dashboard · 02 Trailer 3D (nube de puntos con Three.js; clic en una zona para ver su parte) · 03 Flota ·
+04 Inventario · 05 Reparaciones (el cambio reinicia el contador, descuenta stock, crea el gasto y avisa por
+Telegram) · 06 Viajes, guías, facturas y cobros · 07 Finanzas (flujo de caja, préstamos, reinversiones) ·
+08 Rentabilidad (cotizador de flete con PDF, proyección a 6 meses, presupuesto vs real) · 09 Telegram · Ajustes
+(usuarios y roles, catálogo de partes con su vida útil).
+
+**Desgaste:** cada parte controlada lleva tres contadores (km, viajes y días desde su instalación); manda el
+que se cumple primero. OK < 70 % · PRÓXIMO 70–89 % · CAMBIAR ≥ 90 %. Al cruzar 70 % y 90 % el bot avisa una
+sola vez. Los valores de vida útil iniciales son de ejemplo: ajústalos en Ajustes.
+
+**Roles:** dueño (todo), contador (viajes, facturas, finanzas, rentabilidad), taller (trailer 3D, flota,
+inventario, reparaciones), chofer (solo Telegram).
+
+Diseño de referencia: `DSISEÑO DE LA APP/HANDOFF.md`.
+
+## Sincronización sin servidor (PC y celulares)
+
+Cada dispositivo tiene su propia base (PGlite) y funciona sin conexión. La pantalla **Sincronizar**
+junta los cambios entre dispositivos del mismo grupo por la red local (diseño portado de PixPin:
+`packages/core/src/sincro/`):
+
+- Cada fila lleva `sinc_uid` (código único), `sinc_disp`+`sinc_num` (dispositivo de origen y su
+  correlativo) y `sinc_creado`/`sinc_tocado` (horas); los disparadores de la migración 0008 los
+  ponen solos y dejan lápidas de lo borrado.
+- Descubrimiento por difusión UDP (47475), sincronización por TCP (47474) cifrada con AES-256-GCM
+  (clave derivada del código del grupo). Solo viajan las filas que cambiaron desde la última vez
+  con ese dispositivo; los choques se juntan campo por campo (gana el más reciente).
+- `/empezar`: en un dispositivo nuevo, unirse al grupo y traerse todo sin crear otro dueño.
+
+## Arranque común (PC y Android)
+
+`apps/bot/src/arranque.ts` levanta todo en ambos: web, sincronización, tareas de fondo (reintentos
+SUNAT, alertas, cola de avisos, aviso diario) y el bot de Telegram si hay token. `pnpm app` lo usa
+en la PC (`main.ts`) y la app de Android en el celular (`movil.ts`). La configuración inicial
+(empresa, unidad, chofer, dueño) se hace en `/configurar` y los ajustes del dispositivo (bot y
+SUNAT) en **Ajustes → Este dispositivo**, que escribe el `.env` de ese dispositivo y lo aplica sin
+reiniciar.
+
+## App de Android (sin servidor)
+
+`android/` es una app Kotlin con Node.js dentro (Node LTS de Termux, con ICU completo: fechas,
+monedas y textos iguales que en la PC; va como `libnode.so` y la app lo ejecuta) que corre la misma
+app web en `127.0.0.1:3939`:
+
+```bash
+node scripts/preparar-android.mjs      # baja Node de Termux (necesita ar, tar y readelf) y empaqueta la app
+cd android && gradle assembleRelease    # -Pabis=x86_64 para el emulador
+```
 
 ## Requisitos
-Node 24+, pnpm 9.
+Node 22+ (LTS), pnpm 9.
 
 ## Uso local
 ```bash
@@ -43,12 +112,21 @@ carreta de la unidad habitual, y sin ella el bot pregunta por la placa secundari
 
 ```bash
 pnpm sembrar              # empresa, vehículo(s), conductor y usuario (una sola vez)
-pnpm bot                  # arranca el bot
+pnpm bot                  # arranca solo el bot (pnpm app = bot + web)
 ```
 La primera vez el bot imprime en consola un `Código de registro: 123456`. Envíaselo por Telegram
 desde tu cuenta: quedas como dueño y a partir de ahí solo te responde a ti. El código vale una vez.
 
-### Comandos
+### Comandos de flota
+- `/viaje` — sale una unidad (botones T-01…; luego "Juliaca → Arequipa · 30 ton")
+- `/fin [odómetro o km]` — llegó; suma los km a todas sus partes
+- `/gasto combustible 480 [detalle]` — gasto; manda la foto del voucher con el comando como pie de foto
+- `/km 412380 [T-01]` — lectura de odómetro · `/estado [T-01]` — próximas partes a cambiar
+- `/cambio` — cambio de parte guiado · `/compra REP-014 6 180` — compra de repuesto
+- `/web` — enlace de un solo uso para entrar a la web · `/grupo` (en el grupo del equipo) — recibir ahí las alertas
+- Un chofer nuevo escribe `/start` y el bot le dice su ID; el dueño lo registra en Ajustes.
+
+### Comandos de documentos
 - Envía el PDF de la guía del remitente y el bot arma la guía de transportista.
 - `/guias` — últimas guías · `/pendientes` — guías por terminar
 - `/facturar V001-1` — facturar el flete de una guía

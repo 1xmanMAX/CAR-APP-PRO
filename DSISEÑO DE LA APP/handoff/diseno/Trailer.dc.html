@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Trailer 3D · estado de partes</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&amp;family=Space+Mono:wght@400;700&amp;display=swap">
+<style>
+body{margin:0;font-family:'IBM Plex Mono',ui-monospace,monospace;background:#EFE9DC;color:#1E1B16}
+a{color:#B8236E}a:hover{color:#8A1651}
+</style>
+</helmet>
+<div style="width: 1280px; height: 980px; box-sizing: border-box; padding: 16px; display: flex; flex-direction: column; gap: 10px; background: #EFE9DC; font-family: 'IBM Plex Mono', ui-monospace, monospace; color: #1E1B16; font-size: 13px">
+<header style="display: flex; align-items: center; gap: 14px; background: #FAF7F0; border: 1px solid #CDBFA5; border-radius: 6px; padding: 10px 14px">
+<svg width="40" height="40" viewBox="0 0 40 40" aria-hidden="true"><rect width="40" height="40" rx="4" fill="#121719"></rect><circle cx="11" cy="13" r="3" fill="#E9E3D6"></circle><circle cx="20" cy="13" r="3" fill="#E9E3D6"></circle><circle cx="29" cy="13" r="3" fill="#FF5AAE"></circle><circle cx="11" cy="22" r="3" fill="#E9E3D6"></circle><circle cx="20" cy="22" r="3" fill="#F2C14E"></circle><circle cx="29" cy="22" r="3" fill="#E9E3D6"></circle><circle cx="13" cy="30" r="3.5" fill="#8FB4CC"></circle><circle cx="27" cy="30" r="3.5" fill="#8FB4CC"></circle></svg>
+<div style="display: flex; flex-direction: column; gap: 2px">
+<div style="font-family: 'Space Mono', monospace; font-weight: 700; font-size: 18px">[EMPRESA] · <span style="color: #B8236E">Control</span> <span style="background: #EFD27A; padding: 0 5px">Flota</span></div>
+<div style="font-size: 11px; color: #6B6254; letter-spacing: 0.06em">TRANSPORTE DE CARGA PESADA · CADA PIEZA, CADA VIAJE, BAJO CONTROL</div>
+</div>
+<div style="margin-left: auto; display: flex; gap: 22px; align-items: center">
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 10px; color: #6B6254; letter-spacing: 0.08em">UNIDADES</span><span style="font-family: 'Space Mono', monospace; font-weight: 700; font-size: 16px">5/5</span></div>
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 10px; color: #6B6254; letter-spacing: 0.08em">VIAJES MES</span><span style="font-family: 'Space Mono', monospace; font-weight: 700; font-size: 16px; color: #B8236E">[N]</span></div>
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 10px; color: #6B6254; letter-spacing: 0.08em">MARGEN</span><span style="font-family: 'Space Mono', monospace; font-weight: 700; font-size: 16px; color: #B8236E">[%]</span></div>
+<span style="font-size: 11px; font-weight: 600; padding: 4px 8px; border: 1px solid #2D5B7A; color: #2D5B7A; border-radius: 4px">BOT TELEGRAM · EN LÍNEA</span>
+<span style="font-family: 'Space Mono', monospace; font-weight: 700; font-size: 22px">[HH:MM]</span>
+</div>
+</header>
+<nav aria-label="Secciones" style="display: flex; gap: 4px; align-items: center; background: #FAF7F0; border: 1px solid #CDBFA5; border-radius: 6px; padding: 4px 6px">
+<sc-for list="{{nav}}" as="n" hint-placeholder-count="9">
+<sc-if value="{{n.active}}" hint-placeholder-val="{{false}}"><a href="{{n.href}}" style="display: flex; align-items: center; height: 40px; padding: 0 10px; border-radius: 4px; background: #B8236E; color: #FFFFFF; font-weight: 600; font-size: 12px; text-decoration: none; letter-spacing: 0.04em">{{n.label}}</a></sc-if>
+<sc-if value="{{n.inactive}}" hint-placeholder-val="{{true}}"><a href="{{n.href}}" style="display: flex; align-items: center; height: 40px; padding: 0 10px; border-radius: 4px; color: #1E1B16; font-size: 12px; text-decoration: none; letter-spacing: 0.04em">{{n.label}}</a></sc-if>
+</sc-for>
+<span style="margin-left: auto; font-size: 11px; font-weight: 600; padding: 3px 8px; background: #EFD27A; color: #4A3A00; border-radius: 3px">DATOS DE EJEMPLO</span>
+</nav>
+<div style="display: grid; grid-template-columns: 290px minmax(0, 1fr) 320px; gap: 10px; flex-grow: 1; min-height: 0">
+<section style="background: #FAF7F0; border: 1px solid #CDBFA5; border-radius: 6px; padding: 12px; display: flex; flex-direction: column; gap: 10px">
+<div style="font-size: 12px; font-weight: 600; letter-spacing: 0.06em">UNIDAD · <span style="color: #B8236E">ELIGE EL TRAILER</span></div>
+<div style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px">
+<button type="button" style="height: 40px; border-radius: 4px; border: none; background: #1E1B16; color: #FAF7F0; font: inherit; font-size: 12px; font-weight: 600">T-01</button>
+<button type="button" style="height: 40px; border-radius: 4px; border: 1px solid #CDBFA5; background: #FFFFFF; color: #1E1B16; font: inherit; font-size: 12px">T-02</button>
+<button type="button" style="height: 40px; border-radius: 4px; border: 1px solid #CDBFA5; background: #FFFFFF; color: #1E1B16; font: inherit; font-size: 12px">T-03</button>
+<button type="button" style="height: 40px; border-radius: 4px; border: 1px solid #CDBFA5; background: #FFFFFF; color: #1E1B16; font: inherit; font-size: 12px">T-04</button>
+<button type="button" style="height: 40px; border-radius: 4px; border: 1px solid #CDBFA5; background: #FFFFFF; color: #1E1B16; font: inherit; font-size: 12px">T-05</button>
+</div>
+<div style="font-size: 12px; font-weight: 600; letter-spacing: 0.06em; margin-top: 4px">PARTES · <span style="color: #B8236E">ORDEN POR DESGASTE</span></div>
+<sc-for list="{{parts}}" as="p" hint-placeholder-count="9">
+<button type="button" onClick="{{p.pick}}" style="display: flex; flex-direction: column; gap: 5px; text-align: left; padding: 8px 10px; border-radius: 4px; font: inherit; color: #1E1B16; cursor: pointer; background: {{p.bg}}; border: 1px solid {{p.bd}}">
+<span style="display: flex; justify-content: space-between; gap: 6px; width: 100%; font-size: 12px; font-weight: 600"><span>{{p.name}}</span><span style="color: {{p.txt}}">{{p.pct}}%</span></span>
+<span style="display: block; width: 100%; height: 5px; background: #E4DCCB; border-radius: 2px"><span style="display: block; height: 5px; border-radius: 2px; width: {{p.pct}}%; background: {{p.col}}"></span></span>
+<span style="font-size: 11px; color: #6B6254">{{p.rest}}</span>
+</button>
+</sc-for>
+</section>
+<section style="display: flex; flex-direction: column; gap: 10px; min-width: 0">
+<div style="background: #FAF7F0; border: 1px solid #CDBFA5; border-radius: 6px; overflow: hidden; display: flex; flex-direction: column">
+<div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 12px">
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 12px; font-weight: 600; letter-spacing: 0.06em">T-01 · MODELO DE PUNTOS · <span style="color: #B8236E">EN VIVO</span></span><span style="font-size: 11px; color: #6B6254">CADA PUNTO ES PARTE DEL TRAILER · EL COLOR ES SU DESGASTE</span></div>
+<div style="display: flex; gap: 4px">
+<button type="button" aria-label="Girar a la izquierda" onClick="{{rotL}}" style="width: 40px; height: 40px; border-radius: 4px; border: 1px solid #CDBFA5; background: #FFFFFF; font: inherit; font-weight: 700; color: #1E1B16">&lt;</button>
+<button type="button" aria-label="Girar a la derecha" onClick="{{rotR}}" style="width: 40px; height: 40px; border-radius: 4px; border: 1px solid #CDBFA5; background: #FFFFFF; font: inherit; font-weight: 700; color: #1E1B16">&gt;</button>
+<button type="button" onClick="{{toggleSpin}}" style="height: 40px; padding: 0 12px; border-radius: 4px; border: 1px solid #1E1B16; background: {{spinBg}}; color: {{spinFg}}; font: inherit; font-size: 12px; font-weight: 600">{{spinLabel}}</button>
+</div>
+</div>
+<div style="position: relative; width: 100%; height: 470px; background-color: #121719; background-image: radial-gradient(#212A2E 1px, transparent 1px); background-size: 14px 14px; overflow: hidden">
+<div style="position: absolute; left: 12px; top: 12px; border: 1px solid #3A4449; background: #1A2124; padding: 6px 10px; display: flex; flex-direction: column; gap: 2px; z-index: 2"><span style="font-size: 10px; color: #9AA5AA; letter-spacing: 0.08em">ÁNGULO</span><span style="font-family: 'Space Mono', monospace; font-weight: 700; font-size: 20px; color: #F2C14E">{{angTxt}}°</span></div>
+<div style="position: absolute; right: 12px; top: 12px; border: 1px solid #FF5AAE; background: #1A2124; padding: 6px 10px; display: flex; flex-direction: column; gap: 2px; z-index: 2; max-width: 240px"><span style="font-size: 10px; color: #FF8CC6; letter-spacing: 0.08em">PARTE SELECCIONADA</span><span style="font-size: 12px; color: #F4EFE6; font-weight: 600">{{sel.name}}</span></div>
+<div style="position: absolute; left: 0; right: 0; top: 405px; border-top: 1px solid #2E383D"></div>
+<sc-for list="{{pts}}" as="q" hint-placeholder-count="0">
+<div style="position: absolute; border-radius: 50%; left: {{q.x}}px; top: {{q.y}}px; width: {{q.d}}px; height: {{q.d}}px; background: {{q.c}}; opacity: {{q.o}}"></div>
+</sc-for>
+<sc-for list="{{spots}}" as="h" hint-placeholder-count="0">
+<div style="position: absolute; left: {{h.x}}px; top: {{h.y}}px; width: 18px; height: 18px; margin: -9px 0 0 -9px; border-radius: 50%; border: 1.5px solid {{h.c}}; box-sizing: border-box; z-index: 3"></div>
+</sc-for>
+<div style="position: absolute; left: {{selSpot.x}}px; top: {{selSpot.y}}px; width: 34px; height: 34px; margin: -17px 0 0 -17px; border-radius: 50%; border: 2px dashed #F2C14E; box-sizing: border-box; z-index: 4"></div>
+<div style="position: absolute; left: {{selSpot.lx}}px; top: {{selSpot.ly}}px; background: #F4EFE6; color: #1E1B16; border-radius: 3px; padding: 6px 8px; z-index: 5; display: flex; flex-direction: column; gap: 2px; min-width: 150px"><span style="font-size: 11px; font-weight: 700">{{sel.short}}</span><span style="font-size: 11px; color: #6B6254">DESGASTE <span style="color: {{sel.txt}}; font-weight: 700">{{sel.pct}}%</span></span></div>
+<div style="position: absolute; left: 12px; bottom: 10px; display: flex; gap: 14px; font-size: 11px; color: #C9D1D4; z-index: 2"><span><span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #8FB4CC"></span> OK</span><span><span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #F2C14E"></span> PRÓXIMO (70%+)</span><span><span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #FF5AAE"></span> CAMBIAR (90%+)</span></div>
+</div>
+<div style="display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); border-top: 1px solid #CDBFA5">
+<div style="padding: 8px 12px; display: flex; flex-direction: column; gap: 2px; border-right: 1px solid #E4DCCB"><span style="font-size: 10px; color: #6B6254; letter-spacing: 0.08em">KM TOTAL</span><span style="font-weight: 600">412,380</span></div>
+<div style="padding: 8px 12px; display: flex; flex-direction: column; gap: 2px; border-right: 1px solid #E4DCCB"><span style="font-size: 10px; color: #6B6254; letter-spacing: 0.08em">VIAJES</span><span style="font-weight: 600">188</span></div>
+<div style="padding: 8px 12px; display: flex; flex-direction: column; gap: 2px; border-right: 1px solid #E4DCCB"><span style="font-size: 10px; color: #6B6254; letter-spacing: 0.08em">KM/VIAJE</span><span style="font-weight: 600">2,193</span></div>
+<div style="padding: 8px 12px; display: flex; flex-direction: column; gap: 2px; border-right: 1px solid #E4DCCB"><span style="font-size: 10px; color: #6B6254; letter-spacing: 0.08em">OK</span><span style="font-weight: 600; color: #2D5B7A">{{nOk}}</span></div>
+<div style="padding: 8px 12px; display: flex; flex-direction: column; gap: 2px; border-right: 1px solid #E4DCCB"><span style="font-size: 10px; color: #6B6254; letter-spacing: 0.08em">PRÓXIMAS</span><span style="font-weight: 600; color: #7A5A00">{{nWarn}}</span></div>
+<div style="padding: 8px 12px; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 10px; color: #6B6254; letter-spacing: 0.08em">CAMBIAR YA</span><span style="font-weight: 600; color: #B8236E">{{nCrit}}</span></div>
+</div>
+</div>
+<div style="background: #FAF7F0; border: 1px solid #CDBFA5; border-radius: 6px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; flex-grow: 1">
+<div style="display: flex; justify-content: space-between"><span style="font-size: 12px; font-weight: 600; letter-spacing: 0.06em">KM POR VIAJE · <span style="color: #B8236E">NO TODOS LOS VIAJES DESGASTAN IGUAL</span></span><span style="font-size: 11px; color: #6B6254">ÚLTIMOS 24 VIAJES</span></div>
+<div style="display: flex; align-items: flex-end; gap: 4px; height: 90px; border-bottom: 1px solid #CDBFA5">
+<sc-for list="{{trips}}" as="t" hint-placeholder-count="24">
+<div style="flex-grow: 1; height: {{t.h}}%; background: {{t.c}}"></div>
+</sc-for>
+</div>
+<div style="display: flex; justify-content: space-between; font-size: 11px; color: #6B6254"><span>MÁS ANTIGUO</span><span>RUTAS LARGAS / SUBIDAS = MÁS DESGASTE POR VIAJE</span><span>HOY</span></div>
+</div>
+</section>
+<section style="display: flex; flex-direction: column; gap: 10px">
+<div style="background: #FAF7F0; border: 1px solid #CDBFA5; border-radius: 6px; padding: 12px; display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px"><span style="font-family: 'Space Mono', monospace; font-weight: 700; font-size: 15px">{{sel.name}}</span><span style="font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 3px; white-space: nowrap; background: {{sel.chipBg}}; color: {{sel.chipFg}}">{{sel.state}}</span></div>
+<div style="font-size: 11px; color: #6B6254">INSTALADO {{sel.inst}} · REPUESTO {{sel.code}} · COSTO S/ [MONTO]</div>
+<sc-for list="{{sel.counters}}" as="k" hint-placeholder-count="3">
+<div style="display: flex; flex-direction: column; gap: 4px; padding: 8px; border-radius: 4px; border: 1px solid {{k.bd}}">
+<div style="display: flex; justify-content: space-between; font-size: 11px"><span style="font-weight: 600; letter-spacing: 0.06em">{{k.label}} <span style="color: #B8236E">{{k.tag}}</span></span><span>{{k.val}}</span></div>
+<div style="height: 6px; background: #E4DCCB; border-radius: 2px"><div style="height: 6px; border-radius: 2px; width: {{k.pct}}%; background: {{k.col}}"></div></div>
+</div>
+</sc-for>
+<div style="background: #121719; color: #F4EFE6; border-radius: 4px; padding: 10px; display: flex; flex-direction: column; gap: 3px"><span style="font-size: 10px; color: #9AA5AA; letter-spacing: 0.08em">CAMBIAR ANTES DE</span><span style="font-family: 'Space Mono', monospace; font-weight: 700; font-size: 18px; color: #F2C14E">{{sel.left}}</span><span style="font-size: 11px; color: #C9D1D4">Manda el contador que se cumpla primero</span></div>
+<div style="display: flex; gap: 6px">
+<a href="Reparaciones.dc.html" style="flex-grow: 1; height: 40px; display: flex; align-items: center; justify-content: center; border-radius: 4px; background: #B8236E; color: #FFFFFF; font-size: 12px; font-weight: 600; text-decoration: none">REGISTRAR CAMBIO</a>
+<a href="Inventario.dc.html" style="flex-grow: 1; height: 40px; display: flex; align-items: center; justify-content: center; border-radius: 4px; border: 1px solid #1E1B16; color: #1E1B16; font-size: 12px; font-weight: 600; text-decoration: none">VER EN STOCK</a>
+</div>
+</div>
+<div style="background: #FAF7F0; border: 1px solid #CDBFA5; border-radius: 6px; padding: 12px; display: flex; flex-direction: column; gap: 6px; flex-grow: 1">
+<div style="font-size: 12px; font-weight: 600; letter-spacing: 0.06em">VIAJES DESDE EL CAMBIO · <span style="color: #B8236E">{{sel.tripsN}}</span></div>
+<sc-for list="{{linked}}" as="v" hint-placeholder-count="4">
+<div style="display: flex; justify-content: space-between; font-size: 12px; padding: 6px 0; border-bottom: 1px dashed #D8CCB4"><span><span style="color: #6B6254">{{v.g}}</span> {{v.r}}</span><span style="font-weight: 600">{{v.km}} km</span></div>
+</sc-for>
+<a href="Facturacion.dc.html" style="font-size: 12px; font-weight: 600; margin-top: auto">VER TODOS LOS VIAJES →</a>
+</div>
+</section>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":980}}'>
+class Component extends DCLogic {
+componentDidMount() {
+this.timer = setInterval(() => {
+if (this.state && this.state.spin) this.setState({ ang: ((this.state.ang ?? -30) + 3) % 360 });
+}, 80);
+}
+componentWillUnmount() { clearInterval(this.timer); }
+cloud() {
+if (this._pts) return this._pts;
+let seed = 11;
+const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+const P = [];
+const box = (g, x0, x1, y0, y1, z0, z1, n) => {
+for (let i = 0; i < n; i++) {
+const f = Math.floor(rnd() * 6);
+let x = x0 + rnd() * (x1 - x0), y = y0 + rnd() * (y1 - y0), z = z0 + rnd() * (z1 - z0);
+if (f === 0) x = x0; else if (f === 1) x = x1; else if (f === 2) y = y0; else if (f === 3) y = y1; else if (f === 4) z = z0; else z = z1;
+P.push([x, y, z, g]);
+}
+};
+const wheel = (g, x, z, n) => {
+for (let i = 0; i < n; i++) {
+const a = rnd() * Math.PI * 2, r = 0.52 * (0.7 + 0.3 * rnd());
+P.push([x + Math.cos(a) * r, 0.52 + Math.sin(a) * r, z + (rnd() - 0.5) * 0.3, g]);
+}
+};
+box('cab', -9, -6.6, 1.0, 3.7, -1.25, 1.25, 160);
+box('motor', -9.4, -8.0, 0.9, 2.0, -1.1, 1.1, 70);
+box('chasis', -9, -3, 0.75, 1.0, -0.55, 0.55, 60);
+box('chasis', -3, 9, 1.0, 1.25, -0.55, 0.55, 70);
+box('caja', -4, 9, 1.35, 4.0, -1.3, 1.3, 320);
+box('tanque', -6.2, -5.0, 0.85, 1.35, 1.1, 1.35, 36);
+box('bateria', -5.0, -4.4, 0.85, 1.25, -1.35, -1.05, 26);
+box('quinta', -4.2, -3.2, 1.12, 1.22, -0.6, 0.6, 26);
+[[-8, 'wdel'], [-4.6, 'wtrac'], [-3.4, 'wtrac'], [5.8, 'wsr'], [7.0, 'wsr'], [8.2, 'wsr']].forEach(([x, g]) => { wheel(g, x, -1.05, 22); wheel(g, x, 1.05, 22); });
+this._pts = P;
+return P;
+}
+renderVals() {
+const A = 'Trailer';
+const NAV = [['01 DASHBOARD','Main'],['02 TRAILER 3D','Trailer'],['03 FLOTA','Flota'],['04 INVENTARIO','Inventario'],['05 REPARACIONES','Reparaciones'],['06 VIAJES','Facturacion'],['07 FINANZAS','Finanzas'],['08 RENTABILIDAD','Rentabilidad'],['09 TELEGRAM','Chofer']];
+const nav = NAV.map(([label, f]) => ({ label, href: f + '.dc.html', active: f === A, inactive: f !== A }));
+const st = this.state || {};
+const ang = st.ang ?? -30;
+const selId = st.sel ?? 'frenos';
+const spin = !!st.spin;
+const fmt = (n) => n.toLocaleString('en-US');
+const RAW = [
+{ id: 'frenos', name: 'Pastillas de freno · semirremolque', short: 'FRENOS SEMIRREMOLQUE', g: 'wsr', km: [46800, 60000], tr: [22, 24], d: [140, 240], inst: '12 MAY', code: 'REP-014' },
+{ id: 'aceite', name: 'Aceite y filtro de motor', short: 'ACEITE + FILTRO', g: 'motor', km: [13500, 15000], tr: [6, 8], d: [40, 90], inst: '15 AGO', code: 'REP-021' },
+{ id: 'quinta', name: 'Quinta rueda · engrase', short: 'QUINTA RUEDA', g: 'quinta', km: [4200, 5000], tr: [2, 3], d: [12, 15], inst: '12 SET', code: '—' },
+{ id: 'lltrac', name: 'Llantas de tracción (8)', short: 'LLANTAS TRACCIÓN', g: 'wtrac', km: [88000, 110000], tr: [40, 50], d: [300, 480], inst: '28 NOV', code: 'REP-003' },
+{ id: 'llsr', name: 'Llantas semirremolque (12)', short: 'LLANTAS SEMIRREMOLQUE', g: 'wsr', km: [71000, 120000], tr: [32, 55], d: [260, 540], inst: '07 ENE', code: 'REP-003' },
+{ id: 'aire', name: 'Filtro de aire', short: 'FILTRO DE AIRE', g: 'motor', km: [22000, 40000], tr: [10, 18], d: [80, 180], inst: '05 JUL', code: 'REP-022' },
+{ id: 'bateria', name: 'Batería 12V', short: 'BATERÍA', g: 'bateria', km: null, tr: null, d: [400, 730], inst: '20 AGO', code: 'REP-030' },
+{ id: 'amort', name: 'Amortiguadores', short: 'AMORTIGUADORES', g: 'chasis', km: [65000, 150000], tr: [30, 70], d: [250, 720], inst: '18 ENE', code: 'REP-041' },
+{ id: 'lldel', name: 'Llantas delanteras (2)', short: 'LLANTAS DELANTERAS', g: 'wdel', km: [30000, 100000], tr: [14, 45], d: [110, 480], inst: '02 JUN', code: 'REP-004' }
+];
+const stateOf = (p) => (p >= 90 ? 'crit' : p >= 70 ? 'warn' : 'ok');
+const COL = { ok: '#2D5B7A', warn: '#D9A21B', crit: '#B8236E' };
+const TXT = { ok: '#2D5B7A', warn: '#7A5A00', crit: '#B8236E' };
+const DOT = { ok: '#8FB4CC', warn: '#F2C14E', crit: '#FF5AAE' };
+const parts = RAW.map((r) => {
+const rk = r.km ? r.km[0] / r.km[1] : 0, rt = r.tr ? r.tr[0] / r.tr[1] : 0, rd = r.d[0] / r.d[1];
+const pct = Math.min(100, Math.round(Math.max(rk, rt, rd) * 100));
+const s = stateOf(pct);
+let left;
+if (r.tr) {
+const kmPerTrip = r.km[0] / r.tr[0], daysPerTrip = r.d[0] / r.tr[0];
+const byT = r.tr[1] - r.tr[0], byK = Math.floor((r.km[1] - r.km[0]) / kmPerTrip), byD = Math.floor((r.d[1] - r.d[0]) / daysPerTrip);
+const n = Math.max(0, Math.min(byT, byK, byD));
+left = { n, txt: n + ' VIAJES', lim: n === byT ? 'tr' : n === byK ? 'km' : 'd' };
+} else {
+left = { n: null, txt: (r.d[1] - r.d[0]) + ' DÍAS', lim: 'd' };
+}
+return { ...r, pct, s, rk, rt, rd, left };
+}).sort((a, b) => b.pct - a.pct);
+const nOk = parts.filter((p) => p.s === 'ok').length, nWarn = parts.filter((p) => p.s === 'warn').length, nCrit = parts.filter((p) => p.s === 'crit').length;
+const worst = {};
+parts.forEach((p) => { if (!worst[p.g] || p.pct > worst[p.g]) worst[p.g] = p.pct; });
+const sp = parts.find((p) => p.id === selId) || parts[0];
+const listed = parts.map((p) => ({
+name: p.name, pct: p.pct, col: COL[p.s], txt: TXT[p.s],
+rest: p.left.n === null ? 'Cambiar en ~' + p.left.txt.toLowerCase() : '≈ ' + p.left.txt.toLowerCase() + ' restantes',
+bg: p.id === sp.id ? '#FCE6F1' : '#FFFFFF', bd: p.id === sp.id ? '#B8236E' : '#E4DCCB',
+pick: () => this.setState({ sel: p.id })
+}));
+const W = 648, H = 470, s = 31, cx = W / 2 + 10, cy = 320;
+const a = (ang * Math.PI) / 180, ca = Math.cos(a), sa = Math.sin(a);
+const proj = (x, y, z) => { const xr = x * ca - z * sa, zr = x * sa + z * ca; return { X: cx + xr * s, Y: cy - y * s + zr * s * 0.3, zr }; };
+const pts = this.cloud().map(([x, y, z, g]) => {
+const p = proj(x, y, z), t = Math.max(0, Math.min(1, (p.zr + 9.5) / 19));
+const has = worst[g] !== undefined;
+const c = has ? DOT[stateOf(worst[g])] : '#E9E3D6';
+const on = g === sp.g;
+const d = (1.6 + t * 2.4) * (on ? 1.7 : 1);
+return { zr: p.zr, x: (p.X - d / 2).toFixed(1), y: (p.Y - d / 2).toFixed(1), d: d.toFixed(1), c, o: (has ? 0.55 + 0.45 * t : 0.18 + 0.4 * t).toFixed(2) };
+}).sort((m, n) => m.zr - n.zr);
+const ANCH = { wsr: [7, 0.5, 1.2], wtrac: [-4, 0.5, 1.2], wdel: [-8, 0.5, 1.2], motor: [-8.7, 1.5, 0], bateria: [-4.7, 1.05, -1.25], quinta: [-3.7, 1.2, 0], chasis: [2, 1.1, 0.6] };
+const spots = Object.keys(ANCH).map((g) => { const p = proj(...ANCH[g]); return { x: p.X.toFixed(1), y: p.Y.toFixed(1), c: DOT[stateOf(worst[g] ?? 0)] }; });
+const sP = proj(...ANCH[sp.g]);
+const lx = sP.X > W - 190 ? sP.X - 180 : sP.X + 26;
+const selSpot = { x: sP.X.toFixed(1), y: sP.Y.toFixed(1), lx: lx.toFixed(1), ly: Math.max(70, sP.Y - 70).toFixed(1) };
+const LBL = { crit: 'CAMBIAR YA', warn: 'PRÓXIMO', ok: 'OK' };
+const CHIP = { crit: ['#B8236E', '#FFFFFF'], warn: ['#EFD27A', '#4A3A00'], ok: ['#D6E4EE', '#1F4468'] };
+const cnt = (label, pair, unit, key) => {
+if (!pair) return null;
+const pct = Math.min(100, Math.round((pair[0] / pair[1]) * 100));
+const lim = sp.left.lim === key;
+return { label, val: fmt(pair[0]) + ' / ' + fmt(pair[1]) + ' ' + unit, pct, col: COL[stateOf(pct)], tag: lim ? '· MANDA' : '', bd: lim ? '#B8236E' : '#E4DCCB' };
+};
+const sel = {
+name: sp.name, short: sp.short, pct: sp.pct, txt: TXT[sp.s], state: LBL[sp.s], chipBg: CHIP[sp.s][0], chipFg: CHIP[sp.s][1],
+inst: sp.inst, code: sp.code, left: sp.left.txt, tripsN: sp.tr ? sp.tr[0] + ' VIAJES' : '—',
+counters: [cnt('KILÓMETROS', sp.km, 'km', 'km'), cnt('VIAJES', sp.tr, 'viajes', 'tr'), cnt('DÍAS', sp.d, 'días', 'd')].filter(Boolean)
+};
+const KM = [1480, 2900, 1650, 3100, 2200, 980, 2750, 3300, 1500, 2100, 2600, 1200, 3050, 2400, 1750, 2950, 1100, 2300, 3200, 1900, 2650, 1400, 2850, 2150];
+const trips = KM.map((k) => ({ h: Math.round((k / 3400) * 100), c: k > 2800 ? '#B8236E' : k > 2000 ? '#D9A21B' : '#2D5B7A' }));
+const linked = [['T001-0214', 'Juliaca → Arequipa', '1,290'], ['T001-0209', 'Puno → Lima', '3,050'], ['T001-0203', 'Arequipa → Cusco', '1,020'], ['T001-0198', 'Juliaca → Tacna', '1,480']].map(([g, r, km]) => ({ g, r, km }));
+return {
+nav, parts: listed, pts, spots, selSpot, sel, trips, linked, nOk, nWarn, nCrit,
+angTxt: String(((Math.round(ang) % 360) + 360) % 360),
+rotL: () => this.setState({ ang: ang - 20 }), rotR: () => this.setState({ ang: ang + 20 }),
+toggleSpin: () => this.setState({ spin: !spin }),
+spinLabel: spin ? 'DETENER' : 'GIRAR', spinBg: spin ? '#1E1B16' : '#FFFFFF', spinFg: spin ? '#FAF7F0' : '#1E1B16'
+};
+}
+}
+</script>
+</body>
+</html>

@@ -39,5 +39,9 @@ export function middlewareAutorizacion(deps: Dependencias): Middleware<ContextoB
       return;
     }
     await auditarTelegramDesconocido(deps.ctx, telegramId, texto);
+    // Solo en privado y solo con /start: así un chofer nuevo sabe qué ID darle al dueño.
+    if (texto?.startsWith("/start") && c.chat?.type === "private") {
+      await c.reply(textos.idParaRegistro(telegramId));
+    }
   };
 }

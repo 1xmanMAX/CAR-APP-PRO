@@ -36,6 +36,34 @@
       "when": 1789856497422,
       "tag": "0004_conductor_unico",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1789913899712,
+      "tag": "0005_viajes_y_lecturas",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1789915495126,
+      "tag": "0006_ruta_nombre_normalizado",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1790309172565,
+      "tag": "0007_control_flota",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1790500000000,
+      "tag": "0008_sincronizacion",
+      "breakpoints": true
     }
   ]
 }

@@ -6,7 +6,10 @@ const v = {
   validarRuc: (r: string) => ["20131312955", "20606433094", "20602712592"].includes(r),
   obtenerUbigeo: (c: string) => (["150115", "250101"].includes(c) ? { codigo: c } : undefined),
 };
-const texto = readFileSync(new URL("./fixtures/guia-desordenada.txt", import.meta.url), "utf8");
+// El fixture vive en el repositorio; sin `.gitattributes` normalizando el fin de línea, un
+// checkout en Windows lo deja en CRLF y los `.replace("...\n...", ...)` de abajo (con "\n"
+// literal) dejan de encontrar nada. Se normaliza aquí para que la prueba no dependa del SO.
+const texto = readFileSync(new URL("./fixtures/guia-desordenada.txt", import.meta.url), "utf8").replace(/\r\n/g, "\n");
 
 describe("leerGuiaDeTexto", () => {
   it("extrae todos los campos de una guía desordenada", () => {

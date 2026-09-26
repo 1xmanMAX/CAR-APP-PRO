@@ -1,3 +1,4 @@
+import { textos } from "../src/textos";
 import { describe, expect, it } from "vitest";
 import { contarAuditoria, usuarioPorTelegram } from "@sunatapp/core";
 import { generarCodigoRegistro } from "../src/registro";
@@ -7,7 +8,7 @@ describe("registro del dueño", () => {
   it("el primero que envía el código queda como dueño y el código deja de valer", async () => {
     const a = await crearArnes({ sinDueno: true, codigoRegistro: "482913" });
     await a.texto("482913", 555);
-    expect(a.textosEnviados().at(-1)).toBe("✅ Listo. Solo te atenderé a ti.");
+    expect(a.textosEnviados().at(-1)).toBe(textos.registroOk);
     expect(await usuarioPorTelegram(a.ctx, 555)).not.toBeNull();
     await a.texto("482913", 777);
     expect(a.textosEnviados()).toHaveLength(1);

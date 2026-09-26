@@ -184,11 +184,17 @@ class MainActivity : AppCompatActivity() {
         Thread {
             var visto = false
             var sinProceso = 0
-            while (!Nodo.listo() && System.currentTimeMillis() - inicio < 180_000) {
-                // Si el proceso de Node se cerró (varios vistazos seguidos), falló. Antes de verlo
-                // vivo por primera vez se le dan 20 s: en celulares lentos tarda en crearse.
+            var avisado = false
+            // Mientras el proceso de Node siga vivo se espera (la primera vez, en un celular lento,
+            // copiar el programa y crear la base puede tardar); solo se da por fallido si se cierra.
+            while (!Nodo.listo() && System.currentTimeMillis() - inicio < 600_000) {
+                // Antes de verlo vivo por primera vez se le dan 20 s: en celulares lentos tarda en crearse.
                 if (Nodo.procesoVivo(this)) { visto = true; sinProceso = 0 } else sinProceso++
                 if (sinProceso >= 8 && (visto || System.currentTimeMillis() - inicio > 20_000)) break
+                if (!avisado && System.currentTimeMillis() - inicio > 45_000) {
+                    avisado = true
+                    principal.post { findViewById<TextView>(R.id.error_texto).text = getString(R.string.abriendo_lento) }
+                }
                 Thread.sleep(250)
             }
             val ok = Nodo.listo()

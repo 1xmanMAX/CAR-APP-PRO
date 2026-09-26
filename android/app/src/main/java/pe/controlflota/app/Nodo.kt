@@ -7,7 +7,6 @@ import android.content.Intent
 import android.net.wifi.WifiManager
 import android.os.IBinder
 import android.os.Build
-import android.system.Os
 import android.util.Log
 import java.io.File
 import java.net.HttpURLConnection
@@ -34,9 +33,11 @@ object Nodo {
     private const val ARCHIVO_FALLO = "error-al-arrancar.txt"
     @Volatile private var arrancado = false
 
-    @JvmStatic private external fun arrancar(argumentos: Array<String>): Int
-
-    /** Arranca Node una sola vez por proceso (Node no puede reiniciarse dentro del mismo proceso). */
+    /**
+     * Arranca Node una sola vez por proceso. Node (el de Termux, con ICU completo: fechas, monedas
+     * y textos igual que en la PC) es un ejecutable que Android instala como `libnode.so` en la
+     * carpeta de librerías de la app, el único lugar desde donde una app puede ejecutar programas.
+     */
     @Synchronized
     fun iniciar(ctx: Context) {
         if (arrancado) return
@@ -48,16 +49,29 @@ object Nodo {
                 val datos = File(app.filesDir, "datos").apply { mkdirs() }
                 // Lo escribe iniciar.mjs si el arranque falla; se borra el de una vez anterior.
                 File(datos, ARCHIVO_FALLO).delete()
-                Os.setenv("CF_DATOS", datos.absolutePath, true)
-                Os.setenv("CF_PUERTO", PUERTO.toString(), true)
-                Os.setenv("CF_NOMBRE_DISPOSITIVO", nombreDelEquipo(), true)
-                Os.setenv("HOME", app.filesDir.absolutePath, true)
-                Os.setenv("TMPDIR", app.cacheDir.absolutePath, true)
-                Os.setenv("NODE_ENV", "production", true)
-                System.loadLibrary("node")
-                System.loadLibrary("puente")
+                val libs = app.applicationInfo.nativeLibraryDir
+                val proceso = ProcessBuilder(File(libs, "libnode.so").absolutePath, File(dir, "iniciar.mjs").absolutePath)
+                    .directory(dir)
+                    .redirectErrorStream(true)
+                    .apply {
+                        environment().apply {
+                            put("LD_LIBRARY_PATH", libs)
+                            put("CF_DATOS", datos.absolutePath)
+                            put("CF_PUERTO", PUERTO.toString())
+                            put("CF_NOMBRE_DISPOSITIVO", nombreDelEquipo())
+                            put("HOME", app.filesDir.absolutePath)
+                            put("TMPDIR", app.cacheDir.absolutePath)
+                            put("NODE_ENV", "production")
+                            // OpenSSL de Termux buscaría su configuración y certificados en rutas de
+                            // Termux: se le dan los certificados raíz de Node, que van en el paquete.
+                            put("SSL_CERT_FILE", File(dir, "certificados.pem").absolutePath)
+                            put("OPENSSL_CONF", File(dir, "openssl.cnf").absolutePath)
+                        }
+                    }
                 Log.i(TAG, "Arrancando Node en ${dir.absolutePath}")
-                val codigo = arrancar(arrayOf("node", File(dir, "iniciar.mjs").absolutePath))
+                val p = proceso.start()
+                p.inputStream.bufferedReader().forEachLine { Log.i("ControlFlotaNode", it) }
+                val codigo = p.waitFor()
                 Log.e(TAG, "Node terminó con código $codigo")
             } catch (t: Throwable) {
                 Log.e(TAG, "No se pudo arrancar Node", t)
@@ -98,7 +112,7 @@ object Nodo {
             // Una app puede leer su propio registro (incluye el del proceso :nodo).
             val p = Runtime.getRuntime().exec(arrayOf("logcat", "-d", "-t", "400", "-v", "brief"))
             val lineas = p.inputStream.bufferedReader().readLines()
-                .filter { l -> listOf("ControlFlota", "AndroidRuntime", "libc", "DEBUG", "linker").any { l.contains(it) } }
+                .filter { l -> listOf("ControlFlota", "AndroidRuntime", "libc", "DEBUG", "linker", "CANNOT LINK").any { l.contains(it) } }
                 .takeLast(40)
             if (lineas.isNotEmpty()) partes += lineas.joinToString("\n")
         } catch (_: Exception) {}

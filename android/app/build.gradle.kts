@@ -11,16 +11,15 @@ val codigoVersion: Int = (System.getenv("VERSION_CODE") ?: "1").toInt()
 //   gradle assembleRelease -Pabis=x86_64
 val abis: List<String> = ((findProperty("abis") as String?) ?: "arm64-v8a,armeabi-v7a").split(",").map { it.trim() }
 
-// Node.js (libnode) y el programa empaquetado los deja aquí `node scripts/preparar-android.mjs`.
+// Node.js (de Termux) y el programa empaquetado los deja aquí `node scripts/preparar-android.mjs`.
 val movil = file("movil")
-if (!file("movil/libnode/include/node/node.h").exists() || !file("movil/assets/app/iniciar.mjs").exists()) {
+if (abis.any { !file("movil/jniLibs/$it/libnode.so").exists() } || !file("movil/assets/app/iniciar.mjs").exists()) {
     logger.warn("Falta android/app/movil: ejecuta primero «node scripts/preparar-android.mjs» en la raíz del repo.")
 }
 
 android {
     namespace = "pe.controlflota.app"
     compileSdk = 35
-    ndkVersion = "27.2.12479018"
 
     defaultConfig {
         applicationId = "pe.controlflota.app"
@@ -29,18 +28,10 @@ android {
         versionCode = codigoVersion
         versionName = versionWeb
         ndk { abiFilters += abis }
-        externalNativeBuild { cmake { arguments += "-DANDROID_STL=c++_shared" } }
-    }
-
-    externalNativeBuild {
-        cmake {
-            path = file("src/main/cpp/CMakeLists.txt")
-            version = "3.22.1"
-        }
     }
 
     sourceSets["main"].apply {
-        jniLibs.srcDir(File(movil, "libnode/bin"))
+        jniLibs.srcDir(File(movil, "jniLibs"))
         assets.srcDir(File(movil, "assets"))
     }
 
@@ -50,7 +41,8 @@ android {
         ignoreAssetsPattern = "!.svn:!.git:!.ds_store:!*.scc:!CVS:!thumbs.db:!picasa.ini:!*~"
     }
 
-    // libnode.so pesa ~60 MB por procesador: comprimida en el APK baja mucho la descarga.
+    // Node + ICU pesan ~90 MB por procesador: comprimidos en el APK bajan mucho la descarga, y
+    // así Android los extrae a la carpeta de librerías, desde donde se puede ejecutar Node.
     packaging { jniLibs { useLegacyPackaging = true } }
 
     signingConfigs {

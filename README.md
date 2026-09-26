@@ -62,11 +62,12 @@ reiniciar.
 
 ## App de Android (sin servidor)
 
-`android/` es una app Kotlin con Node.js dentro (libnode de nodejs-mobile 18) que corre la misma
+`android/` es una app Kotlin con Node.js dentro (Node LTS de Termux, con ICU completo: fechas,
+monedas y textos iguales que en la PC; va como `libnode.so` y la app lo ejecuta) que corre la misma
 app web en `127.0.0.1:3939`:
 
 ```bash
-node scripts/preparar-android.mjs      # descarga libnode y empaqueta la app (scripts/empaquetar-movil.mjs)
+node scripts/preparar-android.mjs      # baja Node de Termux (necesita ar, tar y readelf) y empaqueta la app
 cd android && gradle assembleRelease    # -Pabis=x86_64 para el emulador
 ```
 

@@ -51,16 +51,18 @@ jobs:
           gradle-version: "8.14.3"
 
       - name: Node.js para Android y app empaquetada
-        run: node scripts/preparar-android.mjs
+        run: node scripts/preparar-android.mjs arm64-v8a,armeabi-v7a
 
       - name: App de Android (APK)
         working-directory: android
         env:
           VERSION_CODE: ${{ github.run_number }}
         run: |
-          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;27.2.12479018" "cmake;3.22.1" > /dev/null
-          gradle --no-daemon assembleRelease
+          # Uno por procesador para no bajar el doble: 64 bits (todos los celulares actuales) y 32 bits (antiguos).
+          gradle --no-daemon assembleRelease -Pabis=arm64-v8a
           cp app/build/outputs/apk/release/app-release.apk "../ControlFlota-${{ steps.zip.outputs.etiqueta }}.apk"
+          gradle --no-daemon assembleRelease -Pabis=armeabi-v7a
+          cp app/build/outputs/apk/release/app-release.apk "../ControlFlota-${{ steps.zip.outputs.etiqueta }}-32bits.apk"
           ls -la ../*.apk
 
       - name: Publicar prerelease
@@ -75,6 +77,7 @@ jobs:
           files: |
             ${{ steps.zip.outputs.archivo }}
             ControlFlota-${{ steps.zip.outputs.etiqueta }}.apk
+            ControlFlota-${{ steps.zip.outputs.etiqueta }}-32bits.apk
           body: |
             Versión de prueba para la PC.
 
@@ -84,7 +87,8 @@ jobs:
 
             Detalles en `LEEME-PRIMERO.txt` dentro del ZIP.
 
-            **Android:** descarga el `.apk` en el celular, ábrelo y permite "instalar apps de esta fuente".
+            **Android:** descarga `ControlFlota-….apk` en el celular, ábrelo y permite "instalar apps de esta fuente".
+            (Solo para celulares antiguos de 32 bits: el que termina en `-32bits.apk`.)
             La app funciona sola en el celular, sin servidor ni internet: tiene su propia copia de los datos.
 
             **Sincronizar (sin servidor, por el Wi-Fi):** en un dispositivo abre **Sincronizar → Crear un grupo**.

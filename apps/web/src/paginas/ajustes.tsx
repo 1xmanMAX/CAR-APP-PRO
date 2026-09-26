@@ -1,6 +1,6 @@
 /** @jsxRuntime automatic @jsxImportSource hono/jsx */
 import {
-  ErrorNegocio, guardarTipoParte, guardarUsuario, listarTiposParte, listarUsuarios, NOMBRE_ROL, ZONAS, type RolUsuario, type ZonaModelo,
+  ErrorNegocio, guardarEmpresa, guardarTipoParte, guardarUsuario, listarTiposParte, listarUsuarios, NOMBRE_ROL, ZONAS, type RolUsuario, type ZonaModelo,
 } from "@sunatapp/core";
 import { accion, empresaActual, formulario, pagina, type App, type C, type Deps } from "../base";
 import { enteroONull } from "./flota";
@@ -61,17 +61,23 @@ async function vista(c: C, d: Deps) {
           </details>
           <span class="muted" style="font-size:11px">Dueño: ve y edita todo. Contador: viajes, facturas, finanzas y rentabilidad. Taller: trailer 3D, flota, inventario y reparaciones. Chofer: solo Telegram.</span>
         </Panel>
-        <Panel titulo="EMPRESA">
-          {emp ? (
-            <div class="filas" style="font-size:12px">
-              <div><span class="lbl">RAZÓN SOCIAL</span><br /><b>{emp.razonSocial}</b></div>
-              <div><span class="lbl">RUC</span><br />{emp.ruc}</div>
-              <div><span class="lbl">DIRECCIÓN</span><br />{emp.direccion}</div>
-              <div><span class="lbl">REGISTRO MTC</span><br />{emp.registroMtc}</div>
-              <div><span class="lbl">SERIES</span><br />Guía {emp.serieGre} · Factura {emp.serieFactura}</div>
-              <div><span class="lbl">MODO SUNAT</span><br />{d.ctx.simulado ? "SIMULADO / BETA (sin validez tributaria)" : "REAL"}</div>
+        <Panel titulo="EMPRESA" id="empresa" der={emp ? null : <span class="lbl">SE PIDE AL EMITIR GUÍAS Y FACTURAS</span>}>
+          {emp ? null : <span class="muted" style="font-size:12px">Todavía no hace falta: complétalo cuando vayas a emitir tu primera guía o factura. Queda guardado aquí.</span>}
+          <form method="post" action="/ajustes/empresa" class="filas">
+            <label class="campo"><span>RUC</span><input name="ruc" required inputmode="numeric" maxlength={11} pattern="\d{11}" value={emp?.ruc ?? ""} /></label>
+            <label class="campo"><span>Razón social</span><input name="razonSocial" required value={emp?.razonSocial ?? ""} /></label>
+            <label class="campo"><span>Nombre comercial (opcional)</span><input name="nombreComercial" value={emp?.nombreComercial ?? ""} /></label>
+            <label class="campo"><span>Dirección fiscal</span><input name="direccion" required value={emp?.direccion ?? ""} /></label>
+            <div class="linea">
+              <label class="campo" style="flex:1"><span>Ubigeo (6 dígitos)</span><input name="ubigeo" required inputmode="numeric" maxlength={6} pattern="\d{6}" placeholder="150101" value={emp?.ubigeo ?? ""} /></label>
+              <label class="campo" style="flex:1"><span>Registro MTC</span><input name="registroMtc" required value={emp?.registroMtc ?? ""} /></label>
             </div>
-          ) : <span class="muted">Carga los datos de la empresa con <code>pnpm sembrar</code>.</span>}
+            <label class="campo"><span>Cuenta de detracciones (Banco de la Nación, opcional)</span><input name="cuentaDetraccion" value={emp?.cuentaDetraccionBn ?? ""} /></label>
+            <button class="btn primario chico" type="submit">{emp ? "GUARDAR CAMBIOS" : "GUARDAR EMPRESA"}</button>
+          </form>
+          {emp ? (
+            <span class="muted" style="font-size:11px">Series: guía {emp.serieGre} · factura {emp.serieFactura} · SUNAT {d.ctx.simulado ? "simulado / beta (sin validez tributaria)" : "real"}</span>
+          ) : null}
         </Panel>
       </div>
       <Panel titulo="CATÁLOGO DE PARTES · VIDA ÚTIL POR DEFECTO" der={<span class="lbl">MANDA EL CONTADOR QUE SE CUMPLA PRIMERO · VACÍO = NO APLICA</span>}>
@@ -122,6 +128,18 @@ export function rutasAjustes(app: App, d: Deps): void {
       return id === undefined ? "Usuario agregado" : "Usuario actualizado";
     });
   };
+  app.post("/ajustes/empresa", async (c) => {
+    const f = await formulario(c);
+    return accion(c, "/ajustes", async () => {
+      const { creada } = await guardarEmpresa(d.ctx, {
+        ruc: f.ruc ?? "", razonSocial: f.razonSocial ?? "", nombreComercial: f.nombreComercial, direccion: f.direccion ?? "",
+        ubigeo: f.ubigeo ?? "", registroMtc: f.registroMtc ?? "", cuentaDetraccionBn: f.cuentaDetraccion,
+      }, c.get("usuario").id);
+      // Con la empresa ya cargada, SUNAT (y su certificado de prueba) toman el RUC de verdad.
+      if (creada) await d.servicios?.alConfigurar().catch((e: unknown) => d.ctx.log?.("error", "no se pudo reconfigurar tras guardar la empresa", e));
+      return creada ? "Empresa guardada" : "Datos de la empresa actualizados";
+    });
+  });
   app.post("/ajustes/usuario", (c) => guardar(c));
   app.post("/ajustes/usuario/:id", (c) => guardar(c, Number(c.req.param("id"))));
   const guardarParte = async (c: C, id?: number) => {

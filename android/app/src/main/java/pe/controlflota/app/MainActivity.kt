@@ -190,12 +190,13 @@ class MainActivity : AppCompatActivity() {
             while (!Nodo.listo() && System.currentTimeMillis() - inicio < 600_000) {
                 // Antes de verlo vivo por primera vez se le dan 20 s: en celulares lentos tarda en crearse.
                 if (Nodo.procesoVivo(this)) { visto = true; sinProceso = 0 } else sinProceso++
-                if (sinProceso >= 8 && (visto || System.currentTimeMillis() - inicio > 20_000)) break
+                if (sinProceso >= 20 && (visto || System.currentTimeMillis() - inicio > 20_000)) break
                 if (!avisado && System.currentTimeMillis() - inicio > 45_000) {
                     avisado = true
                     principal.post { findViewById<TextView>(R.id.error_texto).text = getString(R.string.abriendo_lento) }
                 }
-                Thread.sleep(250)
+                // Se pregunta seguido: apenas responde, se abre (cada espera de más se nota al entrar).
+                Thread.sleep(100)
             }
             val ok = Nodo.listo()
             val detalle = if (ok) "" else Nodo.detalleDelFallo(this)

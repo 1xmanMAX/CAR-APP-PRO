@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { buscarUnidad, crearEnlaceWeb, guardarUsuario, listarEventos, listarViajesFlota, partesDeUnidad, instalarParte, listarTiposParte, type Contexto } from "@sunatapp/core";
+import {
+  buscarUnidad, crearEnlaceWeb, guardarUsuario, listarEventos, listarUsuarios, listarViajesFlota, obtenerEmpresa, partesDeUnidad, instalarParte, listarTiposParte,
+  type Contexto,
+} from "@sunatapp/core";
+import { crearDb } from "../../../packages/db/src/index";
 import { crearContextoPrueba } from "../../../packages/core/test/helpers";
 import { crearWeb } from "../src/app";
 
@@ -131,5 +135,64 @@ describe("web", () => {
       expect(pdf.headers.get("content-type")).toBe("application/pdf");
       expect(Buffer.from(await pdf.arrayBuffer()).subarray(0, 4).toString()).toBe("%PDF");
     });
+  });
+
+  describe("entrada directa (en desarrollo)", () => {
+    const LOCAL = { incoming: { socket: { remoteAddress: "127.0.0.1" } } };
+    const desde = (ruta: string, env: object, host = "127.0.0.1:3939", cookie?: string) =>
+      app.request(ruta, { headers: { host, ...(cookie ? { cookie } : {}) } }, env);
+
+    beforeEach(() => {
+      app = crearWeb(ctx, { avisar: async (t) => void avisos.push(t), entradaDirecta: true });
+    });
+
+    it("desde el mismo equipo entra como dueño sin formulario", async () => {
+      const r = await desde("/", LOCAL);
+      expect(r.status).toBe(200);
+      const cookie = r.headers.get("set-cookie")!.split(";")[0]!;
+      expect((await desde("/ajustes", LOCAL, undefined, cookie)).status).toBe(200);
+      // Ni configurar ni entrar piden datos: llevan directo al inicio.
+      for (const ruta of ["/configurar", "/entrar"]) expect((await desde(ruta, LOCAL)).headers.get("location")).toBe("/");
+    });
+
+    it("en un dispositivo vacío crea al dueño «Jefe» con el catálogo de partes", async () => {
+      const vacio = await crearDb({ tipo: "pglite" });
+      const ctxVacio = { ...ctx, db: vacio.db } as Contexto;
+      app = crearWeb(ctxVacio, { entradaDirecta: true });
+      try {
+        expect((await desde("/", LOCAL)).status).toBe(200);
+        expect((await desde("/", LOCAL)).status).toBe(200);
+        const usuarios = await listarUsuarios(ctxVacio);
+        expect(usuarios.map((u) => [u.nombre, u.rol])).toEqual([["Jefe", "dueno"]]);
+        expect((await listarTiposParte(ctxVacio)).length).toBeGreaterThan(0);
+      } finally {
+        await vacio.cerrar();
+      }
+    });
+
+    it("desde otro equipo, o con un Host de fuera, sigue pidiendo entrar", async () => {
+      expect((await desde("/", { incoming: { socket: { remoteAddress: "192.168.1.30" } } }, "192.168.1.10:3939")).headers.get("location")).toBe("/configurar");
+      expect((await desde("/", LOCAL, "malo.example.com")).headers.get("location")).toBe("/configurar");
+      expect((await app.request("/")).headers.get("location")).toBe("/configurar");
+    });
+
+    it("apagada, pide la configuración inicial como siempre", async () => {
+      app = crearWeb(ctx, { entradaDirecta: false });
+      expect((await desde("/", LOCAL)).headers.get("location")).toBe("/configurar");
+    });
+  });
+
+  it("los datos de la empresa se completan y corrigen desde Ajustes", async () => {
+    await guardarUsuario(ctx, { id: 1, nombre: "Dueño", email: "dueno@demo.pe", rol: "dueno", clave: "clave-segura" });
+    const cookie = await entrar();
+    let r = await post(cookie, "/ajustes/empresa", { ruc: "123", razonSocial: "X", direccion: "Y", ubigeo: "150101", registroMtc: "M" });
+    expect(aviso(r)).toContain("RUC no es válido");
+    r = await post(cookie, "/ajustes/empresa", {
+      ruc: "20606433094", razonSocial: "TRANSPORTES NUEVOS SAC", direccion: "AV. NUEVA 1", ubigeo: "150101", registroMtc: "MTC-9", cuentaDetraccion: "",
+    });
+    expect(aviso(r)).toContain("ok=");
+    const emp = await obtenerEmpresa(ctx);
+    expect([emp?.razonSocial, emp?.registroMtc, emp?.cuentaDetraccionBn]).toEqual(["TRANSPORTES NUEVOS SAC", "MTC-9", null]);
+    expect(await (await app.request("/ajustes", { headers: { cookie } })).text()).toContain("TRANSPORTES NUEVOS SAC");
   });
 });

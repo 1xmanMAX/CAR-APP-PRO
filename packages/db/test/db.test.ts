@@ -93,3 +93,32 @@ describe("viajes, gastos y lecturas", () => {
     })).rejects.toThrow();
   });
 });
+
+describe("base inicial (CF_BASE_INICIAL)", () => {
+  it("una carpeta nueva se crea copiando la base ya migrada, y luego se reabre tal cual", async () => {
+    const { PGlite } = await import("@electric-sql/pglite");
+    const { mkdtempSync, writeFileSync } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const dir = mkdtempSync(join(tmpdir(), "base-inicial-"));
+    // La plantilla: la misma base en memoria de la prueba, migrada y con una marca.
+    await db.insert(empresa).values({ ruc: "20606433094", razonSocial: "PLANTILLA", direccion: "X", ubigeo: "150101", registroMtc: "M" });
+    const pg = (db as unknown as { $client: InstanceType<typeof PGlite> }).$client;
+    writeFileSync(join(dir, "base.tgz"), Buffer.from(await (await pg.dumpDataDir("gzip")).arrayBuffer()));
+    const antes = process.env.CF_BASE_INICIAL;
+    process.env.CF_BASE_INICIAL = join(dir, "base.tgz");
+    try {
+      const a = await crearDb({ tipo: "pglite", directorio: join(dir, "datos") });
+      expect((await a.db.select().from(empresa)).map((e) => e.razonSocial)).toEqual(["PLANTILLA"]);
+      await a.db.update(empresa).set({ razonSocial: "PROPIA" });
+      await a.cerrar();
+      // Ya existe: no se vuelve a copiar la plantilla encima.
+      const b = await crearDb({ tipo: "pglite", directorio: join(dir, "datos") });
+      expect((await b.db.select().from(empresa)).map((e) => e.razonSocial)).toEqual(["PROPIA"]);
+      await b.cerrar();
+    } finally {
+      if (antes === undefined) delete process.env.CF_BASE_INICIAL;
+      else process.env.CF_BASE_INICIAL = antes;
+    }
+  });
+});

@@ -1,6 +1,6 @@
 import { contraparte, empresa, eq, facturaGuia, factura, guiaTransportista } from "@sunatapp/db";
 import { calcularMontosFactura, type MontosFactura } from "../dominio/montos";
-import { ErrorNegocio } from "../errores";
+import { ErrorNegocio, FALTA_EMPRESA } from "../errores";
 import { registrarAuditoria } from "../infra/auditoria";
 import type { Contexto } from "../infra/contexto";
 
@@ -23,7 +23,7 @@ export async function prepararFactura(ctx: Contexto, e: EntradaFactura, usuarioI
     const [ya] = await tx.select().from(facturaGuia).where(eq(facturaGuia.guiaId, e.guiaId));
     if (ya) throw new ErrorNegocio(`La guía ${guia.serie}-${guia.numero} ya tiene factura`);
     const [emp] = await tx.select().from(empresa).limit(1);
-    if (!emp) throw new ErrorNegocio("Falta configurar la empresa");
+    if (!emp) throw new ErrorNegocio(FALTA_EMPRESA);
     const clienteId = e.clienteId ?? guia.remitenteId;
     const [cliente] = await tx.select().from(contraparte).where(eq(contraparte.id, clienteId));
     if (!cliente) throw new ErrorNegocio("El cliente no existe");

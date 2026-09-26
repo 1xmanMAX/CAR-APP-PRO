@@ -55,10 +55,16 @@ junta los cambios entre dispositivos del mismo grupo por la red local (diseño p
 
 `apps/bot/src/arranque.ts` levanta todo en ambos: web, sincronización, tareas de fondo (reintentos
 SUNAT, alertas, cola de avisos, aviso diario) y el bot de Telegram si hay token. `pnpm app` lo usa
-en la PC (`main.ts`) y la app de Android en el celular (`movil.ts`). La configuración inicial
-(empresa, unidad, chofer, dueño) se hace en `/configurar` y los ajustes del dispositivo (bot y
-SUNAT) en **Ajustes → Este dispositivo**, que escribe el `.env` de ese dispositivo y lo aplica sin
-reiniciar.
+en la PC (`main.ts`) y la app de Android en el celular (`movil.ts`). Los ajustes del dispositivo
+(bot y SUNAT) van en **Ajustes → Este dispositivo**, que escribe el `.env` de ese dispositivo y lo
+aplica sin reiniciar.
+
+**Entrada directa (mientras la app está en desarrollo, `ENTRADA_DIRECTA=1` por defecto):** quien
+abre la app en el mismo equipo (la app de Android, o `http://localhost` en la PC) entra como dueño
+sin formulario ni contraseña; en un dispositivo vacío se crea el dueño «Jefe». Los datos de la
+empresa se piden recién al emitir la primera guía o factura y se guardan en **Ajustes → Empresa**.
+Desde otro equipo de la red se sigue pidiendo correo y contraseña. Con `ENTRADA_DIRECTA=0` vuelve la
+configuración inicial completa (`/configurar`) y el login.
 
 ## App de Android (sin servidor)
 

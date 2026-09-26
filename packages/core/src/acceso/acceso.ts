@@ -1,6 +1,7 @@
 import { createHash, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { and, eq, enlaceWeb, gt, isNull, sesionWeb, sql, usuario, type RolUsuario } from "@sunatapp/db";
 import { ErrorNegocio } from "../errores";
+import { sembrarCatalogoPartes } from "../flota/catalogo";
 import { registrarAuditoria } from "../infra/auditoria";
 import type { Contexto } from "../infra/contexto";
 
@@ -139,4 +140,19 @@ export async function necesitaConfiguracionInicial(ctx: Contexto): Promise<boole
 export async function primerUsuarioId(ctx: Contexto): Promise<number | null> {
   const [f] = await ctx.db.select({ id: usuario.id }).from(usuario).orderBy(usuario.id).limit(1);
   return f?.id ?? null;
+}
+
+/**
+ * **Entrada directa** (mientras la app está en desarrollo): el dueño entra sin formulario ni
+ * contraseña. Devuelve el primer dueño activo y, si el dispositivo está vacío, crea uno («Jefe»)
+ * con el catálogo de partes; el resto de datos (empresa, correo…) se piden cuando hacen falta.
+ */
+export async function duenoParaEntradaDirecta(ctx: Contexto): Promise<{ usuario: UsuarioWeb; creado: boolean }> {
+  const campos = { id: usuario.id, nombre: usuario.nombre, email: usuario.email, rol: usuario.rol, telegramId: usuario.telegramId };
+  const [f] = await ctx.db.select(campos).from(usuario).where(and(eq(usuario.rol, "dueno"), eq(usuario.activo, true))).orderBy(usuario.id).limit(1);
+  if (f) return { usuario: f, creado: false };
+  const [nuevo] = await ctx.db.insert(usuario).values({ nombre: "Jefe", rol: "dueno" }).returning(campos);
+  await sembrarCatalogoPartes(ctx.db);
+  await registrarAuditoria(ctx.db, { usuarioId: nuevo!.id, accion: "usuario_creado", entidad: "usuario", entidadId: nuevo!.id, detalle: { entradaDirecta: true } });
+  return { usuario: nuevo!, creado: true };
 }

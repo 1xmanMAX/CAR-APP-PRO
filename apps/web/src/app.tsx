@@ -2,11 +2,11 @@
 import { getCookie, deleteCookie, setCookie } from "hono/cookie";
 import { Hono } from "hono";
 import {
-  canjearEnlaceWeb, cerrarSesion, crearSesion, encolarAviso, entrarConClave, guardarUsuario, necesitaConfiguracionInicial,
-  ErrorNegocio, obtenerEmpresa, primerUsuarioId, sembrarDatosIniciales, validarRuc, puedeEditar, puedeVer, usuarioDeSesion, type Contexto, type Seccion,
+  canjearEnlaceWeb, cerrarSesion, crearSesion, duenoParaEntradaDirecta, encolarAviso, entrarConClave, guardarUsuario, necesitaConfiguracionInicial,
+  ErrorNegocio, obtenerEmpresa, primerUsuarioId, sembrarDatosIniciales, validarRuc, puedeEditar, puedeVer, usuarioDeSesion, type Contexto, type Seccion, type UsuarioWeb,
 } from "@sunatapp/core";
 import {
-  COOKIE, datosCabecera, formulario, mensajeError, PUBLICO, servirArchivo, THREE,
+  COOKIE, datosCabecera, esDelMismoEquipo, formulario, mensajeError, PUBLICO, servirArchivo, THREE,
   type App, type C, type Deps, type OpcionesWeb, type Variables,
 } from "./base";
 import { PaginaSimple } from "./ui";
@@ -101,6 +101,19 @@ export function crearWeb(ctx: Contexto, opciones: OpcionesWeb = {}): App {
     setCookie(c, COOKIE, token, { httpOnly: true, sameSite: "Lax", secure: opciones.cookieSegura ?? false, path: "/", expires: expira });
   };
 
+  /**
+   * Entrada directa (en desarrollo): desde este mismo equipo se entra como dueño sin formulario.
+   * Devuelve el usuario con la sesión ya fijada, o null si no aplica.
+   */
+  const entrarDirecto = async (c: C): Promise<UsuarioWeb | null> => {
+    if (!opciones.entradaDirecta || !esDelMismoEquipo(c)) return null;
+    const { usuario, creado } = await duenoParaEntradaDirecta(ctx);
+    await fijarSesion(c, usuario.id);
+    // Con un usuario ya puede arrancar el bot (si el dispositivo tiene token).
+    if (creado) await deps.servicios?.alConfigurar().catch((e: unknown) => ctx.log?.("error", "no se pudo arrancar el bot tras la entrada directa", e));
+    return usuario;
+  };
+
   /** Campos de la configuración inicial de un dispositivo sin datos (lo que en la PC hacía `pnpm sembrar`). */
   const CamposEmpresa = (p: { f: Record<string, string> }) => {
     const v = (k: string) => p.f[k] ?? "";
@@ -162,6 +175,7 @@ export function crearWeb(ctx: Contexto, opciones: OpcionesWeb = {}): App {
   );
 
   app.get("/entrar", async (c) => {
+    if (await entrarDirecto(c as C)) return c.redirect("/");
     if (await necesitaConfiguracionInicial(ctx)) return c.redirect("/configurar");
     return c.html("<!doctype html>" + vistaEntrar(c.req.query("error")).toString());
   });
@@ -185,6 +199,7 @@ export function crearWeb(ctx: Contexto, opciones: OpcionesWeb = {}): App {
     }
   });
   app.get("/configurar", async (c) => {
+    if (await entrarDirecto(c as C)) return c.redirect("/");
     if (!(await necesitaConfiguracionInicial(ctx))) return c.redirect("/entrar");
     return c.html("<!doctype html>" + vistaEntrar(undefined, true, !(await obtenerEmpresa(ctx))).toString());
   });
@@ -231,7 +246,7 @@ export function crearWeb(ctx: Contexto, opciones: OpcionesWeb = {}): App {
 
   // Sesión y permisos por rol.
   app.use("*", async (c, next) => {
-    const u = await usuarioDeSesion(ctx, getCookie(c, COOKIE));
+    const u = (await usuarioDeSesion(ctx, getCookie(c, COOKIE))) ?? (await entrarDirecto(c as C));
     if (!u) {
       if (c.req.path.startsWith("/api/")) return c.json({ error: "sin sesión" }, 401);
       return c.redirect((await necesitaConfiguracionInicial(ctx)) ? "/configurar" : "/entrar");

@@ -8,11 +8,13 @@ import type { ConfigWeb } from "./config";
  * (escucha en el Wi-Fi y se anuncia a los del grupo). Devuelve la función que apaga las dos.
  */
 export function iniciarServidorWeb(
-  ctx: Contexto, cfg: ConfigWeb, o: Omit<OpcionesWeb, "urlPublica" | "cookieSegura" | "red"> = {}, alIniciar?: (puerto: number) => void,
+  ctx: Contexto, cfg: ConfigWeb, o: Omit<OpcionesWeb, "urlPublica" | "cookieSegura" | "red" | "entradaDirecta"> = {}, alIniciar?: (puerto: number) => void,
 ): () => void {
   const red = new RedSinc(ctx, (m, e) => ctx.log?.("error", m, e));
   void red.iniciar().catch((e: unknown) => ctx.log?.("error", "no se pudo iniciar la sincronización", e));
-  const app = crearWeb(ctx, { ...o, red, urlPublica: cfg.urlPublica, cookieSegura: cfg.urlPublica?.startsWith("https://") ?? false });
+  const app = crearWeb(ctx, {
+    ...o, red, urlPublica: cfg.urlPublica, cookieSegura: cfg.urlPublica?.startsWith("https://") ?? false, entradaDirecta: cfg.entradaDirecta,
+  });
   const servidor = serve({ fetch: app.fetch, hostname: cfg.host, port: cfg.puerto }, (i) => alIniciar?.(i.port));
   return () => {
     red.detener();

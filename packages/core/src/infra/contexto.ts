@@ -39,22 +39,37 @@ function esArchivoNoEncontrado(error: unknown): boolean {
   return typeof error === "object" && error !== null && "code" in error && (error as { code?: unknown }).code === "ENOENT";
 }
 
-async function obtenerCertificado(config: Config, almacen: Almacen, db: Db): Promise<Certificado> {
-  if (config.sunatModo === "real") return cargarPfx(await readFile(config.certPath!), config.certPassword!);
+/**
+ * El certificado con que se firma. El real se valida al configurar; el de prueba se lee o se
+ * genera recién al firmar el primer documento: abrirlo (y más aún crearlo, con una clave RSA) es
+ * de lo que más demora el arranque en un celular, y la mayoría de veces no se usa.
+ */
+async function obtenerCertificado(config: Config, almacen: Almacen, db: Db): Promise<() => Certificado> {
+  if (config.sunatModo === "real") {
+    const real = cargarPfx(await readFile(config.certPath!), config.certPassword!);
+    return () => real;
+  }
   const [emp] = await db.select().from(empresa).limit(1);
   // Sin empresa todavía (app recién instalada) el de prueba lleva un RUC de relleno: se guarda
   // aparte para no seguir usándolo cuando ya se cargaron los datos de la empresa.
   const archivo = emp ? PFX_PRUEBA : PFX_PRUEBA_SIN_EMPRESA;
-  let pfxExistente: Buffer;
+  let pfx: Buffer | null = null;
   try {
-    pfxExistente = await almacen.leer(archivo);
+    pfx = await almacen.leer(archivo);
   } catch (error) {
     if (!esArchivoNoEncontrado(error)) throw error;
-    const pfx = generarCertificadoPrueba({ ruc: emp?.ruc ?? "20000000001", razonSocial: emp?.razonSocial ?? "EMPRESA DE PRUEBA", password: CLAVE_PRUEBA });
-    await almacen.guardar(archivo, pfx);
-    return cargarPfx(pfx, CLAVE_PRUEBA);
   }
-  return cargarPfx(pfxExistente, CLAVE_PRUEBA);
+  let cargado: Certificado | null = null;
+  return () => {
+    if (cargado) return cargado;
+    if (!pfx) {
+      pfx = generarCertificadoPrueba({ ruc: emp?.ruc ?? "20000000001", razonSocial: emp?.razonSocial ?? "EMPRESA DE PRUEBA", password: CLAVE_PRUEBA });
+      // Si no se llega a guardar, la próxima vez se genera otro: es solo de prueba.
+      void almacen.guardar(archivo, pfx).catch(() => {});
+    }
+    cargado = cargarPfx(pfx, CLAVE_PRUEBA);
+    return cargado;
+  };
 }
 
 async function crearGateway(config: Config, db: Db): Promise<SunatGateway> {
@@ -84,7 +99,7 @@ export async function reconfigurarSunat(ctx: Contexto, config: Config): Promise<
   const gateway = await crearGateway(config, ctx.db);
   const certificado = await obtenerCertificado(config, ctx.almacen, ctx.db);
   ctx.gateway = gateway;
-  ctx.certificado = certificado;
+  Object.defineProperty(ctx, "certificado", { get: certificado, configurable: true, enumerable: true });
   ctx.simulado = config.sunatModo !== "real";
   ctx.facturaSimulada = config.sunatModo !== "real" || config.sunatAmbienteFactura === "beta";
 }

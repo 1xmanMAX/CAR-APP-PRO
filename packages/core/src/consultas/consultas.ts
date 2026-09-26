@@ -1,5 +1,8 @@
 import { and, contraparte, desc, empresa, eq, factura, facturaGuia, guiaTransportista, inArray, isNull, type EstadoGuia } from "@sunatapp/db";
 import { parsearSerieNumero } from "../dominio/serie-numero";
+import { validarRuc } from "../dominio/validaciones";
+import { ErrorNegocio } from "../errores";
+import { registrarAuditoria } from "../infra/auditoria";
 import type { Contexto } from "../infra/contexto";
 
 export interface FilaGuia {
@@ -91,6 +94,38 @@ export async function buscarContrapartePorDoc(
 export async function obtenerEmpresa(ctx: Contexto) {
   const [emp] = await ctx.db.select().from(empresa).limit(1);
   return emp ?? null;
+}
+
+export interface DatosEmpresa {
+  ruc: string;
+  razonSocial: string;
+  nombreComercial?: string | null;
+  direccion: string;
+  ubigeo: string;
+  registroMtc: string;
+  cuentaDetraccionBn?: string | null;
+}
+
+/**
+ * Crea o corrige los datos de la empresa (los que salen en guías y facturas). Se piden recién
+ * cuando hacen falta, no al instalar la app. Devuelve si la empresa se creó ahora.
+ */
+export async function guardarEmpresa(ctx: Contexto, d: DatosEmpresa, autorId?: number): Promise<{ creada: boolean }> {
+  const t = (v: string | null | undefined) => (v ?? "").trim();
+  if (!validarRuc(t(d.ruc))) throw new ErrorNegocio("El RUC no es válido");
+  if (!t(d.razonSocial)) throw new ErrorNegocio("Falta la razón social");
+  if (!t(d.direccion)) throw new ErrorNegocio("Falta la dirección fiscal");
+  if (!/^\d{6}$/.test(t(d.ubigeo))) throw new ErrorNegocio("El ubigeo son 6 dígitos (por ejemplo 150101)");
+  if (!t(d.registroMtc)) throw new ErrorNegocio("Falta el registro MTC");
+  const valores = {
+    ruc: t(d.ruc), razonSocial: t(d.razonSocial), nombreComercial: t(d.nombreComercial) || null, direccion: t(d.direccion),
+    ubigeo: t(d.ubigeo), registroMtc: t(d.registroMtc), cuentaDetraccionBn: t(d.cuentaDetraccionBn) || null,
+  };
+  const actual = await obtenerEmpresa(ctx);
+  if (actual) await ctx.db.update(empresa).set(valores).where(eq(empresa.id, actual.id));
+  else await ctx.db.insert(empresa).values(valores);
+  await registrarAuditoria(ctx.db, { usuarioId: autorId, accion: actual ? "empresa_editada" : "empresa_creada", entidad: "empresa", detalle: valores });
+  return { creada: !actual };
 }
 
 /** Rutas en el almacén de los archivos de una guía o factura (para descargarlos). */

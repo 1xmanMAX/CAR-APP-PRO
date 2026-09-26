@@ -1,7 +1,7 @@
 import { conductor, contraparte, empresa, eq, guiaItem, guiaTransportista, sql, vehiculo, type Tx } from "@sunatapp/db";
 import { normalizarPlaca } from "@sunatapp/sunat";
 import { tipoDocumentoDe } from "../dominio/validaciones";
-import { ErrorNegocio, ErrorValidacion } from "../errores";
+import { ErrorNegocio, ErrorValidacion, FALTA_EMPRESA } from "../errores";
 import { registrarAuditoria } from "../infra/auditoria";
 import type { Contexto } from "../infra/contexto";
 import { validarEntradaGuia, type EntradaGuia } from "./validar";
@@ -82,7 +82,7 @@ export async function registrarGuiaBorrador(ctx: Contexto, e: EntradaGuia, usuar
   try {
     return await ctx.db.transaction(async (tx) => {
       const [emp] = await tx.select().from(empresa).limit(1);
-      if (!emp) throw new ErrorNegocio("Falta configurar empresa, vehículo o conductor");
+      if (!emp) throw new ErrorNegocio(FALTA_EMPRESA);
       const transporte = await resolverTransporte(tx, emp, e.transporte);
       const [guia] = await tx
         .insert(guiaTransportista)
@@ -135,7 +135,7 @@ export async function actualizarGuiaBorrador(ctx: Contexto, guiaId: number, e: E
       throw new ErrorNegocio("Solo se pueden corregir guías en borrador o rechazadas");
     }
     const [emp] = await tx.select().from(empresa).limit(1);
-    if (!emp) throw new ErrorNegocio("Falta configurar empresa, vehículo o conductor");
+    if (!emp) throw new ErrorNegocio(FALTA_EMPRESA);
     const transporte = await resolverTransporte(tx, emp, e.transporte);
     await tx
       .update(guiaTransportista)

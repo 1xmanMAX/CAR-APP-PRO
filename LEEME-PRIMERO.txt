@@ -36,7 +36,9 @@ CONTROL FLOTA · cómo probarla en tu PC
      encendida ni internet. Cada celular guarda su copia y los cambios se juntan al sincronizar.
    - Tiene las mismas funciones que la PC: las mismas pantallas, el bot de Telegram (si le pones
      el token en AJUSTES -> ESTE DISPOSITIVO), las tareas de fondo con SUNAT y los avisos.
-   - Primer celular sin PC: la app pide los datos de la empresa igual que en la PC.
+   - Al abrirla entras directo como dueño (mientras la app está en desarrollo): no pide datos.
+     Los de la empresa (RUC, razón social...) los pide recién al emitir la primera guía o
+     factura, y quedan guardados en AJUSTES -> EMPRESA.
    - El bot de Telegram va en UN solo dispositivo (Telegram no deja conectarlo en dos a la vez):
      el que pase más tiempo encendido y con internet.
 

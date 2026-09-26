@@ -24,6 +24,12 @@ export interface OpcionesWeb {
   red?: RedSinc | null;
   /** Bot, SUNAT y ajustes de este dispositivo (los da el arranque completo: PC y Android). */
   servicios?: ServiciosDispositivo | null;
+  /**
+   * Entrada directa: quien abre la app desde el mismo equipo (la WebView de Android o el navegador
+   * de la PC en localhost) entra como dueño sin formulario. Desde otro equipo se sigue pidiendo
+   * correo y contraseña.
+   */
+  entradaDirecta?: boolean;
 }
 
 /** Estado de lo que corre en este dispositivo además de la web. */
@@ -78,6 +84,17 @@ export async function servirArchivo(c: C, base: string, ruta: string, cache = "p
   } catch {
     return c.notFound();
   }
+}
+
+/**
+ * ¿La petición viene de este mismo equipo? Por la conexión (loopback) y por el Host (así una web
+ * de fuera que apunte su dominio a 127.0.0.1 no aprovecha la entrada directa).
+ */
+export function esDelMismoEquipo(c: C): boolean {
+  const ip = (c.env as { incoming?: { socket?: { remoteAddress?: string } } } | undefined)?.incoming?.socket?.remoteAddress ?? "";
+  const local = ip === "::1" || ip.startsWith("127.") || ip.startsWith("::ffff:127.");
+  const host = (c.req.header("host") ?? "").toLowerCase().replace(/:\d+$/, "");
+  return local && ["127.0.0.1", "localhost", "[::1]"].includes(host);
 }
 
 /** Datos del header: se calculan en cada página (son consultas baratas). */

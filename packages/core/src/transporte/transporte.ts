@@ -1,6 +1,6 @@
 import { conductor, empresa, eq, sql, vehiculo } from "@sunatapp/db";
 import { normalizarPlaca } from "@sunatapp/sunat";
-import { ErrorNegocio } from "../errores";
+import { ErrorNegocio, FALTA_EMPRESA } from "../errores";
 import type { Contexto } from "../infra/contexto";
 
 export interface DatosConductor {
@@ -85,7 +85,9 @@ export async function transporteHabitual(ctx: Contexto): Promise<TransporteGuia>
   const [emp] = await ctx.db.select({ ruc: empresa.ruc }).from(empresa).limit(1);
   const vehiculos = await ctx.db.select().from(vehiculo).where(eq(vehiculo.activo, true)).orderBy(vehiculo.id).limit(2);
   const [cond] = await ctx.db.select().from(conductor).where(eq(conductor.activo, true)).orderBy(conductor.id).limit(1);
-  if (!emp || !vehiculos[0] || !cond) throw new ErrorNegocio("Falta configurar empresa, vehículo o conductor");
+  if (!emp) throw new ErrorNegocio(FALTA_EMPRESA);
+  if (!vehiculos[0]) throw new ErrorNegocio("Falta registrar la unidad (tracto): agrégala en la app, en Flota.");
+  if (!cond) throw new ErrorNegocio("Falta el chofer: envía la guía del remitente con sus datos y el bot lo registra.");
   return {
     rucTransportista: emp.ruc,
     placaPrincipal: vehiculos[0].placa,

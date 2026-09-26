@@ -6,6 +6,7 @@ import { build } from "esbuild";
 import { cpSync, mkdirSync, rmSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 
 const raiz = resolve(import.meta.dirname, "..");
 const salida = resolve(process.argv[2] || join(raiz, "dist-movil", "app"));
@@ -34,7 +35,11 @@ await build({
   external: ["@electric-sql/pglite", "@electric-sql/pglite/*", "xmllint-wasm"],
   jsx: "automatic",
   jsxImportSource: "hono/jsx",
-  logLevel: "warning",
+  // La mitad de tamaño: el celular lee y compila menos al abrir la app. Los nombres de clases y
+  // funciones se conservan (hay código que los usa en mensajes y comprobaciones).
+  minify: true,
+  keepNames: true,
+  logLevel: "error",
   banner: {
     js: [
       "import { createRequire as __crearRequire } from 'node:module';",
@@ -73,12 +78,28 @@ for (const [req, nombre] of [[desdeDb, "@electric-sql/pglite"], [desdeSunat, "xm
   const sobra = (r) => /\.(map|d\.ts|d\.cts|d\.mts|tar\.gz|md)$/.test(r) || /(^|\/)(node_modules|src)$/.test(r);
   cpSync(d, destino, { recursive: true, filter: (r) => !sobra(r.slice(d.length)) });
 }
+// Base de datos ya creada y migrada: crearla desde cero (initdb de PGlite) es lo que más demora el
+// primer arranque en el celular; copiarla de aquí es varias veces más rápido.
+{
+  const { PGlite } = await import(pathToFileURL(desdeDb.resolve("@electric-sql/pglite")).href);
+  const { drizzle } = await import(pathToFileURL(desdeDb.resolve("drizzle-orm/pglite")).href);
+  const { migrate } = await import(pathToFileURL(desdeDb.resolve("drizzle-orm/pglite/migrator")).href);
+  const pg = await PGlite.create();
+  await migrate(drizzle({ client: pg }), { migrationsFolder: join(raiz, "packages/db/drizzle") });
+  const volcado = await pg.dumpDataDir("gzip");
+  writeFileSync(join(salida, "base-inicial.tgz"), Buffer.from(await volcado.arrayBuffer()));
+  await pg.close();
+}
 // Dónde está cada cosa, para el arranque.
 writeFileSync(join(salida, "iniciar.mjs"), `// Arranca la app empaquetada: node iniciar.mjs
 import { writeFileSync } from "node:fs";
+import module from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 const aqui = dirname(fileURLToPath(import.meta.url));
+// Node guarda el código ya compilado: desde la segunda vez la app abre más rápido.
+try { module.enableCompileCache?.(join(process.env.TMPDIR || aqui, "cache-node")); } catch {}
+process.env.CF_BASE_INICIAL ||= join(aqui, "base-inicial.tgz");
 process.env.CF_MIGRACIONES ||= join(aqui, "drizzle");
 process.env.CF_XSD ||= join(aqui, "xsd");
 process.env.CF_PUBLICO ||= join(aqui, "public");

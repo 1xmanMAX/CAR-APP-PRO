@@ -119,9 +119,11 @@ describe("crearContexto", () => {
     const a = await crearContexto(config);
     cerrables.push(a.cerrar);
     expect(a.ctx.simulado).toBe(true);
-    // Sin empresa todavía: el de prueba lleva un RUC de relleno y se guarda aparte.
-    expect(await a.ctx.almacen.leer("certificado-prueba-sin-empresa.pfx")).toBeInstanceOf(Buffer);
+    // El de prueba se crea recién al usarlo (no demora el arranque).
+    await expect(a.ctx.almacen.leer("certificado-prueba-sin-empresa.pfx")).rejects.toThrow();
     const subject = a.ctx.certificado.subject;
+    // Sin empresa todavía: el de prueba lleva un RUC de relleno y se guarda aparte.
+    await vi.waitFor(async () => expect(await a.ctx.almacen.leer("certificado-prueba-sin-empresa.pfx")).toBeInstanceOf(Buffer));
     await a.cerrar();
     cerrables.pop();
     const b = await crearContexto(config);
@@ -131,8 +133,8 @@ describe("crearContexto", () => {
     // Con la empresa cargada (configuración inicial desde la app), se usa uno con su RUC.
     await sembrarDatosIniciales(b.ctx.db, DATOS_INICIALES);
     await reconfigurarSunat(b.ctx, config);
-    expect(await b.ctx.almacen.leer("certificado-prueba.pfx")).toBeInstanceOf(Buffer);
     expect(b.ctx.certificado.subject).toContain(DATOS_INICIALES.empresa.ruc);
+    await vi.waitFor(async () => expect(await b.ctx.almacen.leer("certificado-prueba.pfx")).toBeInstanceOf(Buffer));
   });
 
   it("cierra la conexión si falla tras conectar, y permite reintentar sobre el mismo dataDir", async () => {
@@ -156,7 +158,7 @@ describe("crearContexto", () => {
     expect(ctx.simulado).toBe(true);
   });
 
-  it("no sobrescribe un certificado de prueba corrupto: propaga el error en vez de regenerarlo", async () => {
+  it("no sobrescribe un certificado de prueba corrupto: al firmar da el error en vez de regenerarlo", async () => {
     const base = mkdtempSync(join(tmpdir(), "ctx-cert-"));
     const storageDir = join(base, "storage");
     const almacenPrevio = crearAlmacenLocal(storageDir);
@@ -164,7 +166,9 @@ describe("crearContexto", () => {
     await almacenPrevio.guardar("certificado-prueba-sin-empresa.pfx", contenidoInvalido);
 
     const config = cargarConfig({ STORAGE_DIR: storageDir, DATA_DIR: join(base, "data") });
-    await expect(crearContexto(config)).rejects.toThrow();
+    const { ctx, cerrar } = await crearContexto(config);
+    cerrables.push(cerrar);
+    expect(() => ctx.certificado).toThrow();
 
     // El archivo corrupto no debe haber sido reemplazado por uno nuevo.
     expect(await almacenPrevio.leer("certificado-prueba-sin-empresa.pfx")).toEqual(contenidoInvalido);

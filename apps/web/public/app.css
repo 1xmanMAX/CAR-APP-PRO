@@ -165,6 +165,7 @@ details.plegable[open] > summary .btn { background: var(--panel-alt); }
 .fila-parte.sel { background: var(--accent-softer); border-color: var(--accent); }
 .fila-parte .barra { grid-column: 1 / -1; }
 .fila-parte .rest { grid-column: 1 / -1; font-size: 11px; color: var(--muted); }
+.hist-pieza { display: flex; flex-direction: column; gap: 2px; padding: 6px 8px; border-left: 3px solid var(--amber-dark); background: var(--white); border-radius: 0 4px 4px 0; font-size: 12px; }
 .fila-flota { display: grid; grid-template-columns: 110px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 8px 10px; border: 1px solid var(--divider); border-radius: 4px; background: var(--white); text-decoration: none; color: var(--text); }
 .fila-flota:hover { border-color: var(--accent); color: var(--text); }
 

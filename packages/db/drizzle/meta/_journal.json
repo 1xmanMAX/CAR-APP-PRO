@@ -64,6 +64,13 @@
       "when": 1790500000000,
       "tag": "0008_sincronizacion",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1790600000000,
+      "tag": "0009_pieza_del_modelo",
+      "breakpoints": true
     }
   ]
 }

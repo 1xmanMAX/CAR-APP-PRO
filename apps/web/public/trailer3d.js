@@ -1,4 +1,6 @@
-// Visor 3D del trailer: nube de puntos (THREE.Points) coloreada por el desgaste de cada zona.
+// Visor 3D del trailer: nube de puntos con cada pieza por separado (cada llanta, retrovisor,
+// faro…). El color es el desgaste de su zona; al tocar una pieza se resalta y se muestra su
+// historial al lado. La forma de las piezas viene del servidor (packages/core/src/flota/componentes.ts).
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 
@@ -9,6 +11,8 @@ const etiqueta = cont.querySelector(".etiqueta");
 
 const COLOR = { ok: "#8FB4CC", proximo: "#F2C14E", cambiar: "#FF5AAE" };
 const GRIS = "#E9E3D6";
+const RESALTE = "#FFE08A";
+const ESTADO_TXT = { ok: "OK", proximo: "PRÓXIMO", cambiar: "CAMBIAR" };
 
 function soportaWebGL() {
   try {
@@ -19,44 +23,138 @@ function soportaWebGL() {
   }
 }
 
+// ——— Muestreo de las formas (semilla fija: el modelo sale igual cada vez) ———
+let semilla = 11;
+const rnd = () => { semilla = (semilla * 16807) % 2147483647; return semilla / 2147483647; };
+const DENSIDAD = 55; // puntos por m²
+const cuantos = (area, min, max) => Math.max(min, Math.min(max, Math.round(area * DENSIDAD)));
 
-/** Misma nube que el diseño: cajas y ruedas muestreadas en sus caras, con semilla fija. */
-function nube() {
-  let seed = 11;
-  const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+function muestrearCaja(f, P) {
+  const [x0, y0, z0] = f.min, [x1, y1, z1] = f.max;
+  const dx = x1 - x0, dy = y1 - y0, dz = z1 - z0;
+  const areas = [dy * dz, dy * dz, dx * dz, dx * dz, dx * dy, dx * dy];
+  const total = areas.reduce((a, b) => a + b, 0) || 1;
+  const n = cuantos(total, 50, 1900);
+  for (let i = 0; i < n; i++) {
+    let r = rnd() * total, cara = 0;
+    while (cara < 5 && r > areas[cara]) r -= areas[cara++];
+    let x = x0 + rnd() * dx, y = y0 + rnd() * dy, z = z0 + rnd() * dz;
+    if (cara === 0) x = x0; else if (cara === 1) x = x1; else if (cara === 2) y = y0; else if (cara === 3) y = y1; else if (cara === 4) z = z0; else z = z1;
+    P.push(x, y, z);
+  }
+}
+
+/** Punto en coordenadas locales del cilindro (a = a lo largo del eje, u/v = sección) → mundo. */
+function ubicar(c, eje, a, u, v, P) {
+  if (eje === "x") P.push(c[0] + a, c[1] + u, c[2] + v);
+  else if (eje === "y") P.push(c[0] + u, c[1] + a, c[2] + v);
+  else P.push(c[0] + u, c[1] + v, c[2] + a);
+}
+
+function muestrearCilindro(f, P) {
+  const lateral = 2 * Math.PI * f.r * f.largo, tapa = Math.PI * f.r * f.r;
+  const n = cuantos(lateral + 2 * tapa, 60, 900);
+  for (let i = 0; i < n; i++) {
+    const ang = rnd() * Math.PI * 2;
+    if (rnd() < lateral / (lateral + 2 * tapa)) {
+      ubicar(f.c, f.eje, (rnd() - 0.5) * f.largo, Math.cos(ang) * f.r, Math.sin(ang) * f.r, P);
+    } else {
+      const rr = f.r * Math.sqrt(rnd());
+      ubicar(f.c, f.eje, (rnd() < 0.5 ? -0.5 : 0.5) * f.largo, Math.cos(ang) * rr, Math.sin(ang) * rr, P);
+    }
+  }
+}
+
+function muestrearLlanta(f, P) {
+  const [cx, cy, cz] = f.c;
+  const exterior = Math.sign(cz) || 1; // el aro se ve por fuera
+  for (let i = 0; i < 300; i++) {
+    const ang = rnd() * Math.PI * 2, c = Math.cos(ang), s = Math.sin(ang), q = rnd();
+    if (q < 0.45) { // banda de rodadura
+      P.push(cx + c * f.r, cy + s * f.r, cz + (rnd() - 0.5) * f.ancho);
+    } else if (q < 0.85) { // flancos
+      const rr = f.r * (0.62 + 0.38 * rnd());
+      P.push(cx + c * rr, cy + s * rr, cz + (rnd() < 0.5 ? -0.5 : 0.5) * f.ancho);
+    } else { // aro
+      const rr = f.r * (0.18 + 0.4 * rnd());
+      P.push(cx + c * rr, cy + s * rr, cz + exterior * 0.4 * f.ancho);
+    }
+  }
+}
+
+function nubeDe(pieza) {
   const P = [];
-  const caja = (z, x0, x1, y0, y1, z0, z1, n) => {
-    for (let i = 0; i < n; i++) {
-      const f = Math.floor(rnd() * 6);
-      let x = x0 + rnd() * (x1 - x0), y = y0 + rnd() * (y1 - y0), w = z0 + rnd() * (z1 - z0);
-      if (f === 0) x = x0; else if (f === 1) x = x1; else if (f === 2) y = y0; else if (f === 3) y = y1; else if (f === 4) w = z0; else w = z1;
-      P.push([x, y, w, z]);
-    }
-  };
-  const rueda = (z, x, w, n) => {
-    for (let i = 0; i < n; i++) {
-      const a = rnd() * Math.PI * 2, r = 0.52 * (0.7 + 0.3 * rnd());
-      P.push([x + Math.cos(a) * r, 0.52 + Math.sin(a) * r, w + (rnd() - 0.5) * 0.3, z]);
-    }
-  };
-  const k = 2; // más densidad que el boceto: se ve mejor en pantallas grandes
-  caja("cabina", -9, -6.6, 1.0, 3.7, -1.25, 1.25, 160 * k);
-  caja("motor", -9.4, -8.0, 0.9, 2.0, -1.1, 1.1, 70 * k);
-  caja("chasis", -9, -3, 0.75, 1.0, -0.55, 0.55, 60 * k);
-  caja("chasis", -3, 9, 1.0, 1.25, -0.55, 0.55, 70 * k);
-  caja("caja", -4, 9, 1.35, 4.0, -1.3, 1.3, 320 * k);
-  caja("tanque", -6.2, -5.0, 0.85, 1.35, 1.1, 1.35, 36 * k);
-  caja("bateria", -5.0, -4.4, 0.85, 1.25, -1.35, -1.05, 26 * k);
-  caja("quinta", -4.2, -3.2, 1.12, 1.22, -0.6, 0.6, 26 * k);
-  [[-8, "llantas_del"], [-4.6, "llantas_trac"], [-3.4, "llantas_trac"], [5.8, "llantas_sr"], [7.0, "llantas_sr"], [8.2, "llantas_sr"]]
-    .forEach(([x, z]) => { rueda(z, x, -1.05, 22 * k); rueda(z, x, 1.05, 22 * k); });
+  for (const f of pieza.formas) {
+    if (f.t === "caja") muestrearCaja(f, P);
+    else if (f.t === "cil") muestrearCilindro(f, P);
+    else muestrearLlanta(f, P);
+  }
   return P;
 }
 
-const ANCLAS = {
-  llantas_sr: [7, 0.5, 1.2], llantas_trac: [-4, 0.5, 1.2], llantas_del: [-8, 0.5, 1.2], motor: [-8.7, 1.5, 0],
-  bateria: [-4.7, 1.05, -1.25], quinta: [-3.7, 1.2, 0], chasis: [2, 1.1, 0.6], cabina: [-7.8, 3.2, 0], caja: [2.5, 3.2, 0], tanque: [-5.6, 1.1, 1.3],
+// ——— Panel de la pieza (fuera del canvas) ———
+const panel = {
+  select: document.getElementById("sel-pieza"),
+  detalle: document.getElementById("pieza-detalle"),
+  nombre: document.getElementById("pieza-nombre"),
+  zona: document.getElementById("pieza-zona"),
+  partes: document.getElementById("pieza-partes"),
+  historial: document.getElementById("pieza-historial"),
+  id: document.getElementById("pieza-id"),
+  parte: document.getElementById("pieza-parte"),
+  trabajo: document.getElementById("pieza-trabajo"),
 };
+const porId = new Map(datos.piezas.map((p) => [p.id, p]));
+/** Partes controladas de la pieza, de la más gastada a la menos (la primera manda el color). */
+const partesDe = (id) => datos.partesPieza[id] ?? [];
+const estadoDe = (id) => partesDe(id)[0]?.estado;
+/** ¿La pieza lleva la parte elegida en la lista de la izquierda? */
+const llevaParteElegida = (id) => datos.parteSeleccionada !== null && partesDe(id).some((x) => x.id === datos.parteSeleccionada);
+
+function el(tag, props, ...hijos) {
+  const e = document.createElement(tag);
+  Object.assign(e, props || {});
+  for (const h of hijos) if (h !== null && h !== undefined) e.append(h);
+  return e;
+}
+
+function mostrarPanel(id) {
+  if (!panel.detalle) return;
+  const p = id && porId.get(id);
+  if (panel.select) panel.select.value = p ? id : "";
+  panel.detalle.hidden = !p;
+  if (!p) return;
+  panel.nombre.textContent = p.nombre;
+  const partes = partesDe(id);
+  const peor = partes[0];
+  panel.zona.textContent = `${datos.nombresZona[p.zona] ?? p.zona}${peor ? ` · desgaste ${peor.pct}% · ${ESTADO_TXT[peor.estado]}` : " · sin partes con desgaste controlado"}`;
+
+  panel.partes.replaceChildren(...partes.map((x) => el("a", { className: "fila-parte", href: x.url },
+    el("span", { style: "font-size:12px", textContent: x.nombre }), el("b", { className: `t-${x.estado} mono-t`, textContent: `${x.pct}%` }))));
+
+  const hist = datos.historial[id] ?? [];
+  panel.historial.replaceChildren(...(hist.length ? hist.map((h) => el("div", { className: "hist-pieza" },
+    el("div", { className: "linea", style: "justify-content:space-between" },
+      el("b", { textContent: h.fecha }), el("span", { className: "chip neutro", textContent: h.tipo })),
+    el("span", { textContent: h.trabajo }),
+    el("span", { className: "muted", style: "font-size:11px", textContent: [h.km ? `${h.km} km` : null, h.costo, h.taller].filter(Boolean).join(" · ") }),
+  )) : [el("span", { className: "muted", style: "font-size:12px", textContent: "Todavía no hay nada registrado en esta pieza." })]));
+
+  if (panel.id) panel.id.value = id;
+  if (panel.parte) {
+    panel.parte.replaceChildren(el("option", { value: "", textContent: "— no reinicia ningún contador —" }),
+      ...partes.map((x) => el("option", { value: String(x.id), textContent: `${x.nombre} · ${x.pct}% (vuelve a 0)` })));
+  }
+  if (panel.trabajo && !panel.trabajo.value) panel.trabajo.placeholder = p.grupo === "llantas" ? "Cambio de llanta, rotación, parchado…" : "Qué pasó o qué se hizo";
+}
+
+function recordarEnUrl(id) {
+  try {
+    const u = new URL(location.href);
+    if (id) u.searchParams.set("pieza", id); else u.searchParams.delete("pieza");
+    history.replaceState(null, "", u.pathname + u.search + u.hash);
+  } catch {}
+}
 
 function iniciar() {
   window.__visor3d = true;
@@ -69,9 +167,9 @@ function iniciar() {
   const controles = new OrbitControls(camara, canvas);
   controles.target.set(0, 1.9, 0);
   controles.enableDamping = true;
-  controles.minDistance = 8;
+  controles.minDistance = 3;
   controles.maxDistance = 55;
-  controles.maxPolarAngle = Math.PI * 0.49;
+  controles.maxPolarAngle = Math.PI * 0.6;
   controles.autoRotateSpeed = 1.6;
 
   // Retícula de puntos en el piso.
@@ -79,68 +177,94 @@ function iniciar() {
   for (let x = -14; x <= 14; x += 1) for (let z = -7; z <= 7; z += 1) piso.push(x, 0, z);
   const gPiso = new THREE.BufferGeometry();
   gPiso.setAttribute("position", new THREE.Float32BufferAttribute(piso, 3));
-  escena.add(new THREE.Points(gPiso, new THREE.PointsMaterial({ color: "#3A474C", size: 0.06 })));
+  escena.add(new THREE.Points(gPiso, new THREE.PointsMaterial({ color: "#3A474C", size: 0.05 })));
 
-  // Una nube por zona, para poder cambiar tamaño/opacidad de la seleccionada.
-  const porZona = new Map();
-  for (const [x, y, z, zona] of nube()) {
-    if (!porZona.has(zona)) porZona.set(zona, []);
-    porZona.get(zona).push(x, y, z);
-  }
+  // Una nube por pieza: se puede resaltar cada una por separado.
   const objetos = [];
-  for (const [zona, pos] of porZona) {
-    const estado = datos.zonas[zona]?.estado;
-    const sel = zona === datos.zonaSeleccionada;
+  for (const p of datos.piezas) {
     const g = new THREE.BufferGeometry();
-    g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
-    const m = new THREE.PointsMaterial({
-      color: estado ? COLOR[estado] : GRIS, size: sel ? 0.26 : estado ? 0.17 : 0.12, transparent: true,
-      opacity: estado ? 1 : 0.4, sizeAttenuation: true, depthWrite: false,
-    });
-    const p = new THREE.Points(g, m);
-    p.userData.zona = zona;
-    escena.add(p);
-    objetos.push(p);
+    g.setAttribute("position", new THREE.Float32BufferAttribute(nubeDe(p), 3));
+    g.computeBoundingBox();
+    const m = new THREE.PointsMaterial({ size: 0.1, transparent: true, sizeAttenuation: true, depthWrite: false });
+    const o = new THREE.Points(g, m);
+    o.userData = { id: p.id, zona: p.zona, puntos: g.attributes.position.count, centro: g.boundingBox.getCenter(new THREE.Vector3()) };
+    escena.add(o);
+    objetos.push(o);
   }
+  const caja = new THREE.Box3Helper(new THREE.Box3(), new THREE.Color(RESALTE));
+  caja.visible = false;
+  escena.add(caja);
 
-  // Anillos en cada zona controlada; el seleccionado, ámbar.
-  const anillos = [];
-  for (const zona of Object.keys(datos.zonas)) {
-    const a = ANCLAS[zona];
-    if (!a) continue;
-    const sel = zona === datos.zonaSeleccionada;
-    const geo = new THREE.RingGeometry(sel ? 0.55 : 0.38, sel ? 0.62 : 0.43, 40);
-    const mat = new THREE.MeshBasicMaterial({ color: sel ? "#F2C14E" : COLOR[datos.zonas[zona].estado], side: THREE.DoubleSide, transparent: true, opacity: 0.95, depthTest: false });
-    const anillo = new THREE.Mesh(geo, mat);
-    anillo.position.set(a[0], a[1], a[2]);
-    anillo.renderOrder = 10;
-    anillo.userData.zona = zona;
-    escena.add(anillo);
-    anillos.push(anillo);
-  }
+  let seleccion = porId.has(datos.piezaSeleccionada) ? datos.piezaSeleccionada : null;
+  let encima = null;
+  const pintar = () => {
+    for (const o of objetos) {
+      const { id } = o.userData;
+      const estado = estadoDe(id);
+      const m = o.material;
+      if (id === seleccion) {
+        m.color.set(RESALTE); m.size = 0.13; m.opacity = 1;
+      } else {
+        m.color.set(estado ? COLOR[estado] : GRIS);
+        const enZona = !seleccion && llevaParteElegida(id);
+        m.size = id === encima ? 0.14 : enZona ? 0.13 : estado ? 0.1 : 0.085;
+        m.opacity = seleccion ? (id === encima ? 0.8 : 0.22) : id === encima ? 1 : estado ? 0.95 : 0.45;
+      }
+    }
+    const o = objetos.find((x) => x.userData.id === seleccion);
+    caja.visible = !!o;
+    if (o) caja.box.copy(o.geometry.boundingBox).expandByScalar(0.08);
+  };
 
+  // Al elegir una pieza la cámara la pone al centro (sin girar).
+  const objetivo = controles.target.clone();
+  let volando = false;
+  let acercarA = null; // distancia a la que se acerca la cámara al elegir una pieza
+  const enfocar = (id) => {
+    const o = objetos.find((x) => x.userData.id === id);
+    if (!o) return;
+    objetivo.copy(o.userData.centro);
+    acercarA = Math.max(4, Math.min(11, o.geometry.boundingBox.getSize(new THREE.Vector3()).length() * 1.6 + 3.5));
+    volando = true;
+  };
+  const elegir = (id, { mover = true } = {}) => {
+    seleccion = id && porId.has(id) ? id : null;
+    pintar();
+    mostrarPanel(seleccion);
+    recordarEnUrl(seleccion);
+    if (seleccion && mover) enfocar(seleccion);
+  };
+  if (panel.select) panel.select.addEventListener("change", () => elegir(panel.select.value || null));
+
+  // Selección con el dedo o el mouse: entre las piezas tocadas se prefiere la más cercana y,
+  // si hay varias casi a la misma distancia (retrovisor pegado a la cabina), la más pequeña.
   const raycaster = new THREE.Raycaster();
-  raycaster.params.Points.threshold = 0.25;
+  raycaster.params.Points.threshold = 0.16;
   const puntero = new THREE.Vector2();
-  let abajo = null;
-  canvas.addEventListener("pointerdown", (e) => { abajo = [e.clientX, e.clientY]; });
-  canvas.addEventListener("pointerup", (e) => {
-    if (!abajo || Math.hypot(e.clientX - abajo[0], e.clientY - abajo[1]) > 5) return; // fue un arrastre
+  const piezaEn = (e) => {
     const r = canvas.getBoundingClientRect();
     puntero.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
     raycaster.setFromCamera(puntero, camara);
-    const hits = raycaster.intersectObjects([...anillos, ...objetos.filter((o) => datos.zonas[o.userData.zona])]);
-    const zona = hits[0]?.object.userData.zona;
-    const destino = zona && datos.zonas[zona]?.url;
-    if (destino) window.location.href = destino;
+    const hits = raycaster.intersectObjects(objetos, false);
+    if (!hits.length) return null;
+    const cerca = hits.filter((h) => h.distance < hits[0].distance + 0.5);
+    cerca.sort((a, b) => a.object.userData.puntos - b.object.userData.puntos);
+    return cerca[0].object.userData.id;
+  };
+  let abajo = null;
+  canvas.addEventListener("pointerdown", (e) => { abajo = [e.clientX, e.clientY]; volando = false; acercarA = null; });
+  canvas.addEventListener("pointerup", (e) => {
+    if (!abajo || Math.hypot(e.clientX - abajo[0], e.clientY - abajo[1]) > 6) return; // fue un arrastre
+    elegir(piezaEn(e), { mover: false });
   });
   canvas.addEventListener("pointermove", (e) => {
-    const r = canvas.getBoundingClientRect();
-    puntero.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
-    raycaster.setFromCamera(puntero, camara);
-    const hit = raycaster.intersectObjects([...anillos, ...objetos.filter((o) => datos.zonas[o.userData.zona])])[0];
-    canvas.style.cursor = hit ? "pointer" : "";
-    canvas.title = hit ? `${datos.zonas[hit.object.userData.zona].nombre} · ${datos.zonas[hit.object.userData.zona].pct}%` : "";
+    if (e.pointerType !== "mouse") return;
+    const id = piezaEn(e);
+    if (id === encima) return;
+    encima = id;
+    canvas.style.cursor = id ? "pointer" : "";
+    canvas.title = id ? porId.get(id).nombre : "";
+    pintar();
   });
 
   // Controles.
@@ -159,6 +283,8 @@ function iniciar() {
     girarBtn.classList.toggle("on", controles.autoRotate);
     girarBtn.setAttribute("aria-pressed", String(controles.autoRotate));
   });
+  const verTodo = document.getElementById("btn-todo");
+  if (verTodo) verTodo.addEventListener("click", () => { objetivo.set(0, 1.9, 0); acercarA = 24; volando = true; elegir(null, { mover: false }); });
 
   const ajustar = () => {
     const w = canvas.clientWidth, h = canvas.clientHeight;
@@ -169,22 +295,53 @@ function iniciar() {
   new ResizeObserver(ajustar).observe(canvas);
   ajustar();
 
-  const ancla = datos.zonaSeleccionada && ANCLAS[datos.zonaSeleccionada];
+  // Etiqueta flotante: la pieza elegida o, si no, la zona de la parte elegida en la lista.
+  const textoZona = etiqueta ? etiqueta.innerHTML : "";
+  const centroZona = (() => {
+    const b = new THREE.Box3();
+    for (const o of objetos) if (llevaParteElegida(o.userData.id)) b.union(o.geometry.boundingBox);
+    return b.isEmpty() ? null : b.getCenter(new THREE.Vector3());
+  })();
+
   const v = new THREE.Vector3();
   const reducirMovimiento = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  if (!reducirMovimiento && datos.autogiro) girarBtn.click();
+  if (!reducirMovimiento && datos.autogiro && !seleccion) girarBtn.click();
+  pintar();
+  if (seleccion) { mostrarPanel(seleccion); enfocar(seleccion); }
 
+  let etiquetaDe = undefined;
   function cuadro() {
+    if (volando) {
+      const antes = controles.target.clone();
+      controles.target.lerp(objetivo, reducirMovimiento ? 1 : 0.12);
+      camara.position.add(controles.target.clone().sub(antes));
+      if (acercarA !== null) {
+        const off = camara.position.clone().sub(controles.target);
+        const d = off.length();
+        const nueva = reducirMovimiento ? acercarA : d + (acercarA - d) * 0.1;
+        camara.position.copy(controles.target).add(off.setLength(nueva));
+        if (Math.abs(nueva - acercarA) < 0.02) acercarA = null;
+      }
+      if (controles.target.distanceTo(objetivo) < 0.01 && acercarA === null) volando = false;
+    }
     controles.update();
-    for (const a of anillos) a.quaternion.copy(camara.quaternion);
-    if (ancla && etiqueta) {
-      v.set(ancla[0], ancla[1], ancla[2]).project(camara);
-      const x = (v.x * 0.5 + 0.5) * canvas.clientWidth, y = (-v.y * 0.5 + 0.5) * canvas.clientHeight;
-      const fuera = v.z > 1 || x < 0 || y < 0 || x > canvas.clientWidth || y > canvas.clientHeight;
-      etiqueta.hidden = fuera;
-      const izq = x > canvas.clientWidth - 220;
-      etiqueta.style.left = `${izq ? x - 220 : x}px`;
-      etiqueta.style.top = `${y}px`;
+    const anclaSel = seleccion ? objetos.find((o) => o.userData.id === seleccion).userData.centro : centroZona;
+    if (etiqueta) {
+      if (etiquetaDe !== seleccion) {
+        etiquetaDe = seleccion;
+        if (seleccion) {
+          etiqueta.replaceChildren(el("span", { className: "lbl", style: "color:var(--dark-muted)", textContent: "PIEZA SELECCIONADA" }), el("br"), porId.get(seleccion).nombre);
+        } else etiqueta.innerHTML = textoZona;
+      }
+      if (anclaSel) {
+        v.copy(anclaSel).project(camara);
+        const x = (v.x * 0.5 + 0.5) * canvas.clientWidth, y = (-v.y * 0.5 + 0.5) * canvas.clientHeight;
+        const fuera = v.z > 1 || x < 0 || y < 0 || x > canvas.clientWidth || y > canvas.clientHeight;
+        etiqueta.hidden = fuera;
+        const izq = x > canvas.clientWidth - 240;
+        etiqueta.style.left = `${izq ? x - 240 : x}px`;
+        etiqueta.style.top = `${y}px`;
+      } else etiqueta.hidden = true;
     }
     if (angulo) {
       const off = camara.position.clone().sub(controles.target);
@@ -198,6 +355,9 @@ function iniciar() {
 
 if (!soportaWebGL()) {
   cont.querySelector(".sin-webgl").hidden = false;
+  // Sin 3D la lista de piezas sigue sirviendo para ver y registrar.
+  if (panel.select) panel.select.addEventListener("change", () => { mostrarPanel(panel.select.value || null); recordarEnUrl(panel.select.value || null); });
+  mostrarPanel(porId.has(datos.piezaSeleccionada) ? datos.piezaSeleccionada : null);
 } else {
   iniciar();
 }

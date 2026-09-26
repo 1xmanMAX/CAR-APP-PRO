@@ -28,6 +28,7 @@ export { normalizarPlaca } from "@sunatapp/sunat";
 export type { EstadoGuia } from "@sunatapp/db";
 export * from "./flota/desgaste";
 export * from "./flota/catalogo";
+export * from "./flota/componentes";
 export * from "./flota/unidades";
 export * from "./flota/viajes-flota";
 export * from "./inventario/inventario";

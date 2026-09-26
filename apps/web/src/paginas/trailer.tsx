@@ -1,7 +1,8 @@
 /** @jsxRuntime automatic @jsxImportSource hono/jsx */
 import {
-  ajustarVidaParte, ErrorNegocio, estadoPorZona, instalarParte, listarTiposParte, listarUnidades, listarViajesFlota, partesDeUnidad,
-  puedeEditar, viajesDesde, ZONAS, type ParteConDesgaste,
+  ajustarVidaParte, ErrorNegocio, GRUPOS_PIEZA, hoy, instalarParte, listarReparaciones, listarRepuestos, listarTiposParte,
+  listarUnidades, listarViajesFlota, parsearMonto, partesDePieza, partesDeUnidad, pieza, PIEZAS, puedeEditar, registrarCambio, TIPOS_REPARACION, viajesDesde, ZONAS,
+  type GrupoPieza, type ParteConDesgaste, type TipoReparacion,
 } from "@sunatapp/core";
 import { raw } from "hono/html";
 import { accion, formulario, pagina, type App, type C, type Deps } from "../base";
@@ -39,7 +40,6 @@ async function vista(c: C, d: Deps) {
   const partes = await partesDeUnidad(ctx, unidad.id);
   const parteId = Number(c.req.query("parte"));
   const sel: ParteConDesgaste | undefined = partes.find((p) => p.id === parteId) ?? partes[0];
-  const zonas = estadoPorZona(partes);
   const puedeEditarTaller = puedeEditar(c.get("usuario").rol, "reparaciones");
   const viajes = await listarViajesFlota(ctx, { vehiculoId: unidad.id, limite: 24 });
   const kmViajes = viajes.filter((v) => v.km).reverse();
@@ -51,14 +51,36 @@ async function vista(c: C, d: Deps) {
   const tipos = await listarTiposParte(ctx);
   const faltantes = tipos.filter((t) => !partes.some((p) => p.tipoParteId === t.id));
 
+  const piezaSel = pieza(c.req.query("pieza"));
+  const [historial, repuestos] = await Promise.all([
+    listarReparaciones(ctx, { vehiculoId: unidad.id, conPieza: true, limite: 400 }),
+    puedeEditarTaller ? listarRepuestos(ctx) : Promise.resolve([]),
+  ]);
+  const porPieza: Record<string, Array<{ fecha: string; trabajo: string; tipo: string; km: string; costo: string | null; taller: string | null }>> = {};
+  for (const h of historial) {
+    (porPieza[h.componente!] ??= []).push({
+      fecha: fechaMedia(h.fecha), trabajo: h.trabajo, tipo: TIPOS_REPARACION[h.tipo], km: miles(h.odometro),
+      costo: h.costoTotal ? soles2(h.costoTotal) : null, taller: h.taller,
+    });
+  }
+  // Por pieza: sus partes controladas (para el color y para reiniciar su contador al registrar).
+  const partesPieza: Record<string, Array<{ id: number; nombre: string; pct: number; estado: string; url: string }>> = {};
+  for (const pz of PIEZAS) {
+    const suyas = partesDePieza(pz, partes).sort((a, b) => b.pct - a.pct);
+    if (suyas.length) partesPieza[pz.id] = suyas.map((p) => ({ id: p.id, nombre: p.nombre, pct: p.pct, estado: p.estado, url: `/trailer/${unidad.id}?parte=${p.id}` }));
+  }
+
   const datosVisor = {
-    zonaSeleccionada: sel?.zona ?? null,
+    parteSeleccionada: piezaSel ? null : sel?.id ?? null,
+    piezaSeleccionada: piezaSel?.id ?? null,
     autogiro: false,
-    zonas: Object.fromEntries(Object.entries(zonas).map(([z, v]) => {
-      const peor = partes.find((p) => p.zona === z)!;
-      return [z, { ...v, nombre: ZONAS[z as keyof typeof ZONAS], url: `/trailer/${unidad.id}?parte=${peor.id}` }];
-    })),
+    nombresZona: ZONAS,
+    piezas: PIEZAS,
+    historial: porPieza,
+    partesPieza,
   };
+  const grupos = Object.keys(GRUPOS_PIEZA) as GrupoPieza[];
+  const conHistorial = new Set(Object.keys(porPieza));
 
   return pagina(c, d, { titulo: `Trailer 3D · ${unidad.codigo}`, seccion: "trailer", scripts: ["/static/trailer3d.js"], importmap: true }, (
     <>
@@ -104,13 +126,14 @@ async function vista(c: C, d: Deps) {
 
         <div class="filas" style="gap:10px;min-width:0">
           <div class="visor" id="visor">
-            <canvas aria-label={`Modelo 3D de ${unidad.codigo}: cada punto es parte del trailer y su color es el desgaste. Arrastra para girar, rueda para acercar, clic en una zona para verla.`} role="img"></canvas>
+            <canvas aria-label={`Modelo 3D de ${unidad.codigo}: cada pieza (llantas, retrovisores, faros, puertas…) va por separado y su color es el desgaste. Arrastra para girar, pellizca o usa la rueda para acercar, toca una pieza para resaltarla y ver su historial.`} role="img"></canvas>
             <div class="cab">
-              <span class="lbl-12" style="color:var(--dark-text)"><b>{unidad.codigo} · MODELO DE PUNTOS · EN VIVO</b><br /><span style="color:var(--dark-muted)">CADA PUNTO ES PARTE DEL TRAILER · EL COLOR ES SU DESGASTE</span></span>
+              <span class="lbl-12" style="color:var(--dark-text)"><b>{unidad.codigo} · MODELO DE PUNTOS · {PIEZAS.length} PIEZAS</b><br /><span style="color:var(--dark-muted)">TOCA UNA PIEZA PARA RESALTARLA · EL COLOR ES SU DESGASTE</span></span>
               <div class="der">
                 <button class="btn chico" id="btn-izq" type="button" aria-label="Girar a la izquierda">&lt;</button>
                 <button class="btn chico" id="btn-der" type="button" aria-label="Girar a la derecha">&gt;</button>
                 <button class="btn chico" id="btn-girar" type="button" aria-pressed="false">GIRAR</button>
+                <button class="btn chico" id="btn-todo" type="button">VER TODO</button>
                 <span class="lbl" style="color:var(--dark-muted)">ÁNGULO <span id="angulo">0</span>°</span>
               </div>
             </div>
@@ -120,7 +143,7 @@ async function vista(c: C, d: Deps) {
                 {sel.nombreCorto} · DESGASTE <b>{sel.pct}%</b>
               </div>
             ) : null}
-            <div class="pie"><span><i class="d-ok"></i>OK</span><span><i class="d-proximo"></i>PRÓXIMO (70%+)</span><span><i class="d-cambiar"></i>CAMBIAR (90%+)</span><span><i style="background:#E9E3D6;opacity:.5"></i>SIN CONTROL</span></div>
+            <div class="pie"><span><i style="background:#FFE08A"></i>SELECCIONADA</span><span><i class="d-ok"></i>OK</span><span><i class="d-proximo"></i>PRÓXIMO (70%+)</span><span><i class="d-cambiar"></i>CAMBIAR (90%+)</span><span><i style="background:#E9E3D6;opacity:.5"></i>SIN CONTROL</span></div>
             {raw(`<script>setTimeout(function(){if(!window.__visor3d){var e=document.querySelector("#visor .sin-webgl");if(e)e.hidden=false;}},6000)</script>`)}
             <div class="sin-webgl" hidden>Este navegador no puede mostrar el modelo 3D (WebGL o navegador desactualizado: actualiza "Android System WebView" o Chrome). La lista de partes funciona igual.</div>
           </div>
@@ -148,6 +171,58 @@ async function vista(c: C, d: Deps) {
         </div>
 
         <div class="filas" style="gap:10px;min-width:0">
+          <Panel titulo="PIEZA DEL MODELO" id="panel-pieza" der={<span class="lbl">TÓCALA EN EL 3D</span>}>
+            <label class="campo"><span>Buscar pieza</span>
+              <select id="sel-pieza">
+                <option value="">— toca una pieza en el modelo o elígela aquí —</option>
+                {grupos.map((g) => (
+                  <optgroup label={GRUPOS_PIEZA[g]}>
+                    {PIEZAS.filter((p) => p.grupo === g).map((p) => <option value={p.id} selected={p.id === piezaSel?.id}>{p.nombre}{conHistorial.has(p.id) ? " •" : ""}</option>)}
+                  </optgroup>
+                ))}
+              </select>
+            </label>
+            <div id="pieza-detalle" class="filas" hidden={!piezaSel}>
+              <div>
+                <b id="pieza-nombre" class="mono-t" style="font-size:15px">{piezaSel?.nombre ?? ""}</b><br />
+                <span id="pieza-zona" class="muted" style="font-size:11px"></span>
+              </div>
+              <div id="pieza-partes" class="filas"></div>
+              <span class="lbl">HISTORIAL DE ESTA PIEZA</span>
+              <div id="pieza-historial" class="filas"></div>
+              {puedeEditarTaller ? (
+                <details class="plegable" id="pieza-registrar">
+                  <summary><span class="btn primario chico">+ REGISTRAR EN ESTA PIEZA</span></summary>
+                  <form method="post" action={`/trailer/${unidad.id}/pieza`} class="filas" style="margin-top:8px">
+                    <input type="hidden" name="componente" id="pieza-id" value={piezaSel?.id ?? ""} />
+                    <div class="radios">
+                      {(Object.keys(TIPOS_REPARACION) as TipoReparacion[]).map((t, i) => (
+                        <label><input type="radio" name="tipo" value={t} checked={i === 0} /><span>{TIPOS_REPARACION[t]}</span></label>
+                      ))}
+                    </div>
+                    <label class="campo"><span>¿Qué pasó o qué se hizo?</span><input name="trabajo" id="pieza-trabajo" required maxlength={200} placeholder="Qué pasó o qué se hizo" /></label>
+                    <div class="form-grid">
+                      <label class="campo"><span>Fecha</span><input type="date" name="fecha" value={hoy(ctx)} /></label>
+                      <label class="campo"><span>Odómetro (km)</span><input name="odometro" inputmode="numeric" placeholder={String(unidad.odometroKm)} /></label>
+                      <label class="campo"><span>Mano de obra S/</span><input name="manoObra" inputmode="decimal" placeholder="0.00" /></label>
+                      <label class="campo"><span>Taller / mecánico</span><input name="taller" /></label>
+                    </div>
+                    <div class="linea">
+                      <label class="campo" style="flex:3"><span>Repuesto usado (sale del inventario)</span>
+                        <select name="repuestoId"><option value="">— ninguno —</option>{repuestos.filter((r) => r.stock > 0).map((r) => <option value={r.id}>{r.codigo} · {r.nombre} (stock {r.stock})</option>)}</select>
+                      </label>
+                      <label class="campo" style="flex:1"><span>Cant.</span><input name="cantidad" inputmode="numeric" value="1" /></label>
+                    </div>
+                    <label class="campo"><span>¿Reinicia el contador de una parte controlada?</span>
+                      <select name="parteId" id="pieza-parte"><option value="">— no reinicia ningún contador —</option></select>
+                    </label>
+                    <button class="btn primario" type="submit">GUARDAR EN ESTA PIEZA</button>
+                    <span class="muted" style="font-size:11px">Queda en el historial de la pieza y en Reparaciones. Sin costo sirve para anotar un incidente (por ejemplo, se abrió el retrovisor).</span>
+                  </form>
+                </details>
+              ) : null}
+            </div>
+          </Panel>
           {sel ? (
             <Panel titulo={sel.nombre} der={<ChipEstado estado={sel.estado} />}>
               <span class="muted" style="font-size:11px">INSTALADO {fechaMedia(sel.fechaInstalacion)} · REPUESTO {sel.repuesto?.codigo ?? "—"} · COSTO {sel.costo ? soles2(sel.costo) : "—"}</span>
@@ -221,6 +296,30 @@ export function rutasTrailer(app: App, d: Deps): void {
         n++;
       }
       return `${n} ${n === 1 ? "parte controlada" : "partes controladas"} en ${unidad.codigo}`;
+    });
+  });
+  app.post("/trailer/:id/pieza", async (c) => {
+    const id = Number(c.req.param("id"));
+    const f = await formulario(c);
+    const p = pieza(f.componente);
+    return accion(c, p ? `/trailer/${id}?pieza=${p.id}` : `/trailer/${id}`, async () => {
+      if (!puedeEditar(c.get("usuario").rol, "reparaciones")) throw new ErrorNegocio("Tu rol no puede registrar reparaciones");
+      if (!p) throw new ErrorNegocio("Elige una pieza del modelo");
+      if (!f.trabajo?.trim()) throw new ErrorNegocio("Escribe qué pasó o qué se hizo");
+      const tipo = (f.tipo ?? "correctivo") as TipoReparacion;
+      if (!(tipo in TIPOS_REPARACION)) throw new ErrorNegocio("Tipo no válido");
+      const manoObra = f.manoObra ? parsearMonto(f.manoObra) : 0;
+      if (manoObra === null) throw new ErrorNegocio("Mano de obra no válida");
+      const odometro = entero(f.odometro);
+      const cantidad = entero(f.cantidad) ?? 1;
+      if (Number.isNaN(odometro) || Number.isNaN(cantidad)) throw new ErrorNegocio("Números no válidos");
+      const r = await registrarCambio(d.ctx, {
+        vehiculoId: id, componente: p.id, parteInstaladaId: f.parteId ? Number(f.parteId) : null, tipo, trabajo: f.trabajo,
+        odometro: odometro ?? undefined, fecha: f.fecha || undefined, manoObra, taller: f.taller || null,
+        repuestos: f.repuestoId ? [{ repuestoId: Number(f.repuestoId), cantidad }] : [], origen: "web", usuarioId: c.get("usuario").id,
+      });
+      await d.avisar(r.resumen).catch(() => {});
+      return `Guardado en ${p.nombre}${r.costoTotal ? ` · ${soles2(r.costoTotal)}` : ""}`;
     });
   });
   app.post("/parte/:id/vida", async (c) => {

@@ -1,11 +1,12 @@
 import {
-  and, desc, eq, gasto, inArray, parteInstalada, reparacion, reparacionRepuesto, repuesto, sql, tipoParte, vehiculo, viaje,
+  and, desc, eq, gasto, inArray, isNotNull, parteInstalada, reparacion, reparacionRepuesto, repuesto, sql, tipoParte, vehiculo, viaje,
   type OrigenRegistro, type TipoReparacion,
 } from "@sunatapp/db";
 import { formatearSoles } from "../dominio/montos";
 import { ErrorNegocio } from "../errores";
 import { registrarAuditoria } from "../infra/auditoria";
 import type { Contexto } from "../infra/contexto";
+import { nombrePieza, pieza } from "../flota/componentes";
 import { calcularDesgaste, etiquetaCambio } from "../flota/desgaste";
 import { hoy, instalarParte, partesDeUnidad, promediosUnidad, registrarLecturaOdometro } from "../flota/unidades";
 
@@ -21,6 +22,8 @@ export interface EntradaCambio {
   manoObra?: number;
   taller?: string | null;
   trabajo?: string | null;
+  /** Pieza exacta del modelo 3D (ver `PIEZAS`): llanta, retrovisor, faro… */
+  componente?: string | null;
   origen: OrigenRegistro;
   usuarioId?: number;
 }
@@ -57,6 +60,8 @@ export async function registrarCambio(ctx: Contexto, e: EntradaCambio): Promise<
   for (const r of e.repuestos) {
     if (!Number.isInteger(r.cantidad) || r.cantidad <= 0) throw new ErrorNegocio("Las cantidades de repuestos deben ser enteros positivos");
   }
+  const componente = e.componente?.trim() || null;
+  if (componente && !pieza(componente)) throw new ErrorNegocio("Esa pieza no existe en el modelo del trailer");
   const ids = e.repuestos.map((r) => r.repuestoId);
   if (new Set(ids).size !== ids.length) throw new ErrorNegocio("Un repuesto aparece dos veces; junta las cantidades");
 
@@ -75,7 +80,7 @@ export async function registrarCambio(ctx: Contexto, e: EntradaCambio): Promise<
     const uso = { ...parte.uso, km: Math.max(0, Math.max(odometro, unidad.odometroKm) - parte.kmInstalacion) };
     desgastePct = calcularDesgaste(parte.vida, uso, await promediosUnidad(ctx, e.vehiculoId)).pct;
   }
-  const trabajo = e.trabajo?.trim() || (parte ? `Cambio · ${parte.nombre}` : "Reparación");
+  const trabajo = e.trabajo?.trim() || (parte ? `Cambio · ${parte.nombre}` : componente ? `Revisión · ${nombrePieza(componente)}` : "Reparación");
 
   const r = await ctx.db.transaction(async (tx) => {
     if (odometro > unidad.odometroKm) {
@@ -95,7 +100,8 @@ export async function registrarCambio(ctx: Contexto, e: EntradaCambio): Promise<
       }
     }
     const costoTotal = costoRepuestos + manoObra;
-    if (costoTotal <= 0 && !parte) throw new ErrorNegocio("Indica los repuestos usados o el costo de la mano de obra");
+    // Con la pieza indicada se puede anotar un incidente sin costo (se abrió el retrovisor, etc.).
+    if (costoTotal <= 0 && !parte && !componente) throw new ErrorNegocio("Indica los repuestos usados o el costo de la mano de obra");
 
     let parteNuevaId: number | null = null;
     if (parte) {
@@ -119,7 +125,7 @@ export async function registrarCambio(ctx: Contexto, e: EntradaCambio): Promise<
       proveedorNombre: e.taller ?? null, nota: `${unidad.codigo ?? unidad.placa} · ${trabajo}`,
     }).returning({ id: gasto.id });
     const [rep] = await tx.insert(reparacion).values({
-      vehiculoId: unidad.id, parteRetiradaId: parte?.id ?? null, parteNuevaId, tipoParteId: parte?.tipoParteId ?? null,
+      vehiculoId: unidad.id, parteRetiradaId: parte?.id ?? null, parteNuevaId, tipoParteId: parte?.tipoParteId ?? null, componente,
       tipo: e.tipo, trabajo, odometro, fecha, manoObra, costoRepuestos, costoTotal, taller: e.taller ?? null,
       desgastePct, gastoId: g!.id, origen: e.origen, usuarioId: e.usuarioId ?? null,
     }).returning({ id: reparacion.id });
@@ -138,6 +144,7 @@ export async function registrarCambio(ctx: Contexto, e: EntradaCambio): Promise<
   const resumen = [
     `🔧 CAMBIO REGISTRADO · ${codigo}`,
     trabajo + (desgastePct !== null ? ` (al ${desgastePct}% · ${etiqueta})` : ""),
+    componente && !trabajo.includes(nombrePieza(componente)!) ? `Pieza: ${nombrePieza(componente)}` : "",
     `Costo ${formatearSoles(r.costoTotal)} · ${TIPOS_REPARACION[e.tipo]}${e.taller ? ` · ${e.taller}` : ""}`,
     parte ? "El contador de la parte vuelve a 0." : "",
   ].filter(Boolean).join("\n");
@@ -157,12 +164,18 @@ export interface FilaReparacion {
   taller: string | null;
   desgastePct: number | null;
   parte: string | null;
+  /** Pieza del modelo 3D (id de `PIEZAS`) y su nombre. */
+  componente: string | null;
+  pieza: string | null;
   origen: OrigenRegistro;
 }
 
-export async function listarReparaciones(ctx: Contexto, o: { vehiculoId?: number; limite?: number; desde?: string } = {}): Promise<FilaReparacion[]> {
+export async function listarReparaciones(
+  ctx: Contexto, o: { vehiculoId?: number; limite?: number; desde?: string; conPieza?: boolean } = {},
+): Promise<FilaReparacion[]> {
   const filtros = [];
   if (o.vehiculoId !== undefined) filtros.push(eq(reparacion.vehiculoId, o.vehiculoId));
+  if (o.conPieza) filtros.push(isNotNull(reparacion.componente));
   if (o.desde) filtros.push(sql`${reparacion.fecha} >= ${o.desde}`);
   const filas = await ctx.db
     .select({ r: reparacion, codigo: vehiculo.codigo, placa: vehiculo.placa, parte: tipoParte.nombreCorto })
@@ -175,7 +188,7 @@ export async function listarReparaciones(ctx: Contexto, o: { vehiculoId?: number
   return filas.map(({ r, codigo, placa, parte }) => ({
     id: r.id, fecha: r.fecha, unidad: codigo ?? placa, vehiculoId: r.vehiculoId, trabajo: r.trabajo, tipo: r.tipo,
     odometro: r.odometro, costoTotal: r.costoTotal, manoObra: r.manoObra, taller: r.taller, desgastePct: r.desgastePct,
-    parte, origen: r.origen,
+    parte, componente: r.componente, pieza: nombrePieza(r.componente), origen: r.origen,
   }));
 }
 

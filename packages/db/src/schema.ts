@@ -425,6 +425,8 @@ export const reparacion = pgTable("reparacion", {
   parteRetiradaId: integer("parte_retirada_id").references(() => parteInstalada.id),
   parteNuevaId: integer("parte_nueva_id").references(() => parteInstalada.id),
   tipoParteId: integer("tipo_parte_id").references(() => tipoParte.id),
+  /** Pieza exacta del modelo 3D (llanta, retrovisor, faro…), para verla resaltada en el trailer. */
+  componente: text("componente"),
   tipo: tipoReparacionEnum("tipo").notNull(),
   trabajo: text("trabajo").notNull(),
   odometro: integer("odometro").notNull(),

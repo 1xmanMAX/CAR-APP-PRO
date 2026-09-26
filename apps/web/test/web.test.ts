@@ -69,6 +69,30 @@ describe("web", () => {
       }
     });
 
+    it("cada pieza del modelo 3D guarda su historial y se ve resaltada", async () => {
+      const cookie = await entrar();
+      // Un incidente sin costo en una pieza concreta.
+      let r = await post(cookie, "/trailer/1/pieza", { componente: "retrovisor-izq", tipo: "falla_en_ruta", trabajo: "Se abrió el retrovisor", fecha: "2026-09-10" });
+      expect(r.headers.get("location")).toContain("/trailer/1?pieza=retrovisor-izq");
+      expect(aviso(r)).toContain("ok=");
+      // Un cambio de llanta con mano de obra.
+      r = await post(cookie, "/trailer/1/pieza", { componente: "llanta-sr2-der-ext", tipo: "correctivo", trabajo: "Cambio de llanta", manoObra: "80" });
+      expect(aviso(r)).toContain("ok=");
+      expect(aviso(await post(cookie, "/trailer/1/pieza", { componente: "no-existe", trabajo: "x" }))).toContain("error=");
+      expect(aviso(await post(cookie, "/trailer/1/pieza", { componente: "faro-der", trabajo: "" }))).toContain("error=");
+
+      const pag = await (await app.request("/trailer/1?pieza=llanta-sr2-der-ext", { headers: { cookie } })).text();
+      const datos = JSON.parse(pag.match(/<script[^>]*id="datos-visor"[^>]*>([\s\S]*?)<\/script>/)![1]!);
+      expect(datos.piezaSeleccionada).toBe("llanta-sr2-der-ext");
+      expect(datos.piezas.length).toBeGreaterThan(50);
+      expect(datos.historial["retrovisor-izq"][0].trabajo).toBe("Se abrió el retrovisor");
+      expect(datos.historial["llanta-sr2-der-ext"][0].costo).toContain("80");
+      // En Reparaciones se ve la pieza con el enlace para ubicarla en el modelo.
+      const rep = await (await app.request("/reparaciones", { headers: { cookie } })).text();
+      expect(rep).toContain("/trailer/1?pieza=llanta-sr2-der-ext");
+      expect(rep).toContain("Llanta semirremolque eje 2 · derecha exterior");
+    });
+
     it("contraseña incorrecta no entra", async () => {
       const r = await app.request("/entrar", { method: "POST", headers: { origin: ORIGEN }, body: new URLSearchParams({ email: "dueno@demo.pe", clave: "mala" }) });
       expect(r.status).toBe(401);

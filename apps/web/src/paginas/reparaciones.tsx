@@ -1,7 +1,7 @@
 /** @jsxRuntime automatic @jsxImportSource hono/jsx */
 import {
-  ErrorNegocio, etiquetaCambio, hoy, listarReparaciones, listarRepuestos, listarUnidades, parsearMonto, partesConDesgaste,
-  registrarCambio, TIPOS_REPARACION, type TipoReparacion,
+  ErrorNegocio, etiquetaCambio, GRUPOS_PIEZA, hoy, pieza, PIEZAS, listarReparaciones, listarRepuestos, listarUnidades, parsearMonto, partesConDesgaste,
+  registrarCambio, TIPOS_REPARACION, type GrupoPieza, type TipoReparacion,
 } from "@sunatapp/core";
 import { accion, formulario, pagina, type App, type C, type Deps } from "../base";
 import { enteroONull } from "./flota";
@@ -12,6 +12,7 @@ async function vista(c: C, d: Deps) {
   const unidades = await listarUnidades(ctx);
   const unidadSel = Number(c.req.query("unidad")) || unidades[0]?.id;
   const parteSel = Number(c.req.query("parte")) || undefined;
+  const piezaSel = pieza(c.req.query("pieza"))?.id;
   const filtroHist = c.req.query("h") ? Number(c.req.query("h")) : undefined;
   const [partes, repuestos, historial] = await Promise.all([
     partesConDesgaste(ctx, unidades.map((u) => u.id)),
@@ -40,6 +41,14 @@ async function vista(c: C, d: Deps) {
                   <select name="parteId" id="sel-parte">
                     <option value="">— reparación general (sin parte) —</option>
                     {partes.filter((p) => p.vehiculoId === unidadSel).map((p) => <option value={p.id} selected={p.id === parteSel}>{p.nombre} · {p.pct}%</option>)}
+                  </select>
+                </label>
+                <label class="campo"><span>Pieza exacta (modelo 3D, opcional)</span>
+                  <select name="componente">
+                    <option value="">— sin pieza —</option>
+                    {(Object.keys(GRUPOS_PIEZA) as GrupoPieza[]).map((g) => (
+                      <optgroup label={GRUPOS_PIEZA[g]}>{PIEZAS.filter((p) => p.grupo === g).map((p) => <option value={p.id} selected={p.id === piezaSel}>{p.nombre}</option>)}</optgroup>
+                    ))}
                   </select>
                 </label>
                 <label class="campo"><span>Odómetro actual (km)</span><input name="odometro" id="odometro" inputmode="numeric" placeholder={String(unidades.find((u) => u.id === unidadSel)?.odometroKm ?? "")} /></label>
@@ -118,11 +127,12 @@ async function vista(c: C, d: Deps) {
       }>
         <div class="tabla-wrap">
           <table class="t">
-            <thead><tr><th>Fecha</th><th>Unid.</th><th>Trabajo</th><th>Tipo</th><th class="num">Odómetro</th><th class="num">Desgaste</th><th class="num">Costo</th><th>Taller</th><th>Origen</th></tr></thead>
+            <thead><tr><th>Fecha</th><th>Unid.</th><th>Trabajo</th><th>Pieza</th><th>Tipo</th><th class="num">Odómetro</th><th class="num">Desgaste</th><th class="num">Costo</th><th>Taller</th><th>Origen</th></tr></thead>
             <tbody>
-              {historial.length === 0 ? <tr><td colspan={9}><Vacio>Sin reparaciones registradas.</Vacio></td></tr> : historial.map((h) => (
+              {historial.length === 0 ? <tr><td colspan={10}><Vacio>Sin reparaciones registradas.</Vacio></td></tr> : historial.map((h) => (
                 <tr>
                   <td class="nowrap">{fechaMedia(h.fecha)}</td><td><b>{h.unidad}</b></td><td>{h.trabajo}</td>
+                  <td>{h.componente ? <a href={`/trailer/${h.vehiculoId}?pieza=${h.componente}`} title="Ver dónde está en el modelo 3D">{h.pieza} · VER EN 3D</a> : "—"}</td>
                   <td><span class="chip neutro">{TIPOS_REPARACION[h.tipo]}</span></td>
                   <td class="num">{miles(h.odometro)}</td><td class="num">{h.desgastePct === null ? "—" : `${h.desgastePct}%`}</td>
                   <td class="num">{soles2(h.costoTotal)}</td><td>{h.taller ?? "—"}</td><td><Origen origen={h.origen} /></td>
@@ -158,7 +168,7 @@ export function rutasReparaciones(app: App, d: Deps): void {
       const r = await registrarCambio(d.ctx, {
         vehiculoId, parteInstaladaId: f.parteId ? Number(f.parteId) : null, tipo, odometro: enteroONull(f.odometro) ?? undefined,
         fecha: f.fecha || undefined, repuestos: [...usados].map(([repuestoId, cantidad]) => ({ repuestoId, cantidad })),
-        manoObra, taller: f.taller || null, trabajo: f.trabajo || null, origen: "web", usuarioId: c.get("usuario").id,
+        manoObra, taller: f.taller || null, trabajo: f.trabajo || null, componente: f.componente || null, origen: "web", usuarioId: c.get("usuario").id,
       });
       let aviso = r.resumen;
       if (r.stockBajo.length) aviso += `\n⚠️ Stock bajo: ${r.stockBajo.map((s) => `${s.codigo} (${s.stock})`).join(", ")}`;

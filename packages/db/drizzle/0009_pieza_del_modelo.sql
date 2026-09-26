@@ -1,0 +1,1 @@
+ALTER TABLE "reparacion" ADD COLUMN "componente" text;

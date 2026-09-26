@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { crearUnidad, leerDocumento, registrarViajeFlota } from "@sunatapp/core";
+import { crearUnidad, leerDocumento, registrarEntrega, registrarViajeFlota } from "@sunatapp/core";
 import { IaNoDisponibleError, crearLectorReglas } from "@sunatapp/ia";
 import { documentoRecibido, entrega, eq, gasto } from "../../../packages/db/src/index";
 import { crearArnes } from "./arnes";
@@ -77,7 +77,7 @@ describe("boletas por Telegram", () => {
     expect(a.ultimoTexto()).toMatch(/no tiene un viaje en curso/);
     const v = await registrarViajeFlota(a.ctx, { vehiculoId: t02.id, origenLugar: "Puno", destinoLugar: "Lima", estado: "en_curso", origen: "web" });
     await a.boton(botonT02);
-    expect(a.ultimoTexto()).toBe(`✅ ENTREGA ANOTADA en ${v.codigo}\n💵 Dinero recibido para el viaje · S/ 500.00 · Yape/Plin. Se descuenta en la liquidación del viaje.`);
+    expect(a.ultimoTexto()).toBe(`✅ ENTREGA ANOTADA en ${v.codigo}\n💵 Dinero recibido para el viaje · S/ 500.00 · Yape/Plin. Se descuenta en la liquidación del viaje.\n💰 Quedan S/ 500.00 de lo entregado (${v.codigo}).`);
     expect((await a.ctx.db.select().from(entrega)).map((e) => e.monto)).toEqual([50000]);
   });
 
@@ -111,5 +111,17 @@ describe("boletas por Telegram", () => {
   it("resumen con proveedor, comprobante, fecha y dudas", () => {
     expect(resumenLectura({ tipo: "gasto", categoria: "combustible", monto: 350, fecha: "2026-09-18", proveedorRuc: "20100070970", proveedorNombre: "PRIMAX", comprobante: "B012-4471", nota: null, dudas: ["no se lee la hora"] }))
       .toBe("⛽ Combustible · S/ 350.00\nPRIMAX (RUC 20100070970) · B012-4471 · 18/09\n⚠️ no se lee la hora");
+  });
+
+  it("después de un gasto dice cuánto queda de lo entregado, y /saldo da la liquidación", async () => {
+    const a = await arnes();
+    const v = await registrarViajeFlota(a.ctx, { vehiculoId: 1, origenLugar: "Juliaca", destinoLugar: "Arequipa", estado: "en_curso", origen: "web" });
+    await registrarEntrega(a.ctx, { viajeId: v.id, monto: 100000, medio: "efectivo" });
+    await a.texto("grifo 350");
+    await a.esperarTareas();
+    await a.boton(a.botones().find((b) => b.text === "✅ Correcto")!.callback_data);
+    expect(a.ultimoTexto()).toContain(`💰 Quedan S/ 650.00 de lo entregado (${v.codigo}).`);
+    await a.texto("/saldo");
+    expect(a.ultimoTexto()).toBe(`💰 ${v.codigo} · T-01 · Juliaca → Arequipa (en curso)\nEntregado S/ 1,000.00 · Gastado S/ 350.00\n👉 Le quedan S/ 650.00 al chofer\n🔴 Combustible S/ 350.00`);
   });
 });

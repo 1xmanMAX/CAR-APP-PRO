@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
-  buscarUnidad, crearEnlaceWeb, guardarUsuario, listarEventos, listarUsuarios, listarViajesFlota, obtenerEmpresa, partesDeUnidad, instalarParte, listarTiposParte,
+  buscarUnidad, crearEnlaceWeb, guardarUsuario, registrarGasto, registrarViajeFlota, listarEventos, listarUsuarios, listarViajesFlota, obtenerEmpresa, partesDeUnidad, instalarParte, listarTiposParte,
   type Contexto,
 } from "@sunatapp/core";
 import { crearDb } from "../../../packages/db/src/index";
@@ -109,6 +109,21 @@ describe("web", () => {
       const datos = JSON.parse(pag.match(/<script[^>]*id="datos-visor"[^>]*>([\s\S]*?)<\/script>/)![1]!);
       expect(datos.resaltar).toEqual({ titulo: expect.stringContaining("Luna de retrovisor"), piezas: ["retrovisor-izq", "retrovisor-der"] });
       expect(datos.repuestosPieza["retrovisor-der"]).toEqual([expect.objectContaining({ id, stock: 0 })]);
+    });
+
+    it("liquidación del viaje: entregas, gastos, saldo y semáforo", async () => {
+      const cookie = await entrar();
+      const v = await registrarViajeFlota(ctx, { vehiculoId: 1, origenLugar: "Juliaca", destinoLugar: "Arequipa", estado: "en_curso", origen: "web" });
+      await registrarGasto(ctx, { viajeId: v.id, categoria: "combustible", monto: 35000, origen: "telegram" });
+      let r = await post(cookie, `/viajes/${v.id}/entrega`, { monto: "500", medio: "yape", nota: "Adelanto" });
+      expect(aviso(r)).toContain("ok=");
+      expect(aviso(await post(cookie, `/viajes/${v.id}/entrega`, { monto: "abc" }))).toContain("error=");
+      const html = await (await app.request(`/viajes/${v.id}`, { headers: { cookie } })).text();
+      expect(html).toContain("El chofer tiene S/ 150.00 por rendir o devolver");
+      expect(html).toContain("Combustible");
+      expect(html).toContain("Adelanto");
+      const lista = await (await app.request("/viajes", { headers: { cookie } })).text();
+      expect(lista).toContain(`href="/viajes/${v.id}"`);
     });
 
     it("contraseña incorrecta no entra", async () => {

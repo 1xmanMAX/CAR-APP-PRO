@@ -60,13 +60,13 @@ async function vista(c: C, d: Deps) {
                 <tbody>
                   {viajes.length === 0 ? <tr><td colspan={10}><Vacio>Sin viajes en {mes}.</Vacio></td></tr> : viajes.map((v) => (
                     <tr>
-                      <td class="nowrap"><b>{v.guia}</b><div class="muted" style="font-size:10px">{v.codigo} · {fechaCorta(v.fecha)}</div></td>
+                      <td class="nowrap"><b>{v.guia}</b><div class="muted" style="font-size:10px"><a href={`/viajes/${v.id}`} title="Liquidación del viaje">{v.codigo}</a> · {fechaCorta(v.fecha)}</div></td>
                       <td><b>{v.unidad}</b></td>
                       <td>{v.ruta}{v.estado === "en_curso" ? <> <span class="chip ok">EN CURSO</span></> : null}</td>
                       <td class="num">{miles(v.km)}</td>
                       <td class="num">{v.toneladas ?? "—"}</td>
                       <td class="num">{v.flete ? soles(v.flete) : "—"}</td>
-                      <td class="num">{soles(v.costo)}</td>
+                      <td class="num"><a href={`/viajes/${v.id}`} title="Liquidación: entregado, gastos y semáforo">{soles(v.costo)}</a></td>
                       <td class={`num ${v.margenPct !== null && v.margenPct < 0 ? "t-cambiar" : ""}`}>{v.margenPct === null ? "—" : `${v.margenPct}%`}</td>
                       <td><span class={`chip ${CHIP_FACTURA[v.factura]}`}>{v.factura}</span>{v.facturas.length ? <div class="muted" style="font-size:10px">{v.facturas.join(", ")}</div> : null}</td>
                       <td><Origen origen={v.origen} /></td>

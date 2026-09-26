@@ -48,6 +48,7 @@ export const textos = {
     "/cambio — cambio de una parte",
     "/compra REP-014 6 180 — compra de repuesto",
     "/estado T-01 — próximas partes a cambiar",
+    "/saldo T-01 — dinero entregado vs. gastado del viaje (semáforo)",
     "/web — enlace para entrar a la web",
     "/cancelar — cancelar lo que estemos haciendo",
   ].join("\n"),

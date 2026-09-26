@@ -5,7 +5,7 @@ import {
 import { CATEGORIAS, montoDe, type Categoria } from "@sunatapp/ia";
 import { InlineKeyboard, type Api, type Bot, type Filter } from "grammy";
 import type { ContextoBot, Dependencias } from "./bot";
-import { autor, recordarUnidad, tecladoUnidades, unidadImplicita } from "./flujo-flota";
+import { autor, lineaSaldo, recordarUnidad, tecladoUnidades, unidadImplicita } from "./flujo-flota";
 
 /**
  * **Boletas por Telegram**: el chofer manda la foto de la boleta, un texto («grifo 350») o una
@@ -116,7 +116,8 @@ async function guardar(c: ContextoBot, deps: Dependencias, documentoId: number, 
     const texto = r.tipo === "gasto"
       ? `✅ GASTO GUARDADO\n${u ? `${u.codigo} · ` : ""}${que}${r.viajeCodigo ? ` · ${r.viajeCodigo}` : ""}${d.tipo === "foto" ? " · 📷 foto guardada" : ""}. Ya aparece en Finanzas.`
       : `✅ ENTREGA ANOTADA en ${r.viajeCodigo}\n${que}. Se descuenta en la liquidación del viaje.`;
-    await c.reply(texto);
+    const saldo = await lineaSaldo(deps, vehiculoId);
+    await c.reply(texto + saldo);
     await registrarEvento(deps.ctx, {
       usuarioId: c.session.usuarioId, autor: autor(c), comando: r.tipo === "gasto" ? "gasto (lectura)" : "entrega (lectura)", texto: `${u ? `${u.codigo} · ` : ""}${que}`,
       vehiculoId, entidad: r.tipo, entidadId: r.tipo === "gasto" ? r.gastoId : r.entregaId,

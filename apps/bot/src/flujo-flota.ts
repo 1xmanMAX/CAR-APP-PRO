@@ -1,8 +1,8 @@
 import {
   buscarRepuestoPorCodigo, buscarUnidad, categoriaDesdeTexto, chatAlertas, crearEnlaceWeb, duenoTelegramId, ErrorNegocio,
-  finalizarViajeFlota, formatearSoles, guardarChatAlertas, listarRepuestos, listarUnidades, NOMBRE_CATEGORIA, nombrePieza, parsearMonto, piezasDeTipo,
+  finalizarViajeFlota, formatearSoles, liquidacionDeUnidad, guardarChatAlertas, listarRepuestos, listarUnidades, NOMBRE_CATEGORIA, nombrePieza, parsearMonto, piezasDeTipo,
   partesDeUnidad, registrarCambio, registrarCompra, registrarEvento, registrarGasto, registrarLecturaOdometro,
-  registrarViajeFlota, tomarAlertasDesgaste, viajeEnCursoDeUnidad, type Unidad,
+  registrarViajeFlota, tomarAlertasDesgaste, viajeEnCursoDeUnidad, type LiquidacionViaje, type Unidad,
 } from "@sunatapp/core";
 import { InlineKeyboard, InputFile, type Api, type Bot, type Context, type Filter } from "grammy";
 import type { ContextoBot, Dependencias } from "./bot";
@@ -229,7 +229,7 @@ async function guardarGasto(c: ContextoBot, deps: Dependencias, u: Unidad, g: { 
     delete c.session.flujo;
     recordarUnidad(c, u.id);
     const cat = NOMBRE_CATEGORIA[g.categoria as keyof typeof NOMBRE_CATEGORIA];
-    await c.reply(`✅ GASTO GUARDADO\n${u.codigo} · ${cat} · ${formatearSoles(g.monto)}${r.viajeCodigo ? ` · ${r.viajeCodigo}` : ""}${g.rutaFoto ? " · 📷 voucher guardado" : ""}. Ya aparece en Finanzas.`);
+    await c.reply(`✅ GASTO GUARDADO\n${u.codigo} · ${cat} · ${formatearSoles(g.monto)}${r.viajeCodigo ? ` · ${r.viajeCodigo}` : ""}${g.rutaFoto ? " · 📷 voucher guardado" : ""}. Ya aparece en Finanzas.${await lineaSaldo(deps, u.id)}`);
     await registrarEvento(deps.ctx, { usuarioId: c.session.usuarioId, autor: autor(c), comando: "/gasto", texto: `${cat} ${formatearSoles(g.monto)}${g.rutaFoto ? " · con foto del voucher" : ""}`, vehiculoId: u.id, entidad: "gasto", entidadId: r.id });
   } catch (e) {
     delete c.session.flujo;
@@ -301,6 +301,41 @@ async function comandoEstado(c: ContextoBot, deps: Dependencias, texto: string):
     bloques.push(`🚛 ${u.codigo} · ${u.placa} · ${u.odometroKm.toLocaleString("en-US")} km\n${top.join("\n") || "sin partes controladas"}`);
   }
   await c.reply(bloques.join("\n\n"));
+}
+
+// ── /saldo ───────────────────────────────────────────────────────────────────
+
+const LUZ: Record<string, string> = { ok: "🟢", alerta: "🟡", excedido: "🔴" };
+
+/** Liquidación en texto: entregado, gastado, saldo y semáforo por categoría. */
+export function textoLiquidacion(l: LiquidacionViaje): string {
+  const saldo = l.saldo > 0 ? `👉 Le quedan ${formatearSoles(l.saldo)} al chofer` : l.saldo < 0 ? `👉 La empresa le debe ${formatearSoles(-l.saldo)} al chofer` : "👉 Cuentas en cero";
+  const lineas = l.lineas.map((x) => `${LUZ[x.semaforo]} ${x.nombre} ${formatearSoles(x.real)}${x.presupuesto ? ` / ${formatearSoles(x.presupuesto)} (${x.pct}%)` : ""}`);
+  const origen = l.presupuestoOrigen.tipo === "promedio" ? `Comparado con el promedio de ${l.presupuestoOrigen.viajes} viajes de la ruta.` : l.presupuestoOrigen.tipo === "viaje" ? "Comparado con el presupuesto del viaje." : "";
+  return [
+    `💰 ${l.viaje.codigo} · ${l.viaje.unidad} · ${l.viaje.ruta}${l.viaje.estado === "en_curso" ? " (en curso)" : ""}`,
+    `Entregado ${formatearSoles(l.entregado)} · Gastado ${formatearSoles(l.gastado)}`,
+    saldo, ...lineas, origen,
+  ].filter(Boolean).join("\n");
+}
+
+/** Una línea para después de guardar un gasto o una entrega: cómo va el dinero del viaje en curso. */
+export async function lineaSaldo(deps: Dependencias, vehiculoId: number | null | undefined): Promise<string> {
+  if (!vehiculoId) return "";
+  const l = await liquidacionDeUnidad(deps.ctx, vehiculoId);
+  if (!l || l.viaje.estado !== "en_curso" || l.entregado === 0) return "";
+  return l.saldo >= 0 ? `\n💰 Quedan ${formatearSoles(l.saldo)} de lo entregado (${l.viaje.codigo}).` : `\n💰 Ya gastó ${formatearSoles(-l.saldo)} más de lo entregado (${l.viaje.codigo}).`;
+}
+
+async function comandoSaldo(c: ContextoBot, deps: Dependencias, texto: string): Promise<void> {
+  const u = await unidadImplicita(c, deps, texto);
+  const unidades = u ? [u] : await listarUnidades(deps.ctx);
+  const bloques: string[] = [];
+  for (const x of unidades) {
+    const l = await liquidacionDeUnidad(deps.ctx, x.id);
+    if (l && (u || l.viaje.estado === "en_curso")) bloques.push(textoLiquidacion(l));
+  }
+  await c.reply(bloques.length ? bloques.join("\n\n") : "No hay viajes en curso. Para uno en particular: /saldo T-01");
 }
 
 // ── /cambio ──────────────────────────────────────────────────────────────────
@@ -483,6 +518,7 @@ export function registrarFlujoFlota(bot: Bot<ContextoBot>, deps: Dependencias, o
   bot.command("gasto", (c) => comandoGasto(c, deps, c.match, null));
   bot.command("km", (c) => comandoKm(c, deps, c.match.trim()));
   bot.command("estado", (c) => comandoEstado(c, deps, c.match.trim()));
+  bot.command("saldo", (c) => comandoSaldo(c, deps, c.match.trim()));
   bot.command("compra", (c) => comandoCompra(c, deps, c.match));
   bot.command("cambio", async (c) => {
     const u = /\bT-?\d/i.test(c.match) ? await unidadImplicita(c, deps, c.match) : null;

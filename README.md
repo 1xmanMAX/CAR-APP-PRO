@@ -156,6 +156,14 @@ entregado para el viaje), **✏️ Corregir** («eran 305», «era peaje») y **
 - Notas de voz: solo en la PC con whisper.cpp y ffmpeg (`WHISPER_BIN`, `WHISPER_MODELO`); sin ellos el bot
   pide que lo escriban.
 
+### Liquidación de viajes
+Cada viaje tiene su liquidación (web: Viajes → clic en el código o en el costo; Telegram: `/saldo`):
+dinero **entregado** al chofer (adelanto, yapes; se anota en la web o por Telegram con «me yapearon 500»)
+contra lo **gastado**, el **saldo** (lo que el chofer debe rendir o lo que la empresa le debe), el
+**semáforo** de cada categoría (verde < 90 %, ámbar hasta 100 %, rojo si se pasó) frente al presupuesto del
+viaje o, si no tiene, al promedio de los últimos 5 viajes de la misma ruta, y la **ganancia** (flete − gastos).
+Después de cada gasto confirmado por Telegram, el bot dice cuánto queda de lo entregado.
+
 ### Prueba manual
 Con `SUNAT_MODO=simulado`: envíale el PDF de una guía real del remitente → confirma el borrador →
 recibes la GRE-T simulada en PDF → responde "Sí" a facturar el flete → emite la factura →

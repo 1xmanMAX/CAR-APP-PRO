@@ -23,6 +23,7 @@ import { rutasAjustes } from "./paginas/ajustes";
 import { rutasSincronizar } from "./paginas/sincronizar";
 import { rutasEmpezar } from "./paginas/empezar";
 import { rutasDispositivo } from "./paginas/dispositivo";
+import { rutasLiquidacion } from "./paginas/liquidacion";
 
 export type { OpcionesWeb } from "./base";
 
@@ -263,7 +264,7 @@ export function crearWeb(ctx: Contexto, opciones: OpcionesWeb = {}): App {
     await next();
   });
 
-  for (const m of [rutasDashboard, rutasTrailer, rutasFlota, rutasInventario, rutasReparaciones, rutasViajes, rutasFinanzas, rutasRentabilidad, rutasTelegram, rutasDispositivo, rutasAjustes, rutasSincronizar]) {
+  for (const m of [rutasDashboard, rutasTrailer, rutasFlota, rutasInventario, rutasReparaciones, rutasLiquidacion, rutasViajes, rutasFinanzas, rutasRentabilidad, rutasTelegram, rutasDispositivo, rutasAjustes, rutasSincronizar]) {
     m(app, deps);
   }
   return app;

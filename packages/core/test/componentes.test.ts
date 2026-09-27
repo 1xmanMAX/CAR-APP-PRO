@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { nombrePieza, partesDePieza, pieza, PIEZAS, piezasDeTipo, type Forma } from "../src/flota/componentes";
+import {
+  nombrePieza, partesDePieza, pieza, PIEZAS, piezasDeSemirremolque, piezasDeTipo, TIPOS_SEMIRREMOLQUE, type Forma, type TipoSemirremolque,
+} from "../src/flota/componentes";
 
 type Caja = { min: number[]; max: number[] };
 
@@ -26,7 +28,9 @@ describe("piezas del modelo 3D (tracto cara plana + furgón)", () => {
     }
   });
 
-  it("todas las piezas quedan unidas: forman un solo vehículo, sin piezas flotando", () => {
+  it.each(Object.keys(TIPOS_SEMIRREMOLQUE) as TipoSemirremolque[])("con semirremolque %s todas las piezas quedan unidas: un solo vehículo, sin piezas flotando", (tipo) => {
+    const PIEZAS = piezasDeSemirremolque(tipo);
+    expect(new Set(PIEZAS.map((p) => p.id)).size).toBe(PIEZAS.length);
     const cajas = PIEZAS.map((p) => p.formas.map(cajaDe));
     const unidas = (i: number, j: number) => cajas[i]!.some((a) => cajas[j]!.some((b) => tocan(a, b)));
     const visto = new Set([0]);

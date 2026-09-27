@@ -1,0 +1,1 @@
+ALTER TABLE "vehiculo" ADD COLUMN "semirremolque" text DEFAULT 'furgon' NOT NULL;

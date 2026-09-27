@@ -1,7 +1,7 @@
 /** @jsxRuntime automatic @jsxImportSource hono/jsx */
 import {
   actualizarUnidad, crearUnidad, ErrorNegocio, hoy, instalarParte, listarTiposParte, puedeEditar, rangoMes,
-  registrarLecturaOdometro, resumenFinanciero, saludFlota, type EstadoUnidad,
+  registrarLecturaOdometro, resumenFinanciero, saludFlota, esTipoSemirremolque, TIPOS_SEMIRREMOLQUE, type EstadoUnidad, type TipoSemirremolque,
 } from "@sunatapp/core";
 import { accion, formulario, pagina, type App, type C, type Deps } from "../base";
 import { CHIP_UNIDAD, ESTADO_UNIDAD, miles, Panel, pct } from "../ui";
@@ -32,7 +32,7 @@ async function vista(c: C, d: Deps) {
                 <div style="display:flex;align-items:start;gap:8px">
                   <div>
                     <div class="id">{u.codigo}</div>
-                    <div class="muted" style="font-size:11px">PLACA {u.placa}{u.carreta ? ` + ${u.carreta.placa}` : ""} · {[u.marca, u.modelo, u.anio].filter(Boolean).join(" ") || "—"}</div>
+                    <div class="muted" style="font-size:11px">PLACA {u.placa}{u.carreta ? ` + ${u.carreta.placa}` : ""} · {TIPOS_SEMIRREMOLQUE[u.semirremolque]} · {[u.marca, u.modelo, u.anio].filter(Boolean).join(" ") || "—"}</div>
                   </div>
                   <span class={`chip ${CHIP_UNIDAD[u.estado]}`} style="margin-left:auto">{ESTADO_UNIDAD[u.estado]}</span>
                 </div>
@@ -64,6 +64,7 @@ async function vista(c: C, d: Deps) {
                       <label class="campo"><span>Modelo</span><input name="modelo" value={u.modelo ?? ""} /></label>
                       <label class="campo"><span>Año</span><input name="anio" inputmode="numeric" value={u.anio ?? ""} /></label>
                       <label class="campo"><span>Placa carreta</span><input name="placaCarreta" value={u.carreta?.placa ?? ""} /></label>
+                      <label class="campo"><span>Semirremolque</span><select name="semirremolque">{(Object.keys(TIPOS_SEMIRREMOLQUE) as TipoSemirremolque[]).map((t) => <option value={t} selected={t === u.semirremolque}>{TIPOS_SEMIRREMOLQUE[t]}</option>)}</select></label>
                       <label class="campo"><span>Rendimiento km/gal</span><input name="rendimiento" inputmode="decimal" value={u.rendimientoKmGal ?? ""} /></label>
                       <button class="btn chico" type="submit">GUARDAR</button>
                     </form>
@@ -78,6 +79,7 @@ async function vista(c: C, d: Deps) {
               <form method="post" action="/flota" class="form-grid" style="width:100%">
                 <label class="campo"><span>Placa tracto *</span><input name="placa" required placeholder="ABC-123" /></label>
                 <label class="campo"><span>Placa carreta</span><input name="placaCarreta" placeholder="XYZ-987" /></label>
+                <label class="campo"><span>Semirremolque</span><select name="semirremolque">{(Object.keys(TIPOS_SEMIRREMOLQUE) as TipoSemirremolque[]).map((t) => <option value={t}>{TIPOS_SEMIRREMOLQUE[t]}</option>)}</select></label>
                 <label class="campo"><span>Marca</span><input name="marca" placeholder="Volvo" /></label>
                 <label class="campo"><span>Modelo</span><input name="modelo" placeholder="FH 540" /></label>
                 <label class="campo"><span>Año</span><input name="anio" inputmode="numeric" /></label>
@@ -102,6 +104,7 @@ export function rutasFlota(app: App, d: Deps): void {
       const u = await crearUnidad(d.ctx, {
         placa: f.placa ?? "", marca: f.marca || null, modelo: f.modelo || null, anio: enteroONull(f.anio),
         odometroKm: enteroONull(f.odometro) ?? 0, viajesBase: enteroONull(f.viajesBase) ?? 0, placaCarreta: f.placaCarreta || null,
+        semirremolque: esTipoSemirremolque(f.semirremolque ?? "") ? (f.semirremolque as TipoSemirremolque) : "furgon",
       }, c.get("usuario").id);
       if (f.catalogo) {
         for (const t of await listarTiposParte(d.ctx)) await instalarParte(d.ctx, { vehiculoId: u.id, tipoParteId: t.id }, d.ctx.db, c.get("usuario").id);
@@ -117,6 +120,7 @@ export function rutasFlota(app: App, d: Deps): void {
       await actualizarUnidad(d.ctx, Number(c.req.param("id")), {
         estado: f.estado as EstadoUnidad, marca: f.marca || null, modelo: f.modelo || null, anio: enteroONull(f.anio),
         placaCarreta: f.placaCarreta || null, rendimientoKmGal: rend,
+        ...(f.semirremolque ? { semirremolque: f.semirremolque as TipoSemirremolque } : {}),
       }, c.get("usuario").id);
       return "Unidad actualizada";
     });

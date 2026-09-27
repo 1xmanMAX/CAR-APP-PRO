@@ -78,6 +78,13 @@
       "when": 1790700000000,
       "tag": "0010_repuesto_piezas",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1790800000000,
+      "tag": "0011_tipo_semirremolque",
+      "breakpoints": true
     }
   ]
 }

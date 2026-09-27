@@ -164,6 +164,26 @@ contra lo **gastado**, el **saldo** (lo que el chofer debe rendir o lo que la em
 viaje o, si no tiene, al promedio de los últimos 5 viajes de la misma ruta, y la **ganancia** (flete − gastos).
 Después de cada gasto confirmado por Telegram, el bot dice cuánto queda de lo entregado.
 
+### Rutas, «Por revisar» y estadísticas (web)
+- **Rutas** (Viajes → Rutas y presupuestos): plantilla por categoría para cada «origen → destino» (⇄ vale en
+  los dos sentidos) con el promedio real de los últimos 5 viajes al lado y «usar promedio». Cada viaje nuevo
+  de esa ruta copia la plantilla; en su liquidación se puede ajustar.
+- **Por revisar**: lo que quedó a medias en Telegram (mensajes con error, sin confirmar hace más de 24 h,
+  gastos sin viaje), con la foto o el audio al lado para terminarlo desde la web. También muestra lo que
+  costó la IA en el mes.
+- **Detalle del viaje**: corregir o borrar gastos, enlazar guías de ida y retorno, cerrar y reabrir.
+- **Estadísticas** (Finanzas → Estadísticas): mes a mes, por ruta (ganancia y desvío contra la plantilla),
+  combustible por grifo y por viaje, gasto por proveedor, y **descarga en Excel**.
+
+### Equipo por Telegram
+- `/invitar` (solo el dueño) da un código de 6 dígitos (24 h, un uso); quien lo manda al bot entra como chofer.
+- «Salgo de Juliaca a Puno, me dieron 1300» abre el viaje (con la plantilla de la ruta y el adelanto) y
+  «ya llegué» lo cierra con la liquidación. `/cerrar` hace lo mismo con el odómetro.
+
+### Modelo 3D
+Tracto cara plana 6x4 con el semirremolque de cada unidad (Flota → editar): **furgón, plataforma, cama baja o
+cisterna**. Cada pieza va por separado y encaja con las demás (una prueba lo verifica para los cuatro tipos).
+
 ### Prueba manual
 Con `SUNAT_MODO=simulado`: envíale el PDF de una guía real del remitente → confirma el borrador →
 recibes la GRE-T simulada en PDF → responde "Sí" a facturar el flete → emite la factura →

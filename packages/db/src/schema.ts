@@ -79,6 +79,8 @@ export const vehiculo = pgTable("vehiculo", {
   /** Rendimiento para el cotizador (km por galón); null = el de los parámetros generales. */
   rendimientoKmGal: numeric("rendimiento_km_gal", { precision: 6, scale: 2 }),
   carretaId: integer("carreta_id"),
+  /** Tipo de semirremolque que jala (para el modelo 3D): furgon, plataforma, cama_baja o cisterna. */
+  semirremolque: text("semirremolque").notNull().default("furgon"),
 });
 
 export const conductor = pgTable("conductor", {

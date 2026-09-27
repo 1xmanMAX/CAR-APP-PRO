@@ -117,7 +117,8 @@ function tren(): Pieza[] {
   return out;
 }
 
-export const PIEZAS: Pieza[] = [
+/** El tracto (igual para cualquier semirremolque). */
+const TRACTO: Pieza[] = [
   // ——— Cabina (frontal plana, sobre el motor) ———
   { id: "cabina", nombre: "Cabina (carrocería)", zona: "cabina", grupo: "cabina",
     formas: [caja([CAB.x0, CAB.y0, -CAB.z], [CAB.x1, CAB.y1, CAB.z])] },
@@ -137,8 +138,6 @@ export const PIEZAS: Pieza[] = [
     formas: [cajaLado(s, -9.5, -9.3, 3.0, 3.06, CAB.z, 1.42), cajaLado(s, -9.56, -9.44, 2.55, 3.4, 1.42, 1.56)] })),
   ...LADOS.map(([id, nombre, s]): Pieza => ({ id: `faro-${id}`, nombre: `Faro delantero · ${nombre}`, zona: "cabina", grupo: "luces",
     formas: [cajaLado(s, -9.45, CAB.x0, 1.25, 1.45, 0.72, 1.15)] })),
-  ...LADOS.map(([id, nombre, s]): Pieza => ({ id: `luz-tras-${id}`, nombre: `Luz trasera · ${nombre}`, zona: "caja", grupo: "luces",
-    formas: [cajaLado(s, SR.x1, SR.x1 + 0.05, 1.08, 1.3, 0.8, 1.2)] })),
   // ——— Motor y transmisión (bajo la cabina) ———
   { id: "motor", nombre: "Motor (bajo la cabina)", zona: "motor", grupo: "motor", codigos: ["aceite"], formas: [caja([-9.0, 0.6, -0.34], [-7.4, CAB.y0, 0.34])] },
   { id: "caja-cambios", nombre: "Caja de cambios", zona: "motor", grupo: "motor", codigos: [], formas: [caja([-7.4, 0.68, -0.25], [-6.5, 1.05, 0.25])] },
@@ -166,31 +165,95 @@ export const PIEZAS: Pieza[] = [
     formas: [cajaLado(s, -5.1, -2.55, 1.1, 1.16, RIEL.ze, 1.36)] })),
   ...LADOS.map(([id, nombre, s]): Pieza => ({ id: `lodera-trac-${id}`, nombre: `Lodera del tracto · ${nombre}`, zona: "chasis", grupo: "chasis", codigos: [],
     formas: [cajaLado(s, -2.55, -2.51, 0.25, 1.1, 0.66, 1.36)] })),
-  // ——— Semirremolque furgón ———
-  { id: "plancha-acople", nombre: "Plancha de acople y king pin", zona: "quinta", grupo: "semirremolque", codigos: [],
-    formas: [caja([SR.x0, 1.22, -1.25], [-2.6, SR.piso, 1.25]), cil([X.quinta, 1.14, 0], 0.05, 0.16, "y")] },
-  { id: "chasis-semirremolque", nombre: "Chasis del semirremolque (vigas)", zona: "chasis", grupo: "semirremolque", codigos: [],
-    formas: ambosLados(-2.6, SR.x1, VIGA.y0, SR.piso, VIGA.zi, VIGA.ze) },
-  { id: "caja-frente", nombre: "Furgón · pared delantera", zona: "caja", grupo: "semirremolque", formas: [caja([SR.x0, SR.piso, -SR.z], [SR.x0 + 0.04, SR.techo, SR.z])] },
-  ...LADOS.map(([id, nombre, s]): Pieza => ({ id: `caja-lateral-${id}`, nombre: `Furgón · lateral ${nombre}`, zona: "caja", grupo: "semirremolque",
-    formas: [cajaLado(s, SR.x0, SR.x1, SR.piso, SR.techo, SR.z - 0.02, SR.z)] })),
-  { id: "caja-techo", nombre: "Furgón · techo", zona: "caja", grupo: "semirremolque", formas: [caja([SR.x0, SR.techo - 0.02, -SR.z], [SR.x1, SR.techo, SR.z])] },
-  { id: "marco-trasero", nombre: "Marco trasero", zona: "caja", grupo: "semirremolque", formas: [caja([SR.x1 - 0.1, VIGA.y0, -SR.z], [SR.x1, SR.piso, SR.z])] },
-  ...LADOS.map(([id, nombre, s]): Pieza => ({ id: `puerta-tras-${id}`, nombre: `Puerta trasera · ${nombre}`, zona: "caja", grupo: "semirremolque",
-    formas: [cajaLado(s, SR.x1, SR.x1 + 0.03, SR.piso + 0.02, SR.techo - 0.04, 0.01, SR.z - 0.02)] })),
-  { id: "parachoques-tras", nombre: "Parachoques trasero (antiempotramiento)", zona: "caja", grupo: "semirremolque",
-    formas: [caja([8.55, 0.45, -1.15], [8.68, 0.6, 1.15]), ...ambosLados(8.56, 8.66, 0.6, VIGA.y0, VIGA.zi, VIGA.ze)] },
-  ...LADOS.map(([id, nombre, s]): Pieza => ({ id: `pata-apoyo-${id}`, nombre: `Pata de apoyo · ${nombre}`, zona: "chasis", grupo: "semirremolque", codigos: [],
-    formas: [cajaLado(s, PATAS_X - 0.08, PATAS_X + 0.08, 0.12, VIGA.y0, VIGA.zi, VIGA.ze), cajaLado(s, PATAS_X - 0.2, PATAS_X + 0.2, 0.06, 0.12, VIGA.zi - 0.06, VIGA.ze + 0.06)] })),
-  ...LADOS.map(([id, nombre, s]): Pieza => ({ id: `defensa-lateral-${id}`, nombre: `Defensa lateral · ${nombre}`, zona: "caja", grupo: "semirremolque",
-    formas: [cajaLado(s, -0.8, 4.0, 0.55, 0.85, SR.z - 0.04, SR.z), cajaLado(s, -0.7, -0.55, 0.85, SR.piso, SR.z - 0.1, SR.z), cajaLado(s, 3.75, 3.9, 0.85, SR.piso, SR.z - 0.1, SR.z)] })),
-  ...LADOS.map(([id, nombre, s]): Pieza => ({ id: `lodera-${id}`, nombre: `Lodera del semirremolque · ${nombre}`, zona: "caja", grupo: "semirremolque",
-    formas: [cajaLado(s, 8.05, 8.09, 0.25, VIGA.y0, 0.7, SR.z), cajaLado(s, 8.05, 8.09, 0.9, VIGA.y0, VIGA.ze, 0.7)] })),
-  { id: "llanta-repuesto", nombre: "Llanta de repuesto (con su porta llanta)", zona: "llantas_sr", grupo: "llantas",
-    formas: [cil([1.8, 0.8, 0], 0.5, 0.27, "y"), caja([1.2, 0.935, -VIGA.ze], [2.4, VIGA.y0, VIGA.ze])] },
-  ...tren(),
-  ...llantas(),
 ];
+
+
+// ——— Semirremolque: lo común y la carrocería según el tipo ———
+
+export const TIPOS_SEMIRREMOLQUE = { furgon: "Furgón", plataforma: "Plataforma", cama_baja: "Cama baja", cisterna: "Cisterna" } as const;
+export type TipoSemirremolque = keyof typeof TIPOS_SEMIRREMOLQUE;
+export const esTipoSemirremolque = (t: string): t is TipoSemirremolque => t in TIPOS_SEMIRREMOLQUE;
+
+const kingPin = cil([X.quinta, 1.14, 0], 0.05, 0.16, "y");
+const LUCES_TRASERAS: Pieza[] = LADOS.map(([id, nombre, s]): Pieza => ({ id: `luz-tras-${id}`, nombre: `Luz trasera · ${nombre}`, zona: "caja", grupo: "luces",
+  formas: [cajaLado(s, SR.x1, SR.x1 + 0.05, 1.08, 1.3, 0.8, 1.2)] }));
+const PLANCHA: Pieza = { id: "plancha-acople", nombre: "Plancha de acople y king pin", zona: "quinta", grupo: "semirremolque", codigos: [],
+  formas: [caja([SR.x0, 1.22, -1.25], [-2.6, SR.piso, 1.25]), kingPin] };
+const CHASIS_SR: Pieza = { id: "chasis-semirremolque", nombre: "Chasis del semirremolque (vigas)", zona: "chasis", grupo: "semirremolque", codigos: [],
+  formas: ambosLados(-2.6, SR.x1, VIGA.y0, SR.piso, VIGA.zi, VIGA.ze) };
+const MARCO: Pieza = { id: "marco-trasero", nombre: "Marco trasero", zona: "caja", grupo: "semirremolque", formas: [caja([SR.x1 - 0.1, VIGA.y0, -SR.z], [SR.x1, SR.piso, SR.z])] };
+const PARACHOQUES_TRAS: Pieza = { id: "parachoques-tras", nombre: "Parachoques trasero (antiempotramiento)", zona: "caja", grupo: "semirremolque",
+  formas: [caja([8.55, 0.45, -1.15], [8.68, 0.6, 1.15]), ...ambosLados(8.56, 8.66, 0.6, VIGA.y0, VIGA.zi, VIGA.ze)] };
+const patas = (arriba: number): Pieza[] => LADOS.map(([id, nombre, s]): Pieza => ({ id: `pata-apoyo-${id}`, nombre: `Pata de apoyo · ${nombre}`, zona: "chasis", grupo: "semirremolque", codigos: [],
+  formas: [cajaLado(s, PATAS_X - 0.08, PATAS_X + 0.08, 0.12, arriba, VIGA.zi, VIGA.ze), cajaLado(s, PATAS_X - 0.2, PATAS_X + 0.2, 0.06, 0.12, VIGA.zi - 0.06, VIGA.ze + 0.06)] }));
+const DEFENSAS: Pieza[] = LADOS.map(([id, nombre, s]): Pieza => ({ id: `defensa-lateral-${id}`, nombre: `Defensa lateral · ${nombre}`, zona: "caja", grupo: "semirremolque",
+  formas: [cajaLado(s, -0.8, 4.0, 0.55, 0.85, SR.z - 0.04, SR.z), cajaLado(s, -0.7, -0.55, 0.85, SR.piso, SR.z - 0.1, SR.z), cajaLado(s, 3.75, 3.9, 0.85, SR.piso, SR.z - 0.1, SR.z)] }));
+const LODERAS: Pieza[] = LADOS.map(([id, nombre, s]): Pieza => ({ id: `lodera-${id}`, nombre: `Lodera del semirremolque · ${nombre}`, zona: "caja", grupo: "semirremolque",
+  formas: [cajaLado(s, 8.05, 8.09, 0.25, VIGA.y0, 0.7, SR.z), cajaLado(s, 8.05, 8.09, 0.9, VIGA.y0, VIGA.ze, 0.7)] }));
+const REPUESTO: Pieza = { id: "llanta-repuesto", nombre: "Llanta de repuesto (con su porta llanta)", zona: "llantas_sr", grupo: "llantas",
+  formas: [cil([1.8, 0.8, 0], 0.5, 0.27, "y"), caja([1.2, 0.935, -VIGA.ze], [2.4, VIGA.y0, VIGA.ze])] };
+
+function carroceria(tipo: TipoSemirremolque): Pieza[] {
+  if (tipo === "furgon") {
+    return [
+      { id: "caja-frente", nombre: "Furgón · pared delantera", zona: "caja", grupo: "semirremolque", formas: [caja([SR.x0, SR.piso, -SR.z], [SR.x0 + 0.04, SR.techo, SR.z])] },
+      ...LADOS.map(([id, nombre, s]): Pieza => ({ id: `caja-lateral-${id}`, nombre: `Furgón · lateral ${nombre}`, zona: "caja", grupo: "semirremolque",
+        formas: [cajaLado(s, SR.x0, SR.x1, SR.piso, SR.techo, SR.z - 0.02, SR.z)] })),
+      { id: "caja-techo", nombre: "Furgón · techo", zona: "caja", grupo: "semirremolque", formas: [caja([SR.x0, SR.techo - 0.02, -SR.z], [SR.x1, SR.techo, SR.z])] },
+      ...LADOS.map(([id, nombre, s]): Pieza => ({ id: `puerta-tras-${id}`, nombre: `Puerta trasera · ${nombre}`, zona: "caja", grupo: "semirremolque",
+        formas: [cajaLado(s, SR.x1, SR.x1 + 0.03, SR.piso + 0.02, SR.techo - 0.04, 0.01, SR.z - 0.02)] })),
+    ];
+  }
+  if (tipo === "plataforma") {
+    const tope = SR.piso + 0.08;
+    const estacas = (s: 1 | -1): Forma[] => [
+      ...[-4.6, -2, 0.6, 3.2, 5.8, 8.4].map((x) => cajaLado(s, x - 0.05, x + 0.05, tope, 2.0, SR.z - 0.06, SR.z)),
+      cajaLado(s, SR.x0, SR.x1, 1.95, 2.0, SR.z - 0.06, SR.z),
+    ];
+    return [
+      { id: "plataforma-piso", nombre: "Plataforma · piso", zona: "caja", grupo: "semirremolque", formas: [caja([SR.x0, SR.piso, -SR.z], [SR.x1, tope, SR.z])] },
+      { id: "mampara-frontal", nombre: "Plataforma · mampara delantera", zona: "caja", grupo: "semirremolque", formas: [caja([SR.x0, tope, -1.25], [SR.x0 + 0.08, 2.7, 1.25])] },
+      ...LADOS.map(([id, nombre, s]): Pieza => ({ id: `estacas-${id}`, nombre: `Plataforma · estacas y baranda ${nombre}`, zona: "caja", grupo: "semirremolque", formas: estacas(s) })),
+    ];
+  }
+  if (tipo === "cisterna") {
+    return [
+      { id: "cisterna-tanque", nombre: "Cisterna · tanque", zona: "caja", grupo: "semirremolque", formas: [cil([1.85, 2.58, 0], 1.18, 13.3, "x")] },
+      { id: "cisterna-bocas", nombre: "Cisterna · bocas de carga (manholes)", zona: "caja", grupo: "semirremolque",
+        formas: [-1.5, 2, 5.5].map((x) => cil([x, 3.84, 0], 0.28, 0.16, "y")) },
+      { id: "cisterna-pasarela", nombre: "Cisterna · pasarela superior", zona: "caja", grupo: "semirremolque", formas: [caja([-2.5, 3.92, -0.3], [7, 3.96, 0.3])] },
+      { id: "cisterna-escalera", nombre: "Cisterna · escalera trasera", zona: "caja", grupo: "semirremolque", formas: [caja([8.5, SR.piso, -0.25], [8.62, 3.9, 0.25])] },
+      { id: "cisterna-valvulas", nombre: "Cisterna · válvulas de descarga", zona: "caja", grupo: "semirremolque", formas: [cil([8.0, 1.2, 0], 0.09, 1.2, "z")] },
+    ];
+  }
+  // Cama baja: cuello alto sobre la quinta rueda, piso bajo entre el cuello y los ejes, y rampas.
+  return [
+    { id: "cama-piso-bajo", nombre: "Cama baja · piso bajo", zona: "caja", grupo: "semirremolque", formas: [caja([-2.1, 0.55, -SR.z], [4.3, 0.72, SR.z])] },
+    ...LADOS.map(([id, nombre, s]): Pieza => ({ id: `cama-rampa-${id}`, nombre: `Cama baja · rampa ${nombre}`, zona: "caja", grupo: "semirremolque",
+      formas: [cajaLado(s, SR.x1, SR.x1 + 0.08, SR.piso, 3.0, 0.45, 0.95)] })),
+  ];
+}
+
+/** Todas las piezas de una unidad: el tracto, el semirremolque de su tipo, ejes, frenos y llantas. */
+export function piezasDeSemirremolque(tipo: TipoSemirremolque = "furgon"): Pieza[] {
+  const comunes: Pieza[] = tipo === "cama_baja"
+    ? [
+      { id: "cama-cuello", nombre: "Cama baja · cuello y king pin", zona: "quinta", grupo: "semirremolque", codigos: [],
+        formas: [caja([SR.x0, 1.22, -1.25], [-2.4, 1.62, 1.25]), caja([-2.4, 0.55, -1.25], [-2.1, 1.62, 1.25]), kingPin] },
+      { id: "cama-chasis-trasero", nombre: "Cama baja · chasis y plataforma sobre los ejes", zona: "chasis", grupo: "semirremolque", codigos: [],
+        formas: [...ambosLados(4.3, SR.x1, VIGA.y0, SR.piso, VIGA.zi, VIGA.ze), caja([4.0, 0.55, -SR.z], [4.3, SR.piso + 0.08, SR.z]), caja([4.3, SR.piso, -SR.z], [SR.x1, SR.piso + 0.08, SR.z])] },
+      ...patas(0.55), MARCO, PARACHOQUES_TRAS, ...LODERAS, ...LUCES_TRASERAS,
+    ]
+    : [PLANCHA, CHASIS_SR, ...patas(VIGA.y0), MARCO, PARACHOQUES_TRAS, ...DEFENSAS, ...LODERAS, REPUESTO, ...LUCES_TRASERAS];
+  return [...TRACTO, ...comunes, ...carroceria(tipo), ...tren(), ...llantas()];
+}
+
+/** Todas las piezas posibles (de cualquier tipo de semirremolque), para buscar una por su código. */
+export const PIEZAS: Pieza[] = (() => {
+  const vistas = new Map<string, Pieza>();
+  for (const t of Object.keys(TIPOS_SEMIRREMOLQUE) as TipoSemirremolque[]) for (const p of piezasDeSemirremolque(t)) if (!vistas.has(p.id)) vistas.set(p.id, p);
+  return [...vistas.values()];
+})();
 
 const PORID = new Map(PIEZAS.map((p) => [p.id, p]));
 

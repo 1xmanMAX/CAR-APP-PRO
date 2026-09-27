@@ -166,6 +166,24 @@ describe("web", () => {
       expect(html).toContain("S/ 1,050.00 previstos");
     });
 
+    it("detalle del viaje: corregir y borrar gastos, cerrar y reabrir", async () => {
+      const cookie = await entrar();
+      const v = await registrarViajeFlota(ctx, { vehiculoId: 1, origenLugar: "Juliaca", destinoLugar: "Cusco", estado: "en_curso", origen: "web" });
+      const g1 = await registrarGasto(ctx, { viajeId: v.id, categoria: "combustible", monto: 30000, origen: "telegram" });
+      const g2 = await registrarGasto(ctx, { viajeId: v.id, categoria: "otros", monto: 5000, origen: "telegram" });
+      expect(aviso(await post(cookie, `/viajes/${v.id}/gasto/${g1.id}`, { categoria: "combustible", monto: "305", fecha: "2026-09-13" }))).toContain("ok=");
+      expect(aviso(await post(cookie, `/viajes/${v.id}/gasto/${g2.id}/borrar`, {}))).toContain("ok=");
+      let html = await (await app.request(`/viajes/${v.id}`, { headers: { cookie } })).text();
+      expect(html).toContain("S/ 305.00");
+      expect(html).not.toContain("S/ 50.00");
+      expect(aviso(await post(cookie, `/viajes/${v.id}/cerrar`, { km: "380", flete: "1200" }))).toContain("ok=");
+      html = await (await app.request(`/viajes/${v.id}`, { headers: { cookie } })).text();
+      expect(html).toContain("REABRIR VIAJE");
+      expect(html).toContain("margen 75%");
+      expect(aviso(await post(cookie, `/viajes/${v.id}/reabrir`, {}))).toContain("ok=");
+      expect(await (await app.request(`/viajes/${v.id}`, { headers: { cookie } })).text()).toContain("CERRAR ESTE VIAJE");
+    });
+
     it("contraseña incorrecta no entra", async () => {
       const r = await app.request("/entrar", { method: "POST", headers: { origin: ORIGEN }, body: new URLSearchParams({ email: "dueno@demo.pe", clave: "mala" }) });
       expect(r.status).toBe(401);

@@ -1,10 +1,12 @@
 /** @jsxRuntime automatic @jsxImportSource hono/jsx */
 import {
-  actualizarPresupuestoViaje, borrarEntrega, ErrorNegocio, hoy, liquidacionViaje, MEDIOS_ENTREGA, NOMBRE_CATEGORIA, parsearMonto, puedeEditar, registrarEntrega,
+  actualizarPresupuestoViaje, borrarEntrega, borrarGasto, CATEGORIAS_GASTO, desenlazarGuia, editarGasto, enlazarGuia, ErrorNegocio, finalizarViajeFlota,
+  listarGuiasSinViaje, reabrirViaje, type CategoriaGasto, hoy, liquidacionViaje, MEDIOS_ENTREGA, NOMBRE_CATEGORIA, parsearMonto, puedeEditar, registrarEntrega,
   type LiquidacionViaje, type Semaforo,
 } from "@sunatapp/core";
 import { accion, formulario, pagina, type App, type C, type Deps } from "../base";
 import { Barra, fechaCorta, Kpi, Panel, soles2, Vacio } from "../ui";
+import { enteroONull } from "./flota";
 import { CamposPlantilla, plantillaDeFormulario } from "./rutas";
 
 const ESTADO_SEMAFORO: Record<Semaforo, "ok" | "proximo" | "cambiar"> = { ok: "ok", alerta: "proximo", excedido: "cambiar" };
@@ -22,6 +24,7 @@ function textoSaldo(l: LiquidacionViaje): string {
  */
 async function vista(c: C, d: Deps) {
   const l = await liquidacionViaje(d.ctx, Number(c.req.param("id")));
+  const sinViaje = await listarGuiasSinViaje(d.ctx);
   const edita = puedeEditar(c.get("usuario").rol, "viajes");
   const origen = l.presupuestoOrigen.tipo === "viaje" ? "presupuesto del viaje"
     : l.presupuestoOrigen.tipo === "promedio" ? `promedio de los últimos ${l.presupuestoOrigen.viajes} viajes de esta ruta` : "sin presupuesto ni viajes anteriores de esta ruta";
@@ -71,11 +74,24 @@ async function vista(c: C, d: Deps) {
           <Panel titulo={`GASTOS DEL VIAJE · ${l.gastos.length}`}>
             {l.gastos.length === 0 ? <Vacio>Sin gastos.</Vacio> : (
               <div class="tabla-wrap"><table class="t">
-                <thead><tr><th>Fecha</th><th>Categoría</th><th>Detalle</th><th class="num">Monto</th><th></th></tr></thead>
+                <thead><tr><th>Fecha</th><th>Categoría</th><th>Detalle</th><th class="num">Monto</th><th></th>{edita ? <th></th> : null}</tr></thead>
                 <tbody>{l.gastos.map((g) => (
                   <tr>
                     <td class="nowrap">{fechaCorta(g.fecha)}</td><td>{NOMBRE_CATEGORIA[g.categoria]}</td><td>{g.detalle ?? "—"}</td>
                     <td class="num">{soles2(g.monto)}</td><td>{g.conFoto ? <a href={`/archivo/gasto/${g.id}`} title="Ver la boleta">📷</a> : null}</td>
+                    {edita ? (
+                      <td>
+                        <details class="plegable"><summary><span class="btn chico">EDITAR</span></summary>
+                          <form method="post" action={`/viajes/${l.viaje.id}/gasto/${g.id}`} class="filas" style="margin-top:6px;min-width:220px">
+                            <label class="campo"><span>Categoría</span><select name="categoria">{CATEGORIAS_GASTO.map((k) => <option value={k} selected={k === g.categoria}>{NOMBRE_CATEGORIA[k]}</option>)}</select></label>
+                            <label class="campo"><span>Monto S/</span><input name="monto" inputmode="decimal" value={(g.monto / 100).toFixed(2)} /></label>
+                            <label class="campo"><span>Fecha</span><input name="fecha" type="date" value={g.fecha} /></label>
+                            <button class="btn primario chico" type="submit">GUARDAR</button>
+                          </form>
+                          <form method="post" action={`/viajes/${l.viaje.id}/gasto/${g.id}/borrar`} data-confirmar="¿Borrar este gasto?"><button class="btn chico fantasma" type="submit">BORRAR</button></form>
+                        </details>
+                      </td>
+                    ) : null}
                   </tr>
                 ))}</tbody>
               </table></div>
@@ -105,6 +121,40 @@ async function vista(c: C, d: Deps) {
               </form>
             ) : null}
           </Panel>
+          <Panel titulo="GUÍAS DEL VIAJE (IDA Y RETORNO)">
+            {l.guias.length === 0 ? <Vacio>Sin guías enlazadas. Las que se emiten con el viaje en curso se enlazan solas.</Vacio> : (
+              <div class="tabla-wrap"><table class="t"><tbody>{l.guias.map((g) => (
+                <tr>
+                  <td><b>{g.serieNumero}</b> <span class="chip neutro">{(g.tramo ?? "—").toUpperCase()}</span></td>
+                  <td class="num">{g.flete === null ? <span class="muted">sin factura</span> : soles2(g.flete)}</td>
+                  <td>{edita ? <form method="post" action={`/viajes/${l.viaje.id}/guia/${g.id}/quitar`}><button class="btn chico fantasma" type="submit" aria-label="Quitar guía del viaje">×</button></form> : null}</td>
+                </tr>
+              ))}</tbody></table></div>
+            )}
+            {edita && sinViaje.length ? (
+              <form method="post" action={`/viajes/${l.viaje.id}/guia`} class="linea">
+                <select name="guiaId" aria-label="Guía" style="flex:2">{sinViaje.map((g) => <option value={g.id}>{g.serieNumero} · {fechaCorta(g.fechaTraslado)}</option>)}</select>
+                <select name="tramo" aria-label="Tramo" style="flex:1"><option value="ida">Ida</option><option value="retorno">Retorno</option></select>
+                <button class="btn chico" type="submit">ENLAZAR</button>
+              </form>
+            ) : null}
+          </Panel>
+          {edita ? (
+            l.viaje.estado === "en_curso" ? (
+              <Panel titulo="CERRAR ESTE VIAJE">
+                <form method="post" action={`/viajes/${l.viaje.id}/cerrar`} class="filas">
+                  <div class="form-grid">
+                    <label class="campo"><span>Odómetro final (km)</span><input name="odometro" inputmode="numeric" /></label>
+                    <label class="campo"><span>o km recorridos</span><input name="km" inputmode="numeric" /></label>
+                    <label class="campo"><span>Flete S/ (sin IGV)</span><input name="flete" inputmode="decimal" /></label>
+                  </div>
+                  <button class="btn primario" type="submit">CERRAR VIAJE</button>
+                </form>
+              </Panel>
+            ) : (
+              <form method="post" action={`/viajes/${l.viaje.id}/reabrir`}><button class="btn" type="submit" style="width:100%">REABRIR VIAJE</button></form>
+            )
+          ) : null}
           <section class="panel oscuro" style="gap:4px">
             <span class="lbl" style="color:var(--dark-muted)">RESULTADO</span>
             <b style="font-size:15px">{textoSaldo(l)}</b>
@@ -118,6 +168,44 @@ async function vista(c: C, d: Deps) {
 
 export function rutasLiquidacion(app: App, d: Deps): void {
   app.get("/viajes/:id{[0-9]+}", (c) => vista(c, d));
+  const conId = (c: C) => Number(c.req.param("id"));
+  app.post("/viajes/:id{[0-9]+}/gasto/:g{[0-9]+}", async (c) => {
+    const f = await formulario(c);
+    return accion(c, `/viajes/${conId(c)}`, async () => {
+      const monto = f.monto ? parsearMonto(f.monto) : undefined;
+      if (monto === null) throw new ErrorNegocio("Monto no válido");
+      await editarGasto(d.ctx, Number(c.req.param("g")), { categoria: f.categoria as CategoriaGasto, monto, fecha: f.fecha || undefined }, c.get("usuario").id);
+      return "Gasto corregido";
+    });
+  });
+  app.post("/viajes/:id{[0-9]+}/gasto/:g{[0-9]+}/borrar", async (c) => accion(c, `/viajes/${conId(c)}`, async () => {
+    await borrarGasto(d.ctx, Number(c.req.param("g")), c.get("usuario").id);
+    return "Gasto borrado";
+  }));
+  app.post("/viajes/:id{[0-9]+}/guia", async (c) => {
+    const f = await formulario(c);
+    return accion(c, `/viajes/${conId(c)}`, async () => {
+      await enlazarGuia(d.ctx, Number(f.guiaId), conId(c), f.tramo === "retorno" ? "retorno" : "ida", c.get("usuario").id);
+      return "Guía enlazada";
+    });
+  });
+  app.post("/viajes/:id{[0-9]+}/guia/:g{[0-9]+}/quitar", async (c) => accion(c, `/viajes/${conId(c)}`, async () => {
+    await desenlazarGuia(d.ctx, Number(c.req.param("g")), c.get("usuario").id);
+    return "Guía quitada del viaje";
+  }));
+  app.post("/viajes/:id{[0-9]+}/cerrar", async (c) => {
+    const f = await formulario(c);
+    return accion(c, `/viajes/${conId(c)}`, async () => {
+      const flete = f.flete ? parsearMonto(f.flete) : undefined;
+      if (flete === null) throw new ErrorNegocio("Flete no válido");
+      const r = await finalizarViajeFlota(d.ctx, { viajeId: conId(c), odometroFin: enteroONull(f.odometro) ?? undefined, km: enteroONull(f.km) ?? undefined, flete, usuarioId: c.get("usuario").id });
+      return `Viaje ${r.codigo} cerrado`;
+    });
+  });
+  app.post("/viajes/:id{[0-9]+}/reabrir", async (c) => accion(c, `/viajes/${conId(c)}`, async () => {
+    await reabrirViaje(d.ctx, conId(c), c.get("usuario").id);
+    return "Viaje reabierto";
+  }));
   app.post("/viajes/:id{[0-9]+}/presupuesto", async (c) => {
     const id = Number(c.req.param("id"));
     const f = await formulario(c);

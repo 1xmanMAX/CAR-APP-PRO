@@ -105,6 +105,21 @@ export async function borrarGasto(ctx: Contexto, id: number, usuarioId?: number)
   await registrarAuditoria(ctx.db, { usuarioId, accion: "gasto_borrado", entidad: "gasto", entidadId: id, detalle: f });
 }
 
+/** Corrige un gasto (queda en auditoría con lo que tenía antes). */
+export async function editarGasto(
+  ctx: Contexto, id: number, e: { categoria?: CategoriaGasto; monto?: number; fecha?: string; nota?: string | null }, usuarioId?: number,
+): Promise<void> {
+  if (e.monto !== undefined && (!Number.isInteger(e.monto) || e.monto <= 0 || e.monto > 5_000_000)) throw new ErrorNegocio("El monto no es válido");
+  if (e.categoria !== undefined && !CATEGORIAS_GASTO.includes(e.categoria)) throw new ErrorNegocio("Categoría de gasto no válida");
+  if (e.fecha !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(e.fecha)) throw new ErrorNegocio("Fecha no válida");
+  const [antes] = await ctx.db.select().from(gasto).where(eq(gasto.id, id));
+  if (!antes) throw new ErrorNegocio("El gasto no existe");
+  const [r] = await ctx.db.select({ id: reparacion.id }).from(reparacion).where(eq(reparacion.gastoId, id));
+  if (r && (e.monto !== undefined || e.categoria !== undefined)) throw new ErrorNegocio("Este gasto viene de un cambio de parte: corrígelo en Reparaciones");
+  await ctx.db.update(gasto).set({ ...e, editadoEn: ctx.reloj() }).where(eq(gasto.id, id));
+  await registrarAuditoria(ctx.db, { usuarioId, accion: "gasto_editado", entidad: "gasto", entidadId: id, detalle: { antes, cambios: e } });
+}
+
 export async function obtenerGasto(ctx: Contexto, id: number) {
   const [f] = await ctx.db.select().from(gasto).where(eq(gasto.id, id));
   return f ?? null;

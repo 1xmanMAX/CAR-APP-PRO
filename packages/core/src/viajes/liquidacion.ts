@@ -1,4 +1,4 @@
-import { and, desc, entrega, eq, gasto, ne, sql, vehiculo, viaje, viajePresupuesto, type CategoriaGasto, type MedioEntrega } from "@sunatapp/db";
+import { and, desc, entrega, eq, factura, facturaGuia, gasto, guiaTransportista, ne, sql, vehiculo, viaje, viajePresupuesto, type CategoriaGasto, type MedioEntrega } from "@sunatapp/db";
 import { ErrorNegocio } from "../errores";
 import { CATEGORIAS_GASTO, NOMBRE_CATEGORIA } from "../finanzas/finanzas";
 import { listarViajesFlota, viajeEnCursoDeUnidad } from "../flota/viajes-flota";
@@ -42,6 +42,8 @@ export interface LiquidacionViaje {
   semaforoTotal: Semaforo | "sin_presupuesto";
   /** De dónde sale el presupuesto: el del viaje, el promedio de N viajes de la ruta, o ninguno. */
   presupuestoOrigen: { tipo: "viaje" } | { tipo: "promedio"; viajes: number } | { tipo: "ninguno" };
+  /** Guías del viaje (ida y retorno) con el flete facturado (sin IGV) si ya se aceptó. */
+  guias: Array<{ id: number; serieNumero: string; tramo: string | null; estado: string; flete: number | null }>;
   flete: number;
   ganancia: number | null;
   margenPct: number | null;
@@ -100,6 +102,13 @@ export async function liquidacionViaje(ctx: Contexto, viajeId: number): Promise<
   const entregado = entregas.reduce((s, e) => s + e.monto, 0);
   const gastado = gastos.reduce((s, g) => s + g.monto, 0);
   const presupuestoTotal = lineas.reduce((s, l) => s + l.presupuesto, 0);
+  const guiasFilas = await ctx.db.select({ g: guiaTransportista, f: factura }).from(guiaTransportista)
+    .leftJoin(facturaGuia, eq(facturaGuia.guiaId, guiaTransportista.id)).leftJoin(factura, eq(factura.id, facturaGuia.facturaId))
+    .where(eq(guiaTransportista.viajeId, viajeId)).orderBy(guiaTransportista.id);
+  const guias = guiasFilas.map(({ g, f: fac }) => ({
+    id: g.id, serieNumero: `${g.serie}-${g.numero ?? "?"}`, tramo: g.tramo, estado: g.estado,
+    flete: fac && (fac.estadoSunat === "aceptada" || fac.estadoSunat === "observada") ? fac.subtotal : null,
+  }));
   const fila = (await listarViajesFlota(ctx, { vehiculoId: v.vehiculoId, desde: v.fechaSalida, hasta: v.fechaSalida })).find((x) => x.id === v.id);
   const flete = fila?.flete ?? v.flete ?? 0;
   return {
@@ -111,7 +120,7 @@ export async function liquidacionViaje(ctx: Contexto, viajeId: number): Promise<
     gastos: gastos.map((g) => ({ id: g.id, fecha: g.fecha, categoria: g.categoria, monto: g.monto, detalle: [g.proveedorNombre, g.comprobante, g.nota].filter(Boolean).join(" · ") || null, conFoto: !!g.rutaFoto })),
     entregado, gastado, saldo: entregado - gastado, lineas, presupuestoTotal,
     semaforoTotal: presupuestoTotal > 0 ? semaforo(gastado, presupuestoTotal) : "sin_presupuesto",
-    presupuestoOrigen: origen, flete,
+    presupuestoOrigen: origen, guias, flete,
     ganancia: flete > 0 ? flete - gastado : null,
     margenPct: flete > 0 ? Math.round(((flete - gastado) / flete) * 100) : null,
   };

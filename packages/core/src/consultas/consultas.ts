@@ -137,3 +137,11 @@ export async function archivosDocumento(ctx: Contexto, tipo: "guia" | "factura",
   const [f] = await ctx.db.select({ pdf: factura.rutaPdf, xml: factura.rutaXml, cdr: factura.rutaCdr }).from(factura).where(eq(factura.id, id));
   return f ?? null;
 }
+
+/** Guías emitidas que todavía no están en ningún viaje (para enlazarlas desde el detalle del viaje). */
+export async function listarGuiasSinViaje(ctx: Contexto, limite = 30): Promise<Array<{ id: number; serieNumero: string; fechaTraslado: string }>> {
+  const filas = await ctx.db.select({ id: guiaTransportista.id, serie: guiaTransportista.serie, numero: guiaTransportista.numero, fecha: guiaTransportista.fechaTraslado })
+    .from(guiaTransportista).where(and(isNull(guiaTransportista.viajeId), inArray(guiaTransportista.estado, ["aceptada", "enviada", "pendiente_envio"])))
+    .orderBy(desc(guiaTransportista.id)).limit(limite);
+  return filas.map((f) => ({ id: f.id, serieNumero: `${f.serie}-${f.numero ?? "?"}`, fechaTraslado: f.fecha }));
+}

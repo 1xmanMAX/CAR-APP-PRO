@@ -1,5 +1,5 @@
 import { randomInt } from "node:crypto";
-import { auditarTelegramDesconocido, registrarUsuarioTelegram, usuarioPorTelegram } from "@sunatapp/core";
+import { auditarTelegramDesconocido, registrarUsuarioTelegram, usarInvitacion, usuarioPorTelegram } from "@sunatapp/core";
 import type { Middleware } from "grammy";
 import type { ContextoBot, Dependencias } from "./bot";
 import { textos } from "./textos";
@@ -37,6 +37,16 @@ export function middlewareAutorizacion(deps: Dependencias): Middleware<ContextoB
       deps.log.info("dueño registrado", { telegramId });
       await c.reply(textos.registroOk);
       return;
+    }
+    // Un código de /invitar: queda registrado como parte del equipo.
+    if (texto && /^\d{6}$/.test(texto) && c.chat?.type === "private") {
+      const nombre = [c.from?.first_name, c.from?.last_name].filter(Boolean).join(" ");
+      const nuevo = await usarInvitacion(deps.ctx, texto, telegramId, nombre);
+      if (nuevo) {
+        deps.log.info("usuario invitado registrado", { telegramId });
+        await c.reply(textos.invitacionOk(nuevo.nombre));
+        return;
+      }
     }
     await auditarTelegramDesconocido(deps.ctx, telegramId, texto);
     // Solo en privado y solo con /start: así un chofer nuevo sabe qué ID darle al dueño.

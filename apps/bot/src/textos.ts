@@ -29,6 +29,7 @@ export function etiquetaEstadoGuia(estado: string): string {
 export const textos = {
   registroOk: "✅ Listo. Quedas como dueño. Para sumar a tu equipo, créalos en la web (Ajustes) con su ID de Telegram.",
   idParaRegistro: (id: number) => `👋 Todavía no estás registrado. Tu ID de Telegram es ${id}: pásaselo al dueño para que te dé acceso.`,
+  invitacionOk: (nombre: string) => `✅ Bienvenido, ${nombre}. Ya puedes mandarme tus gastos (foto de la boleta o «grifo 350»), /viaje al salir y /fin al llegar. Escribe /ayuda para ver todo.`,
   errorGenerico: "😕 Algo salió mal. Ya quedó anotado; intenta de nuevo en un momento.",
   ayuda: [
     "📋 Qué puedo hacer:",
@@ -50,6 +51,8 @@ export const textos = {
     "/estado T-01 — próximas partes a cambiar",
     "/saldo T-01 — dinero entregado vs. gastado del viaje (semáforo)",
     "/web — enlace para entrar a la web",
+    "/invitar — código para que alguien del equipo entre al bot",
+    "/cerrar — liquidación del viaje en curso y cerrarlo",
     "/cancelar — cancelar lo que estemos haciendo",
   ].join("\n"),
 

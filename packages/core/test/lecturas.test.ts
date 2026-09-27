@@ -3,7 +3,8 @@ import { crearLectorReglas, IaCredencialesError, IaNoDisponibleError, type Prove
 import { documentoRecibido, entrega, eq, gasto } from "@sunatapp/db";
 import {
   confirmarLectura, corregirLectura, descartarLectura, fijarLectura, leerDocumento, obtenerDocumento, procesarLecturasPendientes,
-  recibirMensaje, registrarViajeFlota, listarPorRevisar, gastosSinViaje, asignarViajeGasto, contarPorRevisar, costoIaDelMes, type Contexto,
+  recibirMensaje, registrarViajeFlota, listarPorRevisar, gastosSinViaje, asignarViajeGasto, contarPorRevisar, costoIaDelMes, crearRuta, liquidacionDeUnidad,
+  crearInvitacion, usarInvitacion, type Contexto,
 } from "../src/index";
 import { crearContextoPrueba } from "./helpers";
 
@@ -124,5 +125,35 @@ describe("lecturas de mensajes", () => {
     expect(await contarPorRevisar(ctx)).toBe(1);
     const mes = new Date(Date.now() - 5 * 3_600_000).toISOString().slice(0, 7); // mes de Lima
     expect(await costoIaDelMes(ctx, mes)).toEqual({ usd: 0, lecturas: 2 });
+  });
+
+  it("«salgo…» abre el viaje con su adelanto y la plantilla de la ruta; «ya llegué» lo cierra", async () => {
+    await crearRuta(ctx, "Juliaca → Puno", [{ categoria: "combustible", monto: 40000 }]);
+    const a = await texto("salgo de Juliaca a Puno, me dieron 1300");
+    await leerDocumento(ctx, a.id);
+    const r = await confirmarLectura(ctx, a.id, { vehiculoId: 1 });
+    expect(r).toMatchObject({ tipo: "inicio_viaje", ruta: "Juliaca → Puno", adelanto: 130000 });
+    const l = await liquidacionDeUnidad(ctx, 1);
+    expect([l!.entregado, l!.presupuestoTotal, l!.viaje.estado]).toEqual([130000, 40000, "en_curso"]);
+    const b = await texto("ya llegué");
+    await leerDocumento(ctx, b.id);
+    expect(await confirmarLectura(ctx, b.id, { vehiculoId: 1 })).toMatchObject({ tipo: "fin_viaje" });
+    expect((await liquidacionDeUnidad(ctx, 1))!.viaje.estado).toBe("cerrado");
+    // Sin origen: sale de donde llegó la última vez.
+    const c = await texto("voy a Arequipa");
+    await leerDocumento(ctx, c.id);
+    expect(await confirmarLectura(ctx, c.id, { vehiculoId: 1 })).toMatchObject({ ruta: "Puno → Arequipa", adelanto: 0 });
+  });
+
+  it("invitaciones: un código sirve una vez y 24 horas", async () => {
+    const inv = await crearInvitacion(ctx, 1);
+    expect(inv.codigo).toMatch(/^\d{6}$/);
+    expect(await usarInvitacion(ctx, "000000" === inv.codigo ? "111111" : "000000", 555, "X")).toBeNull();
+    const u = await usarInvitacion(ctx, inv.codigo, 555, "Juan Pérez");
+    expect(u).toMatchObject({ nombre: "Juan Pérez", rol: "chofer", telegramId: 555 });
+    expect(await usarInvitacion(ctx, inv.codigo, 556, "Otro")).toBeNull();
+    const vencida = await crearInvitacion(ctx, 1);
+    ahora = new Date(ahora.getTime() + 25 * 3_600_000);
+    expect(await usarInvitacion(ctx, vencida.codigo, 557, "Tarde")).toBeNull();
   });
 });

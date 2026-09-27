@@ -10,7 +10,7 @@ import { registrarDocumentoRecibido } from "../documentos/recibidos";
 import { ErrorNegocio } from "../errores";
 import { registrarGasto } from "../finanzas/finanzas";
 import { hoy } from "../flota/unidades";
-import { viajeEnCursoDeUnidad } from "../flota/viajes-flota";
+import { finalizarViajeFlota, registrarViajeFlota, viajeEnCursoDeUnidad } from "../flota/viajes-flota";
 import { registrarAuditoria } from "../infra/auditoria";
 import type { Contexto } from "../infra/contexto";
 import { registrarEntrega } from "../viajes/entregas";
@@ -52,6 +52,8 @@ export type ResultadoLeer =
 export type ResultadoConfirmacion =
   | { tipo: "gasto"; gastoId: number; viajeCodigo: string | null; monto: number }
   | { tipo: "entrega"; entregaId: number; viajeCodigo: string; monto: number }
+  | { tipo: "inicio_viaje"; viajeId: number; viajeCodigo: string; ruta: string; adelanto: number }
+  | { tipo: "fin_viaje"; viajeId: number; viajeCodigo: string }
   | { tipo: "ya_confirmado" };
 
 /** Minutos de espera antes de reintentar una lectura según los intentos hechos. */
@@ -211,6 +213,24 @@ export async function confirmarLectura(ctx: Contexto, documentoId: number, o: { 
       if (!v) throw new ErrorNegocio("Esa unidad no tiene un viaje en curso: inicia uno con /viaje para anotar el dinero entregado.");
       const r = await registrarEntrega(ctx, { viajeId: v.id, monto: aCentimos(l.monto), medio: l.medio, fecha: l.fecha && l.fecha <= hoyStr ? l.fecha : hoyStr, documentoId, usuarioId: o.usuarioId });
       return { tipo: "entrega", entregaId: r.id, viajeCodigo: r.viajeCodigo, monto: aCentimos(l.monto) };
+    }
+    if (l.tipo === "inicio_viaje") {
+      if (!o.vehiculoId) throw new ErrorNegocio("¿Qué unidad sale?");
+      if (!l.destino) throw new ErrorNegocio("No sé a dónde va: toca ✏️ Corregir y escribe, por ejemplo, «a Puno».");
+      // Sin origen, sale de donde terminó su último viaje (o de la base).
+      const [ultimo] = await ctx.db.select({ destino: viaje.destinoLugar }).from(viaje).where(eq(viaje.vehiculoId, o.vehiculoId)).orderBy(desc(viaje.fechaSalida), desc(viaje.id)).limit(1);
+      const origen = l.origen ?? ultimo?.destino ?? "Base";
+      const v = await registrarViajeFlota(ctx, { vehiculoId: o.vehiculoId, origenLugar: origen, destinoLugar: l.destino, estado: "en_curso", origen: "telegram", usuarioId: o.usuarioId });
+      const adelanto = l.adelanto ? aCentimos(l.adelanto) : 0;
+      if (adelanto) await registrarEntrega(ctx, { viajeId: v.id, monto: adelanto, medio: "efectivo", nota: "Adelanto de salida", documentoId, usuarioId: o.usuarioId });
+      return { tipo: "inicio_viaje", viajeId: v.id, viajeCodigo: v.codigo, ruta: `${origen} → ${l.destino}`, adelanto };
+    }
+    if (l.tipo === "fin_viaje") {
+      if (!o.vehiculoId) throw new ErrorNegocio("¿Qué unidad llegó?");
+      const v = await viajeEnCursoDeUnidad(ctx, o.vehiculoId);
+      if (!v) throw new ErrorNegocio("Esa unidad no tiene un viaje en curso.");
+      await finalizarViajeFlota(ctx, { viajeId: v.id, usuarioId: o.usuarioId });
+      return { tipo: "fin_viaje", viajeId: v.id, viajeCodigo: v.codigo };
     }
     throw new ErrorNegocio("No hay un gasto ni una entrega que guardar en este mensaje");
   } catch (e) {

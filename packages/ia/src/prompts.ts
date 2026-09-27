@@ -16,6 +16,8 @@ export function instruccionesSistema(c: ContextoLectura): string {
     "  combustible = grifo, petróleo, diésel · viaticos = comida, menú · reparacion = mecánico, llanta, repuesto.",
     "  monto en soles con decimales (el TOTAL a pagar, con IGV). fecha AAAA-MM-DD. proveedorRuc 11 dígitos. comprobante como B012-4471.",
     '- "entrega": dinero que le dieron al chofer (adelanto, yape, depósito). medio: efectivo, yape, transferencia u otro.',
+    '- "inicio_viaje": el chofer sale de viaje («salgo de Juliaca a Puno, me dieron 1300»). origen y destino (null si no los dice), adelanto en soles o null.',
+    '- "fin_viaje": el chofer llegó o terminó el viaje («ya llegué», «llegamos a la base»).',
     '- "otro": algo que no es un gasto ni una entrega (descripcion corta).',
     '- "no_entendi": no se puede saber qué es o no hay monto (motivo corto).',
     "",
@@ -27,6 +29,6 @@ export function instruccionesSistema(c: ContextoLectura): string {
     ...(c.correcciones.length ? [`El chofer corrigió (aplica estas correcciones sobre la lectura anterior): ${c.correcciones.map((x) => `«${x}»`).join(", ")}`] : []),
     "",
     `Formato json de ejemplo: ${JSON.stringify(EJEMPLO_JSON)}`,
-    'Otros ejemplos: {"tipo":"entrega","monto":500,"medio":"yape","fecha":null,"dudas":[]} · {"tipo":"no_entendi","motivo":"la foto está borrosa"}',
+    'Otros ejemplos: {"tipo":"entrega","monto":500,"medio":"yape","fecha":null,"dudas":[]} · {"tipo":"inicio_viaje","origen":"Juliaca","destino":"Puno","adelanto":1300,"dudas":[]} · {"tipo":"fin_viaje","dudas":[]} · {"tipo":"no_entendi","motivo":"la foto está borrosa"}',
   ].join("\n");
 }

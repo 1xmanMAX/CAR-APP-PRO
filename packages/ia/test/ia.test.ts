@@ -38,6 +38,12 @@ describe("lector por reglas", () => {
     expect(leerPorReglas({ contexto: { ...ctx, lecturaAnterior: anterior, correcciones: ["eran 305"] } })).toMatchObject({ tipo: "gasto", categoria: "combustible", monto: 305 });
     expect(montoDe("B/. sin monto")).toBeNull();
   });
+  it("inicio y fin de viaje", () => {
+    expect(leer("Salgo de Juliaca a Puno, me dieron 1300")).toEqual({ tipo: "inicio_viaje", origen: "Juliaca", destino: "Puno", adelanto: 1300, dudas: [] });
+    expect(leer("voy a arequipa")).toMatchObject({ tipo: "inicio_viaje", origen: null, destino: "Arequipa", adelanto: null });
+    expect(leer("salgo ahorita")).toMatchObject({ tipo: "inicio_viaje", destino: null, dudas: ["no dijo a dónde va"] });
+    expect(leer("ya llegué a la base")).toEqual({ tipo: "fin_viaje", dudas: [] });
+  });
   it("no cuesta nada", async () => {
     expect((await crearLectorReglas().leer({ texto: "peaje 10", contexto: ctx })).uso.costoMicroUsd).toBe(0);
   });

@@ -124,4 +124,45 @@ describe("boletas por Telegram", () => {
     await a.texto("/saldo");
     expect(a.ultimoTexto()).toBe(`💰 ${v.codigo} · T-01 · Juliaca → Arequipa (en curso)\nEntregado S/ 1,000.00 · Gastado S/ 350.00\n👉 Le quedan S/ 650.00 al chofer\n🔴 Combustible S/ 350.00`);
   });
+
+  it("«salgo de Juliaca a Puno, me dieron 1300» abre el viaje y «ya llegué» lo cierra con la liquidación", async () => {
+    const a = await arnes();
+    await a.texto("salgo de Juliaca a Puno, me dieron 1300");
+    await a.esperarTareas();
+    expect(a.ultimoTexto()).toBe("🚛 Sale de viaje · Juliaca → Puno · adelanto S/ 1,300.00\n¿Abro el viaje?");
+    await a.boton(a.botones().find((b) => b.text === "✅ Correcto")!.callback_data);
+    expect(a.ultimoTexto()).toMatch(/^✅ VIAJE ABIERTO · VJ-\d+\nT-01 · Juliaca → Puno · adelanto S\/ 1,300.00 anotado/);
+    await a.texto("peaje 20");
+    await a.esperarTareas();
+    await a.boton(a.botones().find((b) => b.text === "✅ Correcto")!.callback_data);
+    await a.texto("ya llegué");
+    await a.esperarTareas();
+    expect(a.ultimoTexto()).toBe("🏁 Llegó: cerrar el viaje en curso\n¿Lo cierro?");
+    await a.boton(a.botones().find((b) => b.text === "✅ Correcto")!.callback_data);
+    expect(a.ultimoTexto()).toContain("✅ VIAJE CERRADO");
+    expect(a.ultimoTexto()).toContain("👉 Le quedan S/ 1,280.00 al chofer");
+  });
+
+  it("/invitar da un código y quien lo manda entra como chofer", async () => {
+    const a = await arnes();
+    await a.texto("/invitar");
+    const codigo = /(\d{6})/.exec(a.ultimoTexto())![1]!;
+    await a.texto(codigo, 999);
+    expect(a.ultimoTexto()).toMatch(/^✅ Bienvenido, Usuario/);
+    await a.texto("peaje 15", 999);
+    await a.esperarTareas();
+    expect(a.ultimoTexto()).toBe("🛣️ Peajes · S/ 15.00\n¿Lo guardo?");
+    await a.texto("/invitar", 999);
+    expect(a.ultimoTexto()).toBe("Solo el dueño puede invitar a alguien.");
+  });
+
+  it("/cerrar muestra la liquidación y pide el odómetro", async () => {
+    const a = await arnes();
+    const v = await registrarViajeFlota(a.ctx, { vehiculoId: 1, origenLugar: "Juliaca", destinoLugar: "Arequipa", estado: "en_curso", origen: "web" });
+    await registrarEntrega(a.ctx, { viajeId: v.id, monto: 50000, medio: "efectivo" });
+    await a.texto("/cerrar");
+    const t = a.textosEnviados();
+    expect(t.at(-2)).toContain("👉 Le quedan S/ 500.00 al chofer");
+    expect(t.at(-1)).toMatch(/^🏁 T-01: escribe el odómetro final/);
+  });
 });

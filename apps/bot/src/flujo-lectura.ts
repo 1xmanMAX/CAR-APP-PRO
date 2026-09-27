@@ -1,11 +1,11 @@
 import {
-  buscarUnidad, confirmarLectura, corregirLectura, descartarLectura, ErrorNegocio, fijarLectura, formatearSoles, leerDocumento, listarUnidades,
+  buscarUnidad, confirmarLectura, liquidacionViaje, corregirLectura, descartarLectura, ErrorNegocio, fijarLectura, formatearSoles, leerDocumento, listarUnidades,
   NOMBRE_CATEGORIA, obtenerDocumento, recibirMensaje, registrarEvento, type Lectura, type MensajeEntrante, type ResultadoLeer,
 } from "@sunatapp/core";
 import { CATEGORIAS, montoDe, type Categoria } from "@sunatapp/ia";
 import { InlineKeyboard, type Api, type Bot, type Filter } from "grammy";
 import type { ContextoBot, Dependencias } from "./bot";
-import { autor, lineaSaldo, recordarUnidad, tecladoUnidades, unidadImplicita } from "./flujo-flota";
+import { autor, lineaSaldo, recordarUnidad, tecladoUnidades, textoLiquidacion, unidadImplicita } from "./flujo-flota";
 
 /**
  * **Boletas por Telegram**: el chofer manda la foto de la boleta, un texto («grifo 350») o una
@@ -36,6 +36,11 @@ export function resumenLectura(l: Lectura): string {
     return [`💵 Dinero recibido para el viaje · ${formatearSoles(Math.round(l.monto * 100))} · ${MEDIO[l.medio]}${l.fecha ? ` · ${fechaCorta(l.fecha)}` : ""}`,
       l.dudas.length ? `⚠️ ${l.dudas.join(" · ")}` : ""].filter(Boolean).join("\n");
   }
+  if (l.tipo === "inicio_viaje") {
+    const ruta = l.destino ? `${l.origen ? `${l.origen} → ` : "→ "}${l.destino}` : "¿a dónde?";
+    return [`🚛 Sale de viaje · ${ruta}${l.adelanto ? ` · adelanto ${formatearSoles(Math.round(l.adelanto * 100))}` : ""}`, l.dudas.length ? `⚠️ ${l.dudas.join(" · ")}` : ""].filter(Boolean).join("\n");
+  }
+  if (l.tipo === "fin_viaje") return "🏁 Llegó: cerrar el viaje en curso";
   return l.tipo === "otro" ? `No encontré un gasto (${l.descripcion}).` : `No lo entendí (${l.motivo}).`;
 }
 
@@ -58,8 +63,9 @@ export async function notificarLectura(api: Api, chatId: number, r: ResultadoLee
     return;
   }
   const l = r.lectura;
-  if (l.tipo === "gasto" || l.tipo === "entrega") {
-    await api.sendMessage(chatId, `${resumenLectura(l)}\n¿Lo guardo?`, { reply_markup: tecladoConfirmar(r.documentoId) });
+  if (l.tipo === "gasto" || l.tipo === "entrega" || l.tipo === "inicio_viaje" || l.tipo === "fin_viaje") {
+    const pregunta = l.tipo === "inicio_viaje" ? "¿Abro el viaje?" : l.tipo === "fin_viaje" ? "¿Lo cierro?" : "¿Lo guardo?";
+    await api.sendMessage(chatId, `${resumenLectura(l)}\n${pregunta}`, { reply_markup: tecladoConfirmar(r.documentoId) });
     return;
   }
   await api.sendMessage(chatId, `${resumenLectura(l)} ¿Qué gasto es? Elige y luego te pido el monto.`, { reply_markup: tecladoCategorias(r.documentoId) });
@@ -112,6 +118,17 @@ async function guardar(c: ContextoBot, deps: Dependencias, documentoId: number, 
     const u = vehiculoId ? await buscarUnidad(deps.ctx, vehiculoId) : null;
     if (vehiculoId) recordarUnidad(c, vehiculoId);
     const d = await obtenerDocumento(deps.ctx, documentoId);
+    if (r.tipo === "inicio_viaje" || r.tipo === "fin_viaje") {
+      const l = await liquidacionViaje(deps.ctx, r.viajeId);
+      await c.reply(r.tipo === "inicio_viaje"
+        ? `✅ VIAJE ABIERTO · ${r.viajeCodigo}\n${u ? `${u.codigo} · ` : ""}${r.ruta}${r.adelanto ? ` · adelanto ${formatearSoles(r.adelanto)} anotado` : ""}${l.presupuestoTotal ? `\nPresupuesto: ${formatearSoles(l.presupuestoTotal)}` : ""}. Manda tus gastos y al llegar escribe «ya llegué».`
+        : `✅ VIAJE CERRADO · ${r.viajeCodigo}\n${textoLiquidacion(l)}\nSi tienes el odómetro, mándalo con /km.`);
+      await registrarEvento(deps.ctx, {
+        usuarioId: c.session.usuarioId, autor: autor(c), comando: r.tipo === "inicio_viaje" ? "/viaje (lectura)" : "/fin (lectura)",
+        texto: `${u ? `${u.codigo} · ` : ""}${r.viajeCodigo}${r.tipo === "inicio_viaje" ? ` · ${r.ruta}` : " cerrado"}`, vehiculoId, entidad: "viaje", entidadId: r.viajeId,
+      });
+      return;
+    }
     const que = d.lectura ? resumenLectura(d.lectura).split("\n")[0] : formatearSoles(r.monto);
     const texto = r.tipo === "gasto"
       ? `✅ GASTO GUARDADO\n${u ? `${u.codigo} · ` : ""}${que}${r.viajeCodigo ? ` · ${r.viajeCodigo}` : ""}${d.tipo === "foto" ? " · 📷 foto guardada" : ""}. Ya aparece en Finanzas.`
@@ -187,7 +204,10 @@ async function manejarTexto(c: Filter<ContextoBot, "message:text">, deps: Depend
   }
   // Un texto suelto con palabras y un número («grifo 350», «peaje 28.50») es un gasto por leer; un
   // número solo no (suele ser la respuesta a una conversación que ya terminó).
-  if (!c.session.flujo && /\d/.test(t) && /\p{L}{3,}/u.test(t)) return procesar(c, deps, { tipo: "texto", texto: t });
+  const conMonto = /\d/.test(t) && /\p{L}{3,}/u.test(t);
+  // Sin \b: en JavaScript no reconoce la «é» como letra.
+  const deViaje = /(?<!\p{L})(salgo|saliendo|salimos|parto|partimos|llegu[eé]|llegamos|ya volv[ií]|volvimos)(?!\p{L})/iu.test(t);
+  if (!c.session.flujo && (conMonto || deViaje)) return procesar(c, deps, { tipo: "texto", texto: t });
   return next();
 }
 

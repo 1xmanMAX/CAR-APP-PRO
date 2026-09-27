@@ -1,6 +1,6 @@
 import {
   buscarRepuestoPorCodigo, buscarUnidad, categoriaDesdeTexto, chatAlertas, crearEnlaceWeb, duenoTelegramId, ErrorNegocio,
-  finalizarViajeFlota, formatearSoles, liquidacionDeUnidad, guardarChatAlertas, listarRepuestos, listarUnidades, NOMBRE_CATEGORIA, nombrePieza, parsearMonto, piezasDeTipo,
+  crearInvitacion, finalizarViajeFlota, formatearSoles, liquidacionDeUnidad, usuarioPorTelegram, guardarChatAlertas, listarRepuestos, listarUnidades, NOMBRE_CATEGORIA, nombrePieza, parsearMonto, piezasDeTipo,
   partesDeUnidad, registrarCambio, registrarCompra, registrarEvento, registrarGasto, registrarLecturaOdometro,
   registrarViajeFlota, tomarAlertasDesgaste, viajeEnCursoDeUnidad, type LiquidacionViaje, type Unidad,
 } from "@sunatapp/core";
@@ -519,6 +519,22 @@ export function registrarFlujoFlota(bot: Bot<ContextoBot>, deps: Dependencias, o
   bot.command("km", (c) => comandoKm(c, deps, c.match.trim()));
   bot.command("estado", (c) => comandoEstado(c, deps, c.match.trim()));
   bot.command("saldo", (c) => comandoSaldo(c, deps, c.match.trim()));
+  bot.command("cerrar", async (c) => {
+    // La liquidación primero y luego lo mismo que /fin (odómetro o km para cerrar).
+    const u = await unidadImplicita(c, deps, c.match);
+    const l = u ? await liquidacionDeUnidad(deps.ctx, u.id) : null;
+    if (l && l.viaje.estado === "en_curso") await c.reply(textoLiquidacion(l));
+    await iniciarFin(c, deps, c.match.trim());
+  });
+  bot.command("invitar", async (c) => {
+    const yo = c.from ? await usuarioPorTelegram(deps.ctx, c.from.id) : null;
+    if (!yo || yo.rol !== "dueno") {
+      await c.reply("Solo el dueño puede invitar a alguien.");
+      return;
+    }
+    const inv = await crearInvitacion(deps.ctx, yo.id);
+    await c.reply(`🔑 Código de invitación: ${inv.codigo}\nQue la persona se lo envíe a este bot por privado (vale 24 horas, un solo uso). Entra como chofer; en la web (Ajustes) le puedes cambiar el rol.`);
+  });
   bot.command("compra", (c) => comandoCompra(c, deps, c.match));
   bot.command("cambio", async (c) => {
     const u = /\bT-?\d/i.test(c.match) ? await unidadImplicita(c, deps, c.match) : null;

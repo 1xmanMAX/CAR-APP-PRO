@@ -18,6 +18,8 @@ export const esquemaLectura = z.discriminatedUnion("tipo", [
     nota: texto, dudas: z.array(z.string()),
   }),
   z.object({ tipo: z.literal("entrega"), monto: z.number().positive().max(50_000), medio: z.enum(MEDIOS), fecha: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable(), dudas: z.array(z.string()) }),
+  z.object({ tipo: z.literal("inicio_viaje"), origen: texto, destino: texto, adelanto: z.number().positive().max(50_000).nullable(), dudas: z.array(z.string()) }),
+  z.object({ tipo: z.literal("fin_viaje"), dudas: z.array(z.string()) }),
   z.object({ tipo: z.literal("otro"), descripcion: z.string() }),
   z.object({ tipo: z.literal("no_entendi"), motivo: z.string() }),
 ]);

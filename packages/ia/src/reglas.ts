@@ -37,6 +37,15 @@ export function leerPorReglas(e: EntradaLectura): Lectura {
   }
   const t = normal(e.texto ?? "");
   if (!t.trim()) return e.imagenes?.length ? { tipo: "otro", descripcion: "imagen" } : { tipo: "no_entendi", motivo: "mensaje vacío" };
+  // Inicio y fin de viaje: «salgo de Juliaca a Puno, me dieron 1300» · «ya llegué».
+  if (/\b(salgo|saliendo|salimos|parto|partimos|viajo|voy)\b/.test(t)) {
+    const original = e.texto ?? "";
+    const destino = /\b(?:a|para|hacia)\s+([\p{L}][\p{L} ]*?)(?=\s*(?:,|\.|$|\by\b|\bme\b|\bcon\b|\d))/iu.exec(original)?.[1]?.trim() ?? null;
+    const origen = /\bde(?:sde)?\s+([\p{L}][\p{L} ]*?)(?=\s+(?:a|para|hacia)\b)/iu.exec(original)?.[1]?.trim() ?? null;
+    const cap = (x: string | null) => (x ? x.replace(/\b\p{L}/gu, (l) => l.toUpperCase()) : null);
+    return { tipo: "inicio_viaje", origen: cap(origen), destino: cap(destino), adelanto: montoDe(t), dudas: destino ? [] : ["no dijo a dónde va"] };
+  }
+  if (/\b(llegue|llegamos|ya volvi|volvimos|ya estoy en|termine el viaje)\b/.test(t)) return { tipo: "fin_viaje", dudas: [] };
   const monto = montoDe(t);
   if (monto === null) return { tipo: "no_entendi", motivo: "no encontré el monto" };
   if (/\b(yape|plin|deposito|transferencia|me dieron|adelanto|me yapearon)\b/.test(t)) {

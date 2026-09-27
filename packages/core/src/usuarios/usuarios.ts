@@ -1,4 +1,5 @@
-import { and, auditoria, eq, isNotNull, sql, usuario } from "@sunatapp/db";
+import { createHash, randomInt } from "node:crypto";
+import { and, auditoria, eq, gt, invitacion, isNotNull, isNull, sql, usuario } from "@sunatapp/db";
 import { ErrorNegocio } from "../errores";
 import { registrarAuditoria } from "../infra/auditoria";
 import type { Contexto } from "../infra/contexto";
@@ -53,4 +54,35 @@ export async function auditarTelegramDesconocido(ctx: Contexto, telegramId: numb
 export async function contarAuditoria(ctx: Contexto, accion: string): Promise<number> {
   const [fila] = await ctx.db.select({ n: sql<number>`count(*)` }).from(auditoria).where(eq(auditoria.accion, accion));
   return Number(fila?.n ?? 0);
+}
+
+// ── Invitaciones (/invitar) ─────────────────────────────────────────────────
+
+const hashCodigo = (codigo: string) => createHash("sha256").update(codigo).digest("hex");
+
+/**
+ * Código de 6 dígitos (24 h, un solo uso) para que alguien del equipo entre al bot: quien se lo
+ * manda queda registrado como chofer (el dueño le cambia el rol en Ajustes si hace falta).
+ */
+export async function crearInvitacion(ctx: Contexto, creadaPor: number): Promise<{ codigo: string; expiraEn: Date }> {
+  const codigo = String(randomInt(0, 1_000_000)).padStart(6, "0");
+  const expiraEn = new Date(ctx.reloj().getTime() + 24 * 3_600_000);
+  await ctx.db.insert(invitacion).values({ codigoHash: hashCodigo(codigo), creadaPor, expiraEn });
+  await registrarAuditoria(ctx.db, { usuarioId: creadaPor, accion: "invitacion_creada", entidad: "invitacion", detalle: { expiraEn } });
+  return { codigo, expiraEn };
+}
+
+/** Usa un código de invitación: crea el usuario de Telegram. null si no vale (vencido, usado o inventado). */
+export async function usarInvitacion(ctx: Contexto, codigo: string, telegramId: number, nombre: string): Promise<Usuario | null> {
+  if (!/^\d{6}$/.test(codigo.trim())) return null;
+  return ctx.db.transaction(async (tx) => {
+    const [inv] = await tx.update(invitacion).set({ usadaEn: ctx.reloj() })
+      .where(and(eq(invitacion.codigoHash, hashCodigo(codigo.trim())), isNull(invitacion.usadaEn), gt(invitacion.expiraEn, ctx.reloj())))
+      .returning({ id: invitacion.id, creadaPor: invitacion.creadaPor });
+    if (!inv) return null;
+    const [u] = await tx.insert(usuario).values({ nombre: nombre.trim() || "Chofer", rol: "chofer", telegramId, telegramNombre: nombre.trim() || null }).returning();
+    await tx.update(invitacion).set({ usadaPor: u!.id }).where(eq(invitacion.id, inv.id));
+    await registrarAuditoria(tx, { usuarioId: u!.id, accion: "invitacion_usada", entidad: "usuario", entidadId: u!.id, detalle: { invitacionId: inv.id, creadaPor: inv.creadaPor } });
+    return u!;
+  });
 }

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
-  finalizarViajeFlota, liquidacionDeUnidad, liquidacionViaje, registrarEntrega, registrarGasto, registrarViajeFlota, semaforo, type Contexto,
+  crearRuta, finalizarViajeFlota, liquidacionDeUnidad, partesDeRuta, liquidacionViaje, registrarEntrega, registrarGasto, registrarViajeFlota, semaforo, type Contexto,
 } from "../src/index";
 import { crearContextoPrueba } from "./helpers";
 
@@ -59,5 +59,18 @@ describe("liquidación del viaje", () => {
     expect((await liquidacionDeUnidad(ctx, 1))!.viaje.codigo).toBe(a.codigo);
     const b = await viajeJuliaca("en_curso");
     expect((await liquidacionDeUnidad(ctx, 1))!.viaje.codigo).toBe(b.codigo);
+  });
+
+  it("un viaje de una ruta con plantilla copia su presupuesto (también en sentido contrario si es ⇄)", async () => {
+    await crearRuta(ctx, "Juliaca ⇄ Arequipa", [{ categoria: "combustible", monto: 60000 }, { categoria: "peaje", monto: 9000 }]);
+    const v = await viajeJuliaca();
+    await gastar(v.id, "combustible", 55000);
+    const l = await liquidacionViaje(ctx, v.id);
+    expect(l.presupuestoOrigen).toEqual({ tipo: "viaje" });
+    expect(l.lineas.map((x) => [x.categoria, x.presupuesto, x.semaforo])).toEqual([["combustible", 60000, "alerta"], ["peaje", 9000, "ok"]]);
+    await finalizarViajeFlota(ctx, { viajeId: v.id, km: 300 });
+    const vuelta = await registrarViajeFlota(ctx, { vehiculoId: 1, origenLugar: "arequipa", destinoLugar: "JULIACA", estado: "en_curso", origen: "web" });
+    expect((await liquidacionViaje(ctx, vuelta.id)).presupuestoTotal).toBe(69000);
+    expect(partesDeRuta("Puno - Lima")).toEqual({ origen: "Puno", destino: "Lima", ambas: false });
   });
 });

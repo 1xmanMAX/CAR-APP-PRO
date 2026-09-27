@@ -135,13 +135,35 @@ describe("web", () => {
       let html = await (await app.request("/revisar", { headers: { cookie } })).text();
       expect(html).toContain("NO SE PUDO LEER");
       expect(html).toMatch(new RegExp(`<audio controls[^>]*src="/archivo/documento/${m.id}"`));
-      expect((await app.request("/", { headers: { cookie } }).then((r) => r.text()))).toContain("1 por revisar");
+      expect(await (await app.request("/", { headers: { cookie } })).text()).toContain("1 por revisar");
       const r = await post(cookie, `/revisar/${m.id}`, { tipo: "gasto", categoria: "peaje", monto: "28.50", vehiculoId: "1" });
       expect(aviso(r)).toContain("ok=Gasto guardado");
       html = await (await app.request("/revisar", { headers: { cookie } })).text();
       expect(html).toContain("GASTOS SIN VIAJE · 1");
       expect((await app.request(`/archivo/documento/${m.id}`, { headers: { cookie } })).status).toBe(200);
       expect((await app.request(`/archivo/documento/${m.id}`)).status).toBe(302);
+    });
+
+    it("rutas: plantilla, usar el promedio y editar el presupuesto de un viaje", async () => {
+      const cookie = await entrar();
+      let r = await post(cookie, "/rutas", { origen: "Puno", destino: "Lima", sentido: "→", m_combustible: "900", m_peaje: "120.50" });
+      expect(aviso(r)).toContain("ok=");
+      let html = await (await app.request("/rutas", { headers: { cookie } })).text();
+      expect(html).toContain("Puno → Lima");
+      expect(html).toContain('value="120.50"');
+      const previo = await registrarViajeFlota(ctx, { vehiculoId: 1, origenLugar: "Puno", destinoLugar: "Lima", estado: "cerrado", km: 1300, origen: "web" });
+      await registrarGasto(ctx, { viajeId: previo.id, categoria: "combustible", monto: 80000, origen: "web" });
+      const id = Number(/action="\/rutas\/(\d+)"/.exec(html)![1]);
+      r = await post(cookie, `/rutas/${id}`, { usarPromedio: "1" });
+      expect(aviso(r)).toContain("promedio");
+      const v = await registrarViajeFlota(ctx, { vehiculoId: 1, origenLugar: "Puno", destinoLugar: "Lima", estado: "en_curso", origen: "web" });
+      html = await (await app.request(`/viajes/${v.id}`, { headers: { cookie } })).text();
+      expect(html).toContain("PRESUPUESTO DEL VIAJE");
+      expect(html).toContain("S/ 800.00");
+      r = await post(cookie, `/viajes/${v.id}/presupuesto`, { m_combustible: "1000", m_viaticos: "50" });
+      expect(aviso(r)).toContain("ok=");
+      html = await (await app.request(`/viajes/${v.id}`, { headers: { cookie } })).text();
+      expect(html).toContain("S/ 1,050.00 previstos");
     });
 
     it("contraseña incorrecta no entra", async () => {

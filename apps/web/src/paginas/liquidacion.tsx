@@ -1,10 +1,11 @@
 /** @jsxRuntime automatic @jsxImportSource hono/jsx */
 import {
-  borrarEntrega, ErrorNegocio, hoy, liquidacionViaje, MEDIOS_ENTREGA, NOMBRE_CATEGORIA, parsearMonto, puedeEditar, registrarEntrega,
+  actualizarPresupuestoViaje, borrarEntrega, ErrorNegocio, hoy, liquidacionViaje, MEDIOS_ENTREGA, NOMBRE_CATEGORIA, parsearMonto, puedeEditar, registrarEntrega,
   type LiquidacionViaje, type Semaforo,
 } from "@sunatapp/core";
 import { accion, formulario, pagina, type App, type C, type Deps } from "../base";
 import { Barra, fechaCorta, Kpi, Panel, soles2, Vacio } from "../ui";
+import { CamposPlantilla, plantillaDeFormulario } from "./rutas";
 
 const ESTADO_SEMAFORO: Record<Semaforo, "ok" | "proximo" | "cambiar"> = { ok: "ok", alerta: "proximo", excedido: "cambiar" };
 const TEXTO_SEMAFORO: Record<Semaforo, string> = { ok: "DENTRO", alerta: "AL LÍMITE", excedido: "EXCEDIDO" };
@@ -56,6 +57,17 @@ async function vista(c: C, d: Deps) {
               </div>
             )}
           </Panel>
+          {edita ? (
+            <details class="plegable panel" style="background:var(--white)">
+              <summary><span class="lbl-12" style="text-decoration:underline;cursor:pointer">EDITAR EL PRESUPUESTO DE ESTE VIAJE</span></summary>
+              <form method="post" action={`/viajes/${l.viaje.id}/presupuesto`} class="filas" style="margin-top:8px">
+                <CamposPlantilla valores={new Map(l.lineas.filter((x) => l.presupuestoOrigen.tipo === "viaje" && x.presupuesto > 0).map((x) => [x.categoria, x.presupuesto]))}
+                  promedio={new Map(l.lineas.filter((x) => l.presupuestoOrigen.tipo === "promedio").map((x) => [x.categoria, x.presupuesto]))} />
+                <button class="btn primario chico" type="submit">GUARDAR PRESUPUESTO</button>
+                <span class="muted" style="font-size:11px">Las plantillas por ruta se editan en <a href="/rutas">Rutas</a>.</span>
+              </form>
+            </details>
+          ) : null}
           <Panel titulo={`GASTOS DEL VIAJE · ${l.gastos.length}`}>
             {l.gastos.length === 0 ? <Vacio>Sin gastos.</Vacio> : (
               <div class="tabla-wrap"><table class="t">
@@ -106,6 +118,14 @@ async function vista(c: C, d: Deps) {
 
 export function rutasLiquidacion(app: App, d: Deps): void {
   app.get("/viajes/:id{[0-9]+}", (c) => vista(c, d));
+  app.post("/viajes/:id{[0-9]+}/presupuesto", async (c) => {
+    const id = Number(c.req.param("id"));
+    const f = await formulario(c);
+    return accion(c, `/viajes/${id}`, async () => {
+      await actualizarPresupuestoViaje(d.ctx, id, plantillaDeFormulario(f), c.get("usuario").id);
+      return "Presupuesto del viaje guardado";
+    });
+  });
   app.post("/viajes/:id{[0-9]+}/entrega", async (c) => {
     const id = Number(c.req.param("id"));
     const f = await formulario(c);

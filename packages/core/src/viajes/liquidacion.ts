@@ -49,13 +49,15 @@ export interface LiquidacionViaje {
 
 const VIAJES_PROMEDIO = 5;
 
-/** Promedio por categoría de los últimos viajes cerrados con el mismo origen y destino. */
-async function promedioRuta(ctx: Contexto, v: typeof viaje.$inferSelect): Promise<{ montos: Map<CategoriaGasto, number>; viajes: number }> {
-  if (!v.origenLugar || !v.destinoLugar) return { montos: new Map(), viajes: 0 };
+/** Promedio por categoría de los últimos 5 viajes cerrados con el mismo origen y destino. */
+export async function promedioDeRuta(
+  ctx: Contexto, origen: string | null, destino: string | null, excluirViajeId = 0,
+): Promise<{ montos: Map<CategoriaGasto, number>; viajes: number }> {
+  if (!origen || !destino) return { montos: new Map(), viajes: 0 };
   const previos = await ctx.db.select({ id: viaje.id }).from(viaje)
     .where(and(
-      eq(viaje.estado, "cerrado"), ne(viaje.id, v.id),
-      sql`lower(${viaje.origenLugar}) = lower(${v.origenLugar})`, sql`lower(${viaje.destinoLugar}) = lower(${v.destinoLugar})`,
+      eq(viaje.estado, "cerrado"), ne(viaje.id, excluirViajeId),
+      sql`lower(${viaje.origenLugar}) = lower(${origen})`, sql`lower(${viaje.destinoLugar}) = lower(${destino})`,
     ))
     .orderBy(desc(viaje.fechaSalida), desc(viaje.id)).limit(VIAJES_PROMEDIO);
   const montos = new Map<CategoriaGasto, number>();
@@ -80,7 +82,7 @@ export async function liquidacionViaje(ctx: Contexto, viajeId: number): Promise<
   let montos = new Map<CategoriaGasto, number>(presupuesto.map((p) => [p.categoria, p.monto]));
   if (presupuesto.length) origen = { tipo: "viaje" };
   else {
-    const prom = await promedioRuta(ctx, v);
+    const prom = await promedioDeRuta(ctx, v.origenLugar, v.destinoLugar, v.id);
     if (prom.viajes) {
       montos = prom.montos;
       origen = { tipo: "promedio", viajes: prom.viajes };

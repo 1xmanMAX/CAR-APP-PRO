@@ -53,6 +53,8 @@ async function vista(c: C, d: Deps) {
                 <select name="unidad" aria-label="Unidad" style="width:auto"><option value="">TODAS</option>{unidades.map((u) => <option value={u.id} selected={u.id === unidadId}>{u.codigo}</option>)}</select>
                 <button class="btn chico" type="submit">VER</button>
               </form>
+              <a class="btn chico" href="/rutas">RUTAS Y PRESUPUESTOS</a>
+              <a class="btn chico" href="/revisar">🔎 POR REVISAR</a>
               {edita ? <a class="btn primario chico" href="#nuevo-viaje">+ VIAJE</a> : null}
             </>
           }>

@@ -1,10 +1,11 @@
 import {
   and, conductor, desc, eq, factura, facturaGuia, gasto, guiaTransportista, inArray, siguienteCorrelativo, sql, usuario,
-  vehiculo, viaje, type Ejecutor, type OrigenRegistro,
+  vehiculo, viaje, viajePresupuesto, type Ejecutor, type OrigenRegistro,
 } from "@sunatapp/db";
 import { ErrorNegocio } from "../errores";
 import { registrarAuditoria } from "../infra/auditoria";
 import type { Contexto } from "../infra/contexto";
+import { rutaDeViaje } from "../viajes/rutas";
 import { CODIGO_VIAJE } from "../viajes/viajes";
 import { hoy, registrarLecturaOdometro } from "./unidades";
 
@@ -72,6 +73,12 @@ export async function registrarViajeFlota(ctx: Contexto, e: EntradaViajeFlota): 
         odometroInicio: v.odometroKm, odometroFin: aplicarKm ? v.odometroKm + e.km! : null, kmAplicados: aplicarKm,
         origen: e.origen, nota: e.nota ?? null,
       }).returning({ id: viaje.id });
+      // Si el viaje es de una ruta con plantilla, se copia como su presupuesto (editable después).
+      const r = await rutaDeViaje(tx, e.origenLugar, e.destinoLugar);
+      if (r) {
+        await tx.update(viaje).set({ rutaId: r.id }).where(eq(viaje.id, f!.id));
+        if (r.plantilla.length) await tx.insert(viajePresupuesto).values(r.plantilla.map((l) => ({ viajeId: f!.id, categoria: l.categoria, monto: l.monto })));
+      }
       if (aplicarKm) {
         await registrarLecturaOdometro(ctx, { vehiculoId: v.id, km: v.odometroKm + e.km!, fecha, origen: "sistema", usuarioId: e.usuarioId, viajeId: f!.id }, tx);
       }

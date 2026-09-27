@@ -1,4 +1,4 @@
-import { categoriaGastoEnum, eq, ruta, rutaPresupuesto, type CategoriaGasto } from "@sunatapp/db";
+import { categoriaGastoEnum, eq, ruta, rutaPresupuesto, type CategoriaGasto, type Ejecutor } from "@sunatapp/db";
 import { ErrorNegocio } from "../errores";
 import { registrarAuditoria } from "../infra/auditoria";
 import type { Contexto } from "../infra/contexto";
@@ -129,4 +129,25 @@ export async function buscarRuta(ctx: Contexto, texto: string): Promise<Ruta[]> 
   const resultado: Ruta[] = [];
   for (const f of filas) resultado.push(await filaAModelo(ctx, f));
   return resultado;
+}
+
+/** «Juliaca → Arequipa», «Juliaca ⇄ Arequipa», «Juliaca - Arequipa» → origen y destino (y si es ida y vuelta). */
+export function partesDeRuta(nombre: string): { origen: string; destino: string; ambas: boolean } | null {
+  const m = /^(.+?)\s*(→|->|⇄|<->|–|—|\s-\s|\sa\s)\s*(.+)$/i.exec(nombre.trim());
+  if (!m) return null;
+  return { origen: m[1]!.trim(), destino: m[3]!.trim(), ambas: m[2] === "⇄" || m[2] === "<->" };
+}
+
+/** La ruta (activa) que corresponde a un viaje de origen a destino, si hay una. */
+export async function rutaDeViaje(db: Ejecutor, origen: string, destino: string): Promise<Ruta | null> {
+  const o = normalizar(origen), d = normalizar(destino);
+  // Las lecturas van por el ejecutor recibido (puede ser una transacción abierta).
+  const ctx = { db } as unknown as Contexto;
+  for (const f of (await db.select().from(ruta).orderBy(ruta.id)).filter((x) => x.activa)) {
+    const p = partesDeRuta(f.nombre);
+    if (!p) continue;
+    const po = normalizar(p.origen), pd = normalizar(p.destino);
+    if ((po === o && pd === d) || (p.ambas && po === d && pd === o)) return filaAModelo(ctx, f);
+  }
+  return null;
 }

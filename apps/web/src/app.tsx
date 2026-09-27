@@ -25,6 +25,7 @@ import { rutasEmpezar } from "./paginas/empezar";
 import { rutasDispositivo } from "./paginas/dispositivo";
 import { rutasLiquidacion } from "./paginas/liquidacion";
 import { rutasRevisar } from "./paginas/revisar";
+import { rutasRutas } from "./paginas/rutas";
 
 export type { OpcionesWeb } from "./base";
 
@@ -33,7 +34,7 @@ function seccionDeRuta(ruta: string): Seccion | null {
   const primero = ruta.split("/")[1] ?? "";
   const mapa: Record<string, Seccion> = {
     "": "dashboard", trailer: "trailer", parte: "trailer", flota: "flota", inventario: "inventario", reparaciones: "reparaciones",
-    viajes: "viajes", revisar: "viajes", guias: "viajes", facturas: "viajes", cobros: "viajes", finanzas: "finanzas", rentabilidad: "rentabilidad",
+    viajes: "viajes", revisar: "viajes", rutas: "viajes", guias: "viajes", facturas: "viajes", cobros: "viajes", finanzas: "finanzas", rentabilidad: "rentabilidad",
     cotizacion: "rentabilidad", telegram: "telegram", ajustes: "ajustes", sincronizar: "sincronizar", archivo: "dashboard", api: "dashboard",
   };
   return mapa[primero] ?? null;
@@ -265,7 +266,7 @@ export function crearWeb(ctx: Contexto, opciones: OpcionesWeb = {}): App {
     await next();
   });
 
-  for (const m of [rutasDashboard, rutasTrailer, rutasFlota, rutasInventario, rutasReparaciones, rutasLiquidacion, rutasRevisar, rutasViajes, rutasFinanzas, rutasRentabilidad, rutasTelegram, rutasDispositivo, rutasAjustes, rutasSincronizar]) {
+  for (const m of [rutasDashboard, rutasTrailer, rutasFlota, rutasInventario, rutasReparaciones, rutasLiquidacion, rutasRevisar, rutasRutas, rutasViajes, rutasFinanzas, rutasRentabilidad, rutasTelegram, rutasDispositivo, rutasAjustes, rutasSincronizar]) {
     m(app, deps);
   }
   return app;

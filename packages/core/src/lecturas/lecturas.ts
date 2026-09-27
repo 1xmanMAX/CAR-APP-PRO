@@ -1,6 +1,7 @@
 import {
-  and, documentoRecibido, eq, lecturaIa, lte, type EstadoLectura, type TipoMensaje,
+  and, desc, documentoRecibido, eq, gasto, gte, inArray, isNull, lecturaIa, lt, lte, ne, or, sql, viaje, type EstadoLectura, type TipoMensaje,
 } from "@sunatapp/db";
+import { fechaHoraLima } from "../dominio/fechas";
 import {
   esquemaLectura, IaCredencialesError, IaNoDisponibleError, TranscripcionNoDisponibleError, type Imagen, type Lectura,
 } from "@sunatapp/ia";
@@ -235,4 +236,89 @@ export async function procesarLecturasPendientes(ctx: Contexto): Promise<Array<R
     if (r.ok || r.error !== "pendiente") listos.push({ ...r, telegramChatId: p.chat });
   }
   return listos;
+}
+
+// ── Por revisar (web) ───────────────────────────────────────────────────────
+
+export interface ItemPorRevisar {
+  documentoId: number;
+  tipo: TipoMensaje;
+  estado: EstadoLectura;
+  desde: Date;
+  lectura: Lectura | null;
+  texto: string | null;
+  rutaArchivo: string | null;
+  mime: string;
+  error: string | null;
+}
+
+const DIA_MS = 86_400_000;
+
+/**
+ * Lo que quedó a medias: mensajes con error, sin confirmar hace más de 24 h o que la IA no pudo
+ * leer tras varios intentos. Los PDF (guías) tienen su propio flujo y no aparecen aquí.
+ */
+export async function listarPorRevisar(ctx: Contexto): Promise<ItemPorRevisar[]> {
+  const limite = new Date(ctx.reloj().getTime() - DIA_MS);
+  const filas = await ctx.db.select().from(documentoRecibido)
+    .where(and(
+      ne(documentoRecibido.tipo, "pdf"),
+      or(
+        eq(documentoRecibido.estadoLectura, "error"),
+        and(eq(documentoRecibido.estadoLectura, "por_confirmar"), lt(documentoRecibido.creadoEn, limite)),
+        and(eq(documentoRecibido.estadoLectura, "pendiente"), gte(documentoRecibido.intentosLectura, 3)),
+      ),
+    ))
+    .orderBy(desc(documentoRecibido.creadoEn)).limit(100);
+  const errores = filas.length
+    ? await ctx.db.select({ documentoId: lecturaIa.documentoId, error: lecturaIa.error }).from(lecturaIa)
+      .where(inArray(lecturaIa.documentoId, filas.map((f) => f.id))).orderBy(lecturaIa.id)
+    : [];
+  return filas.map((d) => {
+    const l = esquemaLectura.safeParse(d.datosExtraidos);
+    return {
+      documentoId: d.id, tipo: d.tipo, estado: d.estadoLectura, desde: d.creadoEn, lectura: l.success ? l.data : null, texto: d.texto,
+      rutaArchivo: d.rutaArchivo, mime: d.mime, error: errores.filter((e) => e.documentoId === d.id && e.error).at(-1)?.error ?? null,
+    };
+  });
+}
+
+/** Gastos que llegaron por Telegram sin viaje (la unidad no tenía viaje en curso). */
+export async function gastosSinViaje(ctx: Contexto, dias = 60) {
+  const desde = fechaHoraLima(new Date(ctx.reloj().getTime() - dias * DIA_MS)).fecha;
+  return ctx.db.select({
+    id: gasto.id, fecha: gasto.fecha, categoria: gasto.categoria, monto: gasto.monto, vehiculoId: gasto.vehiculoId, nota: gasto.nota,
+    proveedorNombre: gasto.proveedorNombre, conFoto: sql<boolean>`${gasto.rutaFoto} is not null`,
+  }).from(gasto)
+    .where(and(isNull(gasto.viajeId), eq(gasto.origen, "telegram"), ne(gasto.categoria, "reparacion"), gte(gasto.fecha, desde)))
+    .orderBy(desc(gasto.fecha), desc(gasto.id));
+}
+
+/** Pasa un gasto a un viaje (y a la unidad del viaje). */
+export async function asignarViajeGasto(ctx: Contexto, gastoId: number, viajeId: number, usuarioId?: number): Promise<string> {
+  const [v] = await ctx.db.select({ codigo: viaje.codigo, vehiculoId: viaje.vehiculoId }).from(viaje).where(eq(viaje.id, viajeId));
+  if (!v) throw new ErrorNegocio("El viaje no existe");
+  const [g] = await ctx.db.update(gasto).set({ viajeId, vehiculoId: v.vehiculoId, editadoEn: ctx.reloj() }).where(eq(gasto.id, gastoId)).returning({ id: gasto.id });
+  if (!g) throw new ErrorNegocio("El gasto no existe");
+  await registrarAuditoria(ctx.db, { usuarioId, accion: "gasto_asignado_viaje", entidad: "gasto", entidadId: gastoId, detalle: { viajeId } });
+  return v.codigo;
+}
+
+/** Costo de la IA en un mes (AAAA-MM), en dólares, y cuántas lecturas se hicieron. */
+export async function costoIaDelMes(ctx: Contexto, mes: string): Promise<{ usd: number; lecturas: number }> {
+  const [f] = await ctx.db.select({ micro: sql<number>`coalesce(sum(${lecturaIa.costoMicroUsd}), 0)`, n: sql<number>`count(*)` }).from(lecturaIa)
+    .where(sql`to_char(${lecturaIa.creadoEn} at time zone 'America/Lima', 'YYYY-MM') = ${mes}`);
+  return { usd: Number(f?.micro ?? 0) / 1_000_000, lecturas: Number(f?.n ?? 0) };
+}
+
+/** El archivo original de un mensaje (foto o nota de voz), para verlo en la web. */
+export async function archivoDeDocumento(ctx: Contexto, documentoId: number): Promise<{ ruta: string; mime: string } | null> {
+  const [d] = await ctx.db.select({ ruta: documentoRecibido.rutaArchivo, mime: documentoRecibido.mime }).from(documentoRecibido).where(eq(documentoRecibido.id, documentoId));
+  return d?.ruta ? { ruta: d.ruta, mime: d.mime } : null;
+}
+
+/** Cuántas cosas esperan revisión (para el aviso del inicio). */
+export async function contarPorRevisar(ctx: Contexto): Promise<number> {
+  const [a, b] = await Promise.all([listarPorRevisar(ctx), gastosSinViaje(ctx)]);
+  return a.length + b.length;
 }

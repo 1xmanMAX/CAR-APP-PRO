@@ -2,7 +2,7 @@
 import type { FC } from "hono/jsx";
 import {
   deudaPrestamos, estadoBot, gastosPorCategoria, hoy, listarEventos, listarRepuestos, listarViajesFlota, rangoMes, resumenFinanciero,
-  resumirInventario, saludFlota, sumarDias, type Contexto,
+  resumirInventario, saludFlota, sumarDias, type Contexto, contarPorRevisar, puedeVer,
 } from "@sunatapp/core";
 import { pagina, type App, type C, type Deps } from "../base";
 import { Barra, CHIP_UNIDAD, ESTADO_UNIDAD, Kpi, Panel, soles, Vacio } from "../ui";
@@ -36,6 +36,7 @@ export async function htmlFeed(ctx: Contexto, n = 14): Promise<string> {
 
 async function vista(c: C, d: Deps) {
   const ctx = d.ctx;
+  const porRevisar = puedeVer(c.get("usuario").rol, "viajes") ? await contarPorRevisar(ctx) : 0;
   const h = hoy(ctx);
   const { desde, hasta } = rangoMes(h);
   const [fin, repuestos, deuda, salud, eventos, bot, gastosCat, viajes30] = await Promise.all([
@@ -57,6 +58,7 @@ async function vista(c: C, d: Deps) {
 
   return pagina(c, d, { titulo: "Dashboard", seccion: "dashboard" }, (
     <>
+      {porRevisar > 0 ? <a class="aviso info" href="/revisar" style="display:block;text-decoration:none">🔎 <b>{porRevisar} por revisar</b>: mensajes de Telegram sin confirmar o gastos sin viaje. Revisar →</a> : null}
       <section class="kpis" aria-label="Resumen del mes">
         <Kpi oscuro etiqueta="GANANCIA NETA · MES" valor={soles(fin.ganancia)} sub={fin.margenPct !== null ? `margen ${fin.margenPct}%` : undefined} />
         <Kpi etiqueta="INGRESOS · FLETES" valor={soles(fin.ingresos)} sub={`${fin.viajes} viajes · ${fin.km.toLocaleString("en-US")} km`} />

@@ -126,6 +126,24 @@ describe("web", () => {
       expect(lista).toContain(`href="/viajes/${v.id}"`);
     });
 
+    it("por revisar: guardar desde la web un mensaje que no se pudo leer", async () => {
+      const cookie = await entrar();
+      const { recibirMensaje, leerDocumento, crearLectorReglas } = await import("./ayuda-revisar");
+      ctx.ia = crearLectorReglas();
+      const m = await recibirMensaje(ctx, { tipo: "voz", contenido: Buffer.from("ogg"), mime: "audio/ogg", telegramChatId: 5, telegramMessageId: 6 });
+      await leerDocumento(ctx, m.id);
+      let html = await (await app.request("/revisar", { headers: { cookie } })).text();
+      expect(html).toContain("NO SE PUDO LEER");
+      expect(html).toMatch(new RegExp(`<audio controls[^>]*src="/archivo/documento/${m.id}"`));
+      expect((await app.request("/", { headers: { cookie } }).then((r) => r.text()))).toContain("1 por revisar");
+      const r = await post(cookie, `/revisar/${m.id}`, { tipo: "gasto", categoria: "peaje", monto: "28.50", vehiculoId: "1" });
+      expect(aviso(r)).toContain("ok=Gasto guardado");
+      html = await (await app.request("/revisar", { headers: { cookie } })).text();
+      expect(html).toContain("GASTOS SIN VIAJE · 1");
+      expect((await app.request(`/archivo/documento/${m.id}`, { headers: { cookie } })).status).toBe(200);
+      expect((await app.request(`/archivo/documento/${m.id}`)).status).toBe(302);
+    });
+
     it("contraseña incorrecta no entra", async () => {
       const r = await app.request("/entrar", { method: "POST", headers: { origin: ORIGEN }, body: new URLSearchParams({ email: "dueno@demo.pe", clave: "mala" }) });
       expect(r.status).toBe(401);

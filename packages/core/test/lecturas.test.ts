@@ -3,7 +3,7 @@ import { crearLectorReglas, IaCredencialesError, IaNoDisponibleError, type Prove
 import { documentoRecibido, entrega, eq, gasto } from "@sunatapp/db";
 import {
   confirmarLectura, corregirLectura, descartarLectura, fijarLectura, leerDocumento, obtenerDocumento, procesarLecturasPendientes,
-  recibirMensaje, registrarViajeFlota, type Contexto,
+  recibirMensaje, registrarViajeFlota, listarPorRevisar, gastosSinViaje, asignarViajeGasto, contarPorRevisar, costoIaDelMes, type Contexto,
 } from "../src/index";
 import { crearContextoPrueba } from "./helpers";
 
@@ -103,5 +103,26 @@ describe("lecturas de mensajes", () => {
     const otra = await recibirMensaje(ctx, { ...nota, contenido: Buffer.from("ogg2"), telegramMessageId: 71 });
     expect(await leerDocumento(ctx, otra.id)).toMatchObject({ ok: true, lectura: { categoria: "viaticos", monto: 15 } });
     expect((await obtenerDocumento(ctx, otra.id)).texto).toBe("almuerzo 15");
+  });
+
+  it("por revisar: errores, sin confirmar +24 h y gastos sin viaje; se asignan y se cuenta el costo de la IA", async () => {
+    const viejo = await texto("grifo 100");
+    await leerDocumento(ctx, viejo.id);
+    const malo = await recibirMensaje(ctx, { tipo: "voz", contenido: Buffer.from("x"), mime: "audio/ogg", telegramChatId: 111, telegramMessageId: 900 });
+    await leerDocumento(ctx, malo.id);
+    expect((await listarPorRevisar(ctx)).map((i) => i.documentoId)).toEqual([malo.id]);
+    // La fecha de creación la pone la base con su reloj: se adelanta el de la app desde ese momento.
+    ahora = new Date(Date.now() + 25 * 3_600_000);
+    expect((await listarPorRevisar(ctx)).map((i) => [i.documentoId, i.estado])).toEqual([[malo.id, "error"], [viejo.id, "por_confirmar"]]);
+    // Un gasto por Telegram sin viaje en curso queda sin viaje; se pasa a uno.
+    await confirmarLectura(ctx, viejo.id, { vehiculoId: 1 });
+    const [g] = await gastosSinViaje(ctx);
+    expect(g).toMatchObject({ monto: 10000, categoria: "combustible" });
+    const v = await registrarViajeFlota(ctx, { vehiculoId: 1, origenLugar: "A", destinoLugar: "B", estado: "cerrado", km: 10, origen: "web" });
+    expect(await asignarViajeGasto(ctx, g!.id, v.id)).toBe(v.codigo);
+    expect(await gastosSinViaje(ctx)).toEqual([]);
+    expect(await contarPorRevisar(ctx)).toBe(1);
+    const mes = new Date(Date.now() - 5 * 3_600_000).toISOString().slice(0, 7); // mes de Lima
+    expect(await costoIaDelMes(ctx, mes)).toEqual({ usd: 0, lecturas: 2 });
   });
 });

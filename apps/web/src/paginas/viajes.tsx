@@ -2,7 +2,7 @@
 import {
   editarViajeFlota, emitirFactura, enlazarGuia, ErrorNegocio, finalizarViajeFlota, hoy, listarCobrosPendientes, listarGuias,
   listarUnidades, listarViajesFlota, parsearMonto, prepararFactura, puedeEditar, rangoMes, registrarCobro, registrarViajeFlota,
-  sumarDias, formatearSoles, archivosDocumento,
+  sumarDias, formatearSoles, archivosDocumento, contarPorRevisar, puedeVer,
 } from "@sunatapp/core";
 import { accion, formulario, pagina, servirDeAlmacen, type App, type C, type Deps } from "../base";
 import { enteroONull } from "./flota";
@@ -17,6 +17,7 @@ function diasEntre(a: string, b: string) {
 
 async function vista(c: C, d: Deps) {
   const ctx = d.ctx;
+  const porRevisar = puedeVer(c.get("usuario").rol, "viajes") ? await contarPorRevisar(ctx) : 0;
   const h = hoy(ctx);
   const mes = c.req.query("mes") ?? h.slice(0, 7);
   const { desde, hasta } = rangoMes(`${mes}-01`);
@@ -35,6 +36,7 @@ async function vista(c: C, d: Deps) {
 
   return pagina(c, d, { titulo: "Viajes, guías y facturas", seccion: "viajes" }, (
     <>
+      {porRevisar > 0 ? <a class="aviso info" href="/revisar" style="display:block;text-decoration:none">🔎 <b>{porRevisar} por revisar</b>: mensajes de Telegram sin confirmar o gastos sin viaje. Revisar →</a> : null}
       <section class="kpis">
         <Kpi oscuro etiqueta="VIAJES DEL MES" valor={viajes.length} sub={mes} />
         <Kpi etiqueta="KM RECORRIDOS" valor={miles(km)} />

@@ -1,5 +1,5 @@
 /** @jsxRuntime automatic @jsxImportSource hono/jsx */
-import { ErrorNegocio } from "@sunatapp/core";
+import { costoIaDelMes, ErrorNegocio, hoy } from "@sunatapp/core";
 import { accion, formularioMultiparte, pagina, type App, type C, type Deps, type EstadoServicios } from "../base";
 import { Panel, Vacio } from "../ui";
 
@@ -46,6 +46,7 @@ async function vista(c: C, d: Deps) {
   }
   const e = s.estado();
   const a = s.ajustes();
+  const ia = await costoIaDelMes(d.ctx, hoy(d.ctx).slice(0, 7));
   const modo = a.SUNAT_MODO || "simulado";
   return pagina(c, d, { titulo: "Este dispositivo", seccion: "ajustes" }, (
     <>
@@ -115,6 +116,7 @@ async function vista(c: C, d: Deps) {
               <span class={`chip ${e.ia.voz ? "ok" : "neutro"}`}>{e.ia.voz ? "NOTAS DE VOZ ACTIVAS" : "SIN NOTAS DE VOZ"}</span>
             </span>
             {e.ia.error ? <div class="aviso error">{e.ia.error}</div> : null}
+            <span class="muted" style="font-size:11px">Este mes: {ia.lecturas} lecturas · US$ {ia.usd.toFixed(3)}. Lo que quedó a medias está en <a href="/revisar">Por revisar</a>.</span>
           </div>
           <span class="muted" style="font-size:12px">El chofer manda la foto de la boleta, un texto («grifo 350») o una nota de voz, y el bot le pide confirmar antes de guardar el gasto.
             Sin clave de IA se entienden los textos y las fotos se completan con botones. Con DeepSeek también se leen las fotos (cuesta menos de un centavo de dólar por boleta).</span>

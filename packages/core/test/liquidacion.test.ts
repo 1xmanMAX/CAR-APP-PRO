@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
-  crearRuta, finalizarViajeFlota, liquidacionDeUnidad, partesDeRuta, liquidacionViaje, registrarEntrega, registrarGasto, registrarViajeFlota, semaforo, type Contexto,
+  crearRuta, finalizarViajeFlota, obtenerUnidad, reabrirViaje, liquidacionDeUnidad, partesDeRuta, liquidacionViaje, registrarEntrega, registrarGasto, registrarViajeFlota, semaforo, type Contexto,
 } from "../src/index";
 import { crearContextoPrueba } from "./helpers";
 
@@ -72,5 +72,14 @@ describe("liquidación del viaje", () => {
     const vuelta = await registrarViajeFlota(ctx, { vehiculoId: 1, origenLugar: "arequipa", destinoLugar: "JULIACA", estado: "en_curso", origen: "web" });
     expect((await liquidacionViaje(ctx, vuelta.id)).presupuestoTotal).toBe(69000);
     expect(partesDeRuta("Puno - Lima")).toEqual({ origen: "Puno", destino: "Lima", ambas: false });
+  });
+
+  it("reabrir y volver a cerrar un viaje no suma dos veces sus km", async () => {
+    const antes = (await obtenerUnidad(ctx, 1)).odometroKm;
+    const v = await viajeJuliaca();
+    await finalizarViajeFlota(ctx, { viajeId: v.id, km: 300 });
+    await reabrirViaje(ctx, v.id);
+    await finalizarViajeFlota(ctx, { viajeId: v.id, km: 300 });
+    expect((await obtenerUnidad(ctx, 1)).odometroKm).toBe(antes + 300);
   });
 });

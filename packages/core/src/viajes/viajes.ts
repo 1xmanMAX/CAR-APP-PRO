@@ -218,6 +218,7 @@ export async function reabrirViaje(ctx: Contexto, viajeId: number, usuarioId?: n
   try {
     await ctx.db.transaction(async (tx) => {
       await tx.update(viaje).set({ estado: "en_curso", fechaRegreso: null }).where(eq(viaje.id, viajeId));
+      await tx.update(vehiculo).set({ estadoUnidad: "en_ruta" }).where(eq(vehiculo.id, v.vehiculoId));
       await registrarAuditoria(tx, { usuarioId, accion: "viaje_reabierto", entidad: "viaje", entidadId: viajeId });
     });
   } catch (error) {

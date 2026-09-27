@@ -120,7 +120,11 @@ export async function finalizarViajeFlota(
       km = e.km;
       odometroFin = v!.odometroKm + e.km;
     }
-    if (odometroFin !== null && odometroFin > v!.odometroKm) {
+    // Un viaje reabierto que ya había sumado sus km no los vuelve a sumar al cerrarse otra vez.
+    if (vj.kmAplicados && vj.odometroFin !== null) {
+      odometroFin = vj.odometroFin;
+      km = vj.km ?? km;
+    } else if (odometroFin !== null && odometroFin > v!.odometroKm) {
       await registrarLecturaOdometro(ctx, { vehiculoId: v!.id, km: odometroFin, fecha, origen: "sistema", usuarioId: e.usuarioId, viajeId: vj.id }, tx);
     }
     await tx.update(viaje).set({

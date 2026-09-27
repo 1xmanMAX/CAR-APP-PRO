@@ -24,6 +24,7 @@ export * from "./viajes/rutas";
 export * from "./viajes/viajes";
 export * from "./viajes/entregas";
 export * from "./viajes/liquidacion";
+export * from "./viajes/estadisticas";
 export * from "./lecturas/lecturas";
 export * from "./consultas/consultas";
 export * from "./usuarios/usuarios";

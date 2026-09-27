@@ -49,6 +49,7 @@ async function vista(c: C, d: Deps) {
 
   return pagina(c, d, { titulo: "Finanzas", seccion: "finanzas" }, (
     <>
+      <a class="aviso info" href="/estadisticas" style="display:block;text-decoration:none">📊 <b>Estadísticas</b>: mes a mes, por ruta, combustible por grifo y descarga en Excel →</a>
       <section class="kpis">
         <Kpi etiqueta="INGRESOS DEL MES" valor={soles(fin.ingresos)} />
         <Kpi etiqueta="GASTOS DEL MES" valor={soles(fin.gastos)} />

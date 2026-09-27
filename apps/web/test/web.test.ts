@@ -184,6 +184,26 @@ describe("web", () => {
       expect(await (await app.request(`/viajes/${v.id}`, { headers: { cookie } })).text()).toContain("CERRAR ESTE VIAJE");
     });
 
+    it("estadísticas y Excel con montos numéricos", async () => {
+      const cookie = await entrar();
+      const v = await registrarViajeFlota(ctx, { vehiculoId: 1, origenLugar: "Juliaca", destinoLugar: "Arequipa", estado: "cerrado", km: 300, flete: 150000, fecha: "2026-09-10", origen: "web" });
+      await registrarGasto(ctx, { viajeId: v.id, categoria: "combustible", monto: 45000, proveedorNombre: "GRIFO PRIMAX", fecha: "2026-09-10", origen: "web" });
+      const html = await (await app.request("/estadisticas?desde=2026-08-01&hasta=2026-09-30", { headers: { cookie } })).text();
+      expect(html).toContain("GRIFO PRIMAX");
+      expect(html).toContain("Juliaca → Arequipa");
+      expect(html).toContain("<svg");
+      const r = await app.request("/estadisticas.xlsx?desde=2026-08-01&hasta=2026-09-30", { headers: { cookie } });
+      expect(r.headers.get("content-type")).toContain("spreadsheetml");
+      const ExcelJS = (await import("exceljs")).default;
+      const libro = new ExcelJS.Workbook();
+      await libro.xlsx.load(await r.arrayBuffer());
+      const hoja = libro.getWorksheet("Viajes")!;
+      expect(hoja.getRow(1).getCell(7).value).toBe("Flete");
+      expect(hoja.getRow(2).getCell(7).value).toBe(1500);
+      expect(hoja.getRow(2).getCell(8).value).toBe(450);
+      expect(hoja.getRow(2).getCell(7).numFmt).toContain("S/");
+    });
+
     it("contraseña incorrecta no entra", async () => {
       const r = await app.request("/entrar", { method: "POST", headers: { origin: ORIGEN }, body: new URLSearchParams({ email: "dueno@demo.pe", clave: "mala" }) });
       expect(r.status).toBe(401);

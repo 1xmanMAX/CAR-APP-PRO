@@ -1,8 +1,8 @@
 import {
-  buscarUnidad, confirmarLectura, liquidacionViaje, corregirLectura, descartarLectura, ErrorNegocio, fijarLectura, formatearSoles, leerDocumento, listarUnidades,
-  NOMBRE_CATEGORIA, obtenerDocumento, recibirMensaje, registrarEvento, type Lectura, type MensajeEntrante, type ResultadoLeer,
+  buscarUnidad, capturarContexto, confirmarLectura, describirContexto, liquidacionViaje, corregirLectura, descartarLectura, ErrorNegocio, fijarLectura,
+  formatearSoles, leerDocumento, listarCategorias, listarUnidades, nombreCategoria, obtenerDocumento, recibirMensaje, registrarEvento, type Lectura, type MensajeEntrante, type ResultadoLeer,
 } from "@sunatapp/core";
-import { CATEGORIAS, montoDe, type Categoria } from "@sunatapp/ia";
+import { CATEGORIAS_BASE, montoDe } from "@sunatapp/ia";
 import { InlineKeyboard, type Api, type Bot, type Filter } from "grammy";
 import type { ContextoBot, Dependencias } from "./bot";
 import { autor, lineaSaldo, recordarUnidad, tecladoUnidades, textoLiquidacion, unidadImplicita } from "./flujo-flota";
@@ -12,11 +12,13 @@ import { autor, lineaSaldo, recordarUnidad, tecladoUnidades, textoLiquidacion, u
  * nota de voz; el lector (IA o reglas) propone qué es y cuánto y la persona confirma con un botón.
  * Nada se guarda sin ese ✅. Los PDF siguen yendo al flujo de guía.
  */
-export type EstadoFlujoLectura = { tipo: "lectura"; paso: "correccion" | "monto"; documentoId: number; categoria?: Categoria | "entrega" };
+export type EstadoFlujoLectura = { tipo: "lectura"; paso: "correccion" | "monto" | "km"; documentoId: number; categoria?: string };
 
-const ICONO: Record<Categoria, string> = {
-  combustible: "⛽", peaje: "🛣️", viaticos: "🍽️", hospedaje: "🛏️", estiba: "📦", balanza: "⚖️", cochera: "🅿️", reparacion: "🔧", otros: "🧾",
+const ICONO: Record<string, string> = {
+  combustible: "⛽", peaje: "🛣️", viaticos: "🍽️", hospedaje: "🛏️", estiba: "📦", balanza: "⚖️", cochera: "🅿️", lavado: "🚿", llantas_ruta: "🛞",
+  reparacion_ruta: "🔧", lubricantes: "🛢️", resguardo: "🛡️", multas: "🚨", otros_viaje: "🧾",
 };
+const icono = (cat: string) => ICONO[cat] ?? "🧾";
 const MEDIO: Record<string, string> = { efectivo: "efectivo", yape: "Yape/Plin", transferencia: "transferencia", otro: "otro medio" };
 
 function flujoLectura(c: ContextoBot): EstadoFlujoLectura | undefined {
@@ -26,11 +28,15 @@ function flujoLectura(c: ContextoBot): EstadoFlujoLectura | undefined {
 const fechaCorta = (f: string | null) => (f ? `${f.slice(8, 10)}/${f.slice(5, 7)}` : null);
 
 /** El resumen que se confirma: «⛽ Combustible · S/ 350.00 · Grifo Primax (RUC …) · B012-4471 · 18/09». */
-export function resumenLectura(l: Lectura): string {
+export function resumenLectura(l: Lectura, contexto?: string | null): string {
   if (l.tipo === "gasto") {
-    const cabeza = `${ICONO[l.categoria]} ${NOMBRE_CATEGORIA[l.categoria]} · ${formatearSoles(Math.round(l.monto * 100))}`;
-    const detalle = [l.proveedorNombre && `${l.proveedorNombre}${l.proveedorRuc ? ` (RUC ${l.proveedorRuc})` : ""}`, l.comprobante, fechaCorta(l.fecha), l.nota].filter(Boolean).join(" · ");
-    return [cabeza, detalle, l.dudas.length ? `⚠️ ${l.dudas.join(" · ")}` : ""].filter(Boolean).join("\n");
+    const cabeza = `${icono(l.categoria)} ${nombreCategoria(l.categoria)} · ${formatearSoles(Math.round(l.monto * 100))}`;
+    const detalle = [
+      l.proveedorNombre && `${l.proveedorNombre}${l.proveedorRuc ? ` (RUC ${l.proveedorRuc})` : ""}`, l.comprobante, fechaCorta(l.fecha), l.nota,
+      l.kmOdometro ? `${l.kmOdometro.toLocaleString("en-US")} km` : null,
+    ].filter(Boolean).join(" · ");
+    // Lo que el gasto tomará solo (unidad, viaje y guía, forma de pago, km): se ve antes de confirmar.
+    return [cabeza, detalle, l.dudas.length ? `⚠️ ${l.dudas.join(" · ")}` : "", contexto ? `📍 ${contexto}` : ""].filter(Boolean).join("\n");
   }
   if (l.tipo === "entrega") {
     return [`💵 Dinero recibido para el viaje · ${formatearSoles(Math.round(l.monto * 100))} · ${MEDIO[l.medio]}${l.fecha ? ` · ${fechaCorta(l.fecha)}` : ""}`,
@@ -49,8 +55,8 @@ const tecladoConfirmar = (id: number) =>
 
 function tecladoCategorias(id: number): InlineKeyboard {
   const k = new InlineKeyboard();
-  CATEGORIAS.forEach((cat, i) => {
-    k.text(`${ICONO[cat]} ${NOMBRE_CATEGORIA[cat]}`, `l:cat:${id}:${cat}`);
+  CATEGORIAS_BASE.forEach((cat, i) => {
+    k.text(`${icono(cat)} ${nombreCategoria(cat)}`, `l:cat:${id}:${cat}`);
     if (i % 2 === 1) k.row();
   });
   return k.row().text("💵 Me dieron dinero", `l:cat:${id}:entrega`).row().text("❌ Descartar", `l:desc:${id}`);
@@ -65,10 +71,21 @@ export async function notificarLectura(api: Api, chatId: number, r: ResultadoLee
   const l = r.lectura;
   if (l.tipo === "gasto" || l.tipo === "entrega" || l.tipo === "inicio_viaje" || l.tipo === "fin_viaje") {
     const pregunta = l.tipo === "inicio_viaje" ? "¿Abro el viaje?" : l.tipo === "fin_viaje" ? "¿Lo cierro?" : "¿Lo guardo?";
-    await api.sendMessage(chatId, `${resumenLectura(l)}\n${pregunta}`, { reply_markup: tecladoConfirmar(r.documentoId) });
+    await api.sendMessage(chatId, `${resumenLectura(l, r.contexto)}\n${pregunta}`, { reply_markup: tecladoConfirmar(r.documentoId) });
     return;
   }
   await api.sendMessage(chatId, `${resumenLectura(l)} ¿Qué gasto es? Elige y luego te pido el monto.`, { reply_markup: tecladoCategorias(r.documentoId) });
+}
+
+/** Lo que el gasto tomará solo, con la unidad que el bot deduce (la única, la última usada o la escrita). */
+async function contextoDe(c: ContextoBot, deps: Dependencias, texto?: string | null): Promise<string | null> {
+  const u = await unidadImplicita(c, deps, texto ?? undefined);
+  return u ? describirContexto(await capturarContexto(deps.ctx, { vehiculoId: u.id })) : null;
+}
+
+/** Avisa la lectura con el contexto de la unidad. */
+async function avisarConContexto(c: ContextoBot, deps: Dependencias, r: ResultadoLeer, texto?: string | null): Promise<void> {
+  await notificarLectura(c.api, c.chat!.id, r.ok ? { ...r, contexto: r.contexto ?? (await contextoDe(c, deps, texto)) } : r);
 }
 
 async function procesar(c: ContextoBot, deps: Dependencias, m: MensajeEntrante): Promise<void> {
@@ -90,12 +107,13 @@ async function procesar(c: ContextoBot, deps: Dependencias, m: MensajeEntrante):
       return;
     }
     if (d.estado === "por_confirmar" && d.lectura) {
-      await notificarLectura(c.api, chatId, { ok: true, documentoId: doc.id, lectura: d.lectura });
+      await avisarConContexto(c, deps, { ok: true, documentoId: doc.id, lectura: d.lectura }, d.texto);
       return;
     }
   }
   await c.reply("👀 Leyendo…");
-  deps.enSegundoPlano(async () => notificarLectura(c.api, chatId, await leerDocumento(deps.ctx, doc.id)));
+  const texto = "texto" in m ? m.texto : undefined;
+  deps.enSegundoPlano(async () => avisarConContexto(c, deps, await leerDocumento(deps.ctx, doc.id), texto));
 }
 
 async function descargar(deps: Dependencias, fileId: string): Promise<Buffer | null> {
@@ -134,7 +152,7 @@ async function guardar(c: ContextoBot, deps: Dependencias, documentoId: number, 
       ? `✅ GASTO GUARDADO\n${u ? `${u.codigo} · ` : ""}${que}${r.viajeCodigo ? ` · ${r.viajeCodigo}` : ""}${d.tipo === "foto" ? " · 📷 foto guardada" : ""}. Ya aparece en Finanzas.`
       : `✅ ENTREGA ANOTADA en ${r.viajeCodigo}\n${que}. Se descuenta en la liquidación del viaje.`;
     const saldo = await lineaSaldo(deps, vehiculoId);
-    await c.reply(texto + saldo);
+    await c.reply(texto + (r.tipo === "gasto" && r.avisoKm ? `\n⚠️ ${r.avisoKm}` : "") + saldo);
     await registrarEvento(deps.ctx, {
       usuarioId: c.session.usuarioId, autor: autor(c), comando: r.tipo === "gasto" ? "gasto (lectura)" : "entrega (lectura)", texto: `${u ? `${u.codigo} · ` : ""}${que}`,
       vehiculoId, entidad: r.tipo, entidadId: r.tipo === "gasto" ? r.gastoId : r.entregaId,
@@ -145,19 +163,32 @@ async function guardar(c: ContextoBot, deps: Dependencias, documentoId: number, 
   }
 }
 
+/** Antes de guardar: al cargar combustible sin km pide el del tablero (una vez); luego la unidad si hace falta. */
+async function continuarGuardado(c: ContextoBot, deps: Dependencias, id: number, preguntarKm = true): Promise<void> {
+  const d = await obtenerDocumento(deps.ctx, id).catch(() => null);
+  if (!d) return void (await c.reply("Ese mensaje ya no existe."));
+  if (preguntarKm && d.estado === "por_confirmar" && d.lectura?.tipo === "gasto" && d.lectura.categoria === "combustible" && !d.lectura.kmOdometro) {
+    c.session.flujo = { tipo: "lectura", paso: "km", documentoId: id } satisfies EstadoFlujoLectura;
+    await c.reply("⛽ ¿Km del tablero? (escribe solo el número)", { reply_markup: new InlineKeyboard().text("No sé", `l:nokm:${id}`) });
+    return;
+  }
+  const u = await unidadImplicita(c, deps, d.texto ?? undefined);
+  if (!u) {
+    await c.reply("¿De qué unidad es?", { reply_markup: tecladoUnidades(await listarUnidades(deps.ctx), `l:u:${id}:`) });
+    return;
+  }
+  await guardar(c, deps, id, u.id);
+}
+
 async function manejarBoton(c: Filter<ContextoBot, "callback_query:data">, deps: Dependencias): Promise<void> {
   await c.answerCallbackQuery().catch(() => {});
   const [, accion, idTexto, valor] = c.callbackQuery.data.split(":");
   const id = Number(idTexto);
   if (accion === "ok") {
-    const d = await obtenerDocumento(deps.ctx, id).catch(() => null);
-    if (!d) return void (await c.reply("Ese mensaje ya no existe."));
-    const u = await unidadImplicita(c, deps, d.texto ?? undefined);
-    if (!u) {
-      await c.reply("¿De qué unidad es?", { reply_markup: tecladoUnidades(await listarUnidades(deps.ctx), `l:u:${id}:`) });
-      return;
-    }
-    await guardar(c, deps, id, u.id);
+    await continuarGuardado(c, deps, id);
+  } else if (accion === "nokm") {
+    delete c.session.flujo;
+    await continuarGuardado(c, deps, id, false);
   } else if (accion === "u") {
     await guardar(c, deps, id, Number(valor));
   } else if (accion === "corr") {
@@ -168,10 +199,11 @@ async function manejarBoton(c: Filter<ContextoBot, "callback_query:data">, deps:
     delete c.session.flujo;
     await c.reply("❌ Descartado. No guardé nada.");
   } else if (accion === "cat") {
-    const categoria = valor === "entrega" ? "entrega" : (CATEGORIAS as readonly string[]).includes(valor ?? "") ? (valor as Categoria) : null;
+    const activas = await listarCategorias(deps.ctx, { soloActivas: true });
+    const categoria = valor === "entrega" ? "entrega" : activas.some((x) => x.clave === valor) ? valor! : null;
     if (!categoria) return void (await c.reply("Ese botón ya no está activo."));
     c.session.flujo = { tipo: "lectura", paso: "monto", documentoId: id, categoria } satisfies EstadoFlujoLectura;
-    await c.reply(categoria === "entrega" ? "¿Cuánto te dieron? (ej. 500)" : `${ICONO[categoria]} ${NOMBRE_CATEGORIA[categoria]}: ¿cuánto fue? (ej. 350.50)`);
+    await c.reply(categoria === "entrega" ? "¿Cuánto te dieron? (ej. 500)" : `${icono(categoria)} ${nombreCategoria(categoria, activas)}: ¿cuánto fue? (ej. 350.50)`);
   } else {
     await c.reply("Ese botón ya no está activo.");
   }
@@ -184,7 +216,16 @@ async function manejarTexto(c: Filter<ContextoBot, "message:text">, deps: Depend
   if (f?.paso === "correccion") {
     delete c.session.flujo;
     await c.reply("👀 Corrigiendo…");
-    await notificarLectura(c.api, c.chat.id, await corregirLectura(deps.ctx, f.documentoId, t));
+    await avisarConContexto(c, deps, await corregirLectura(deps.ctx, f.documentoId, t));
+    return;
+  }
+  if (f?.paso === "km") {
+    const km = Number(t.replace(/[,.\s]|km/gi, ""));
+    if (!Number.isInteger(km) || km <= 0) return void (await c.reply("Escribe solo el número del tablero, por ejemplo 402380, o toca «No sé»."));
+    delete c.session.flujo;
+    const d = await obtenerDocumento(deps.ctx, f.documentoId);
+    if (d.lectura?.tipo === "gasto") await fijarLectura(deps.ctx, f.documentoId, { ...d.lectura, kmOdometro: km });
+    await continuarGuardado(c, deps, f.documentoId, false);
     return;
   }
   if (f?.paso === "monto") {
@@ -193,9 +234,9 @@ async function manejarTexto(c: Filter<ContextoBot, "message:text">, deps: Depend
     delete c.session.flujo;
     const lectura: Lectura = f.categoria === "entrega"
       ? { tipo: "entrega", monto, medio: /yape|plin/i.test(t) ? "yape" : "efectivo", fecha: null, dudas: [] }
-      : { tipo: "gasto", categoria: f.categoria ?? "otros", monto, fecha: null, proveedorRuc: null, proveedorNombre: null, comprobante: null, nota: null, dudas: [] };
+      : { tipo: "gasto", categoria: f.categoria ?? "otros_viaje", monto, fecha: null, proveedorRuc: null, proveedorNombre: null, comprobante: null, nota: null, dudas: [], medioPago: null, kmOdometro: null };
     try {
-      await notificarLectura(c.api, c.chat.id, { ok: true, documentoId: f.documentoId, lectura: await fijarLectura(deps.ctx, f.documentoId, lectura) });
+      await avisarConContexto(c, deps, { ok: true, documentoId: f.documentoId, lectura: await fijarLectura(deps.ctx, f.documentoId, lectura) });
     } catch (e) {
       if (!(e instanceof ErrorNegocio)) throw e;
       await c.reply(`⚠️ ${e.message}`);

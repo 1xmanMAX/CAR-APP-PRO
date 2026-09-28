@@ -145,7 +145,9 @@ export async function leerDocumento(ctx: Contexto, documentoId: number): Promise
     await ctx.db.update(documentoRecibido).set({
       estadoLectura: "por_confirmar", datosExtraidos: r.lectura, clasificacion: r.lectura.tipo, intentosLectura: d.intentosLectura + 1, proximoIntentoEn: null,
     }).where(eq(documentoRecibido.id, documentoId));
-    const contexto = describirContexto(await capturarContexto(ctx, { usuarioId: d.usuarioId ?? undefined }));
+    // Solo si se sabe la unidad (el chofer que escribe tiene un viaje en curso); si no, el bot la deduce.
+    const cap = await capturarContexto(ctx, { usuarioId: d.usuarioId ?? undefined });
+    const contexto = cap.vehiculoId !== null ? describirContexto(cap) : null;
     return { ok: true, documentoId, lectura: r.lectura, contexto };
   } catch (e) {
     if (e instanceof IaCredencialesError) {

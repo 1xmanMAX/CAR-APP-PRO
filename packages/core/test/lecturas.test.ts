@@ -63,8 +63,8 @@ describe("lecturas de mensajes", () => {
     await registrarViajeFlota(ctx, { vehiculoId: 1, origenLugar: "Juliaca", destinoLugar: "Arequipa", estado: "en_curso", origen: "web" });
     const { id } = await texto("peaje 28");
     const leida = await leerDocumento(ctx, id);
-    // Sin usuario (texto suelto) no se sabe la unidad: el contexto dice «sin viaje».
-    expect(leida).toMatchObject({ ok: true, contexto: expect.stringContaining("sin viaje") });
+    // Sin usuario (texto suelto) no se sabe la unidad: no hay contexto (el bot lo arma con la suya).
+    expect(leida).toMatchObject({ ok: true, contexto: null });
     await fijarLectura(ctx, id, {
       tipo: "gasto", categoria: "inventada", monto: 28, fecha: null, proveedorRuc: null, proveedorNombre: null, comprobante: null, nota: null, dudas: [],
       medioPago: null, kmOdometro: null,

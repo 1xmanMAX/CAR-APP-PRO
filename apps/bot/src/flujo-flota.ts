@@ -1,6 +1,6 @@
 import {
   buscarRepuestoPorCodigo, buscarUnidad, categoriaDesdeTexto, chatAlertas, crearEnlaceWeb, duenoTelegramId, ErrorNegocio,
-  crearInvitacion, finalizarViajeFlota, formatearSoles, liquidacionDeUnidad, usuarioPorTelegram, guardarChatAlertas, listarRepuestos, listarUnidades, NOMBRE_CATEGORIA, nombrePieza, parsearMonto, piezasDeTipo,
+  crearInvitacion, finalizarViajeFlota, formatearSoles, liquidacionDeUnidad, usuarioPorTelegram, guardarChatAlertas, listarRepuestos, listarUnidades, nombreCategoria, nombrePieza, parsearMonto, piezasDeTipo,
   partesDeUnidad, registrarCambio, registrarCompra, registrarEvento, registrarGasto, registrarLecturaOdometro,
   registrarViajeFlota, tomarAlertasDesgaste, viajeEnCursoDeUnidad, type LiquidacionViaje, type Unidad,
 } from "@sunatapp/core";
@@ -204,7 +204,7 @@ export function leerGasto(texto: string): { categoria: string; monto: number; no
   return { categoria, monto, nota: nota || null };
 }
 
-const USO_GASTO = "Uso: /gasto combustible 480 [detalle]\nCategorías: combustible, peaje, viáticos, hospedaje, estiba, balanza, cochera, reparación, otros.\nPuedes mandar la foto del voucher con el comando como pie de foto.";
+const USO_GASTO = "Uso: /gasto combustible 480 [detalle]\nCategorías: combustible, peaje, viáticos, hospedaje, estiba, balanza, cochera, lavado, llanta, aceite, custodia, multa, mecánico, otros.\nPuedes mandar la foto del voucher con el comando como pie de foto.";
 
 async function comandoGasto(c: ContextoBot, deps: Dependencias, texto: string, rutaFoto: string | null): Promise<void> {
   const g = leerGasto(texto);
@@ -224,12 +224,12 @@ async function comandoGasto(c: ContextoBot, deps: Dependencias, texto: string, r
 async function guardarGasto(c: ContextoBot, deps: Dependencias, u: Unidad, g: { categoria: string; monto: number; nota: string | null; rutaFoto: string | null }): Promise<void> {
   try {
     const r = await registrarGasto(deps.ctx, {
-      categoria: g.categoria as never, monto: g.monto, vehiculoId: u.id, nota: g.nota, rutaFoto: g.rutaFoto, origen: "telegram", usuarioId: c.session.usuarioId,
+      categoria: g.categoria, monto: g.monto, vehiculoId: u.id, nota: g.nota, rutaFoto: g.rutaFoto, origen: "telegram", usuarioId: c.session.usuarioId,
     });
     delete c.session.flujo;
     recordarUnidad(c, u.id);
-    const cat = NOMBRE_CATEGORIA[g.categoria as keyof typeof NOMBRE_CATEGORIA];
-    await c.reply(`✅ GASTO GUARDADO\n${u.codigo} · ${cat} · ${formatearSoles(g.monto)}${r.viajeCodigo ? ` · ${r.viajeCodigo}` : ""}${g.rutaFoto ? " · 📷 voucher guardado" : ""}. Ya aparece en Finanzas.${await lineaSaldo(deps, u.id)}`);
+    const cat = nombreCategoria(g.categoria);
+    await c.reply(`✅ GASTO GUARDADO\n${u.codigo} · ${cat} · ${formatearSoles(g.monto)}${r.viajeCodigo ? ` · ${r.viajeCodigo}` : ""}${g.rutaFoto ? " · 📷 voucher guardado" : ""}. Ya aparece en Finanzas.${r.avisoKm ? `\n⚠️ ${r.avisoKm}` : ""}${await lineaSaldo(deps, u.id)}`);
     await registrarEvento(deps.ctx, { usuarioId: c.session.usuarioId, autor: autor(c), comando: "/gasto", texto: `${cat} ${formatearSoles(g.monto)}${g.rutaFoto ? " · con foto del voucher" : ""}`, vehiculoId: u.id, entidad: "gasto", entidadId: r.id });
   } catch (e) {
     delete c.session.flujo;

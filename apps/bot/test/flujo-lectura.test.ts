@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { crearUnidad, leerDocumento, registrarEntrega, registrarViajeFlota } from "@sunatapp/core";
+import { crearUnidad, leerDocumento, obtenerUnidad, registrarEntrega, registrarViajeFlota } from "@sunatapp/core";
 import { IaNoDisponibleError, crearLectorReglas } from "@sunatapp/ia";
 import { documentoRecibido, entrega, eq, gasto } from "../../../packages/db/src/index";
 import { crearArnes } from "./arnes";
@@ -17,6 +17,8 @@ async function arnes(o: Parameters<typeof crearArnes>[0] = {}) {
 }
 
 const idDe = (data: string) => Number(data.split(":")[2]);
+/** El resumen sin la línea 📍 del contexto (unidad, viaje, pago, km), que se prueba aparte. */
+const sinContexto = (t: string) => t.replace(/\n📍 [^\n]*/, "");
 
 describe("boletas por Telegram", () => {
   it("texto «grifo 350» → resumen → ✅ → gasto en la unidad (una sola vez)", async () => {
@@ -24,14 +26,49 @@ describe("boletas por Telegram", () => {
     await a.texto("grifo 350 Primax");
     await a.esperarTareas();
     expect(a.textosEnviados()).toContain("👀 Leyendo…");
-    expect(a.ultimoTexto()).toBe("⛽ Combustible · S/ 350.00\ngrifo Primax\n¿Lo guardo?");
+    expect(sinContexto(a.ultimoTexto())).toBe("⛽ Combustible · S/ 350.00\ngrifo Primax\n¿Lo guardo?");
     const ok = a.botones().find((b) => b.text === "✅ Correcto")!.callback_data;
     await a.boton(ok);
+    // Combustible sin km en el voucher: pregunta el del tablero una vez.
+    await a.boton(a.botones().find((b) => b.text === "No sé")!.callback_data);
     expect(a.ultimoTexto()).toMatch(/^✅ GASTO GUARDADO\nT-01 · ⛽ Combustible · S\/ 350.00/);
     await a.boton(ok);
     expect(a.ultimoTexto()).toBe("Ya lo guardé.");
     const gastos = await a.ctx.db.select().from(gasto).where(eq(gasto.documentoId, idDe(ok)));
     expect(gastos.map((g) => g.monto)).toEqual([35000]);
+  });
+
+  it("combustible sin km: al confirmar pide el km del tablero y lo guarda como km real", async () => {
+    const a = await arnes();
+    const km0 = (await obtenerUnidad(a.ctx, 1)).odometroKm;
+    await a.texto("grifo 350");
+    await a.esperarTareas();
+    await a.boton(a.botones().find((b) => b.text === "✅ Correcto")!.callback_data);
+    expect(a.ultimoTexto()).toContain("¿Km del tablero?");
+    expect(a.botones().some((b) => b.text === "No sé")).toBe(true);
+    await a.texto(String(km0 + 200));
+    expect(a.ultimoTexto()).toMatch(/^✅ GASTO GUARDADO/);
+    const [g] = await a.ctx.db.select().from(gasto);
+    expect(g).toMatchObject({ kmVehiculo: km0 + 200, kmReal: true });
+  });
+
+  it("combustible: «No sé» guarda con el último km", async () => {
+    const a = await arnes();
+    await a.texto("grifo 350");
+    await a.esperarTareas();
+    await a.boton(a.botones().find((b) => b.text === "✅ Correcto")!.callback_data);
+    await a.boton(a.botones().find((b) => b.text === "No sé")!.callback_data);
+    expect(a.ultimoTexto()).toMatch(/^✅ GASTO GUARDADO/);
+    const [g] = await a.ctx.db.select().from(gasto);
+    expect(g!.kmReal).toBe(false);
+  });
+
+  it("el resumen muestra unidad, viaje, forma de pago y km", async () => {
+    const a = await arnes();
+    const v = await registrarViajeFlota(a.ctx, { vehiculoId: 1, origenLugar: "Juliaca", destinoLugar: "Arequipa", estado: "en_curso", origen: "web" });
+    await a.texto("peaje 28");
+    await a.esperarTareas();
+    expect(a.ultimoTexto()).toContain(`📍 T-01 · ${v.codigo} (sin guía) · efectivo del chofer`);
   });
 
   it("corregir y descartar", async () => {
@@ -41,7 +78,7 @@ describe("boletas por Telegram", () => {
     const botones = a.botones();
     await a.boton(botones.find((b) => b.text === "✏️ Corregir")!.callback_data);
     await a.texto("eran 28.50");
-    expect(a.ultimoTexto()).toBe("🛣️ Peajes · S/ 28.50\n¿Lo guardo?");
+    expect(sinContexto(a.ultimoTexto())).toBe("🛣️ Peajes · S/ 28.50\n¿Lo guardo?");
     await a.boton(a.botones().find((b) => b.text === "❌ Descartar")!.callback_data);
     expect(a.ultimoTexto()).toBe("❌ Descartado. No guardé nada.");
     expect(await a.ctx.db.select().from(gasto)).toEqual([]);
@@ -54,7 +91,7 @@ describe("boletas por Telegram", () => {
     expect(a.ultimoTexto()).toContain("¿Qué gasto es?");
     await a.boton(a.botones().find((b) => b.text.includes("Hospedaje"))!.callback_data);
     await a.texto("60");
-    expect(a.ultimoTexto()).toBe("🛏️ Hospedaje · S/ 60.00\n¿Lo guardo?");
+    expect(sinContexto(a.ultimoTexto())).toBe("🛏️ Hospedaje · S/ 60.00\n¿Lo guardo?");
     await a.boton(a.botones().find((b) => b.text === "✅ Correcto")!.callback_data);
     expect(a.ultimoTexto()).toContain("📷 foto guardada");
     const [g] = await a.ctx.db.select().from(gasto);
@@ -99,7 +136,7 @@ describe("boletas por Telegram", () => {
     caida = false;
     const [d] = await a.ctx.db.select().from(documentoRecibido);
     await notificarLectura(a.api, 111, await leerDocumento(a.ctx, d!.id));
-    expect(a.ultimoTexto()).toBe("🅿️ Cochera · S/ 20.00\n¿Lo guardo?");
+    expect(sinContexto(a.ultimoTexto())).toBe("🅿️ Cochera en ruta · S/ 20.00\n¿Lo guardo?");
   });
 
   it("un texto sin números sigue yendo a la ayuda de guías", async () => {
@@ -109,7 +146,7 @@ describe("boletas por Telegram", () => {
   });
 
   it("resumen con proveedor, comprobante, fecha y dudas", () => {
-    expect(resumenLectura({ tipo: "gasto", categoria: "combustible", monto: 350, fecha: "2026-09-18", proveedorRuc: "20100070970", proveedorNombre: "PRIMAX", comprobante: "B012-4471", nota: null, dudas: ["no se lee la hora"] }))
+    expect(resumenLectura({ tipo: "gasto", categoria: "combustible", monto: 350, fecha: "2026-09-18", proveedorRuc: "20100070970", proveedorNombre: "PRIMAX", comprobante: "B012-4471", nota: null, dudas: ["no se lee la hora"], medioPago: null, kmOdometro: null }))
       .toBe("⛽ Combustible · S/ 350.00\nPRIMAX (RUC 20100070970) · B012-4471 · 18/09\n⚠️ no se lee la hora");
   });
 
@@ -120,6 +157,7 @@ describe("boletas por Telegram", () => {
     await a.texto("grifo 350");
     await a.esperarTareas();
     await a.boton(a.botones().find((b) => b.text === "✅ Correcto")!.callback_data);
+    await a.boton(a.botones().find((b) => b.text === "No sé")!.callback_data);
     expect(a.ultimoTexto()).toContain(`💰 Quedan S/ 650.00 de lo entregado (${v.codigo}).`);
     await a.texto("/saldo");
     expect(a.ultimoTexto()).toBe(`💰 ${v.codigo} · T-01 · Juliaca → Arequipa (en curso)\nEntregado S/ 1,000.00 · Gastado S/ 350.00\n👉 Le quedan S/ 650.00 al chofer\n🔴 Combustible S/ 350.00`);
@@ -151,7 +189,7 @@ describe("boletas por Telegram", () => {
     expect(a.ultimoTexto()).toMatch(/^✅ Bienvenido, Usuario/);
     await a.texto("peaje 15", 999);
     await a.esperarTareas();
-    expect(a.ultimoTexto()).toBe("🛣️ Peajes · S/ 15.00\n¿Lo guardo?");
+    expect(sinContexto(a.ultimoTexto())).toBe("🛣️ Peajes · S/ 15.00\n¿Lo guardo?");
     await a.texto("/invitar", 999);
     expect(a.ultimoTexto()).toBe("Solo el dueño puede invitar a alguien.");
   });

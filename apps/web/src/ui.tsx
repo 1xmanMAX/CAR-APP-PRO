@@ -1,8 +1,8 @@
 /** @jsxRuntime automatic @jsxImportSource hono/jsx */
 import type { Child, FC, PropsWithChildren } from "hono/jsx";
 import { raw } from "hono/html";
-import type { EstadoDesgaste, Seccion, UsuarioWeb } from "@sunatapp/core";
-import { puedeVer } from "@sunatapp/core";
+import type { EstadoDesgaste, Pieza, Seccion, UsuarioWeb } from "@sunatapp/core";
+import { listaDePiezas, puedeVer } from "@sunatapp/core";
 
 // ── Formato ──────────────────────────────────────────────────────────────────
 
@@ -207,3 +207,17 @@ export const PaginaSimple: FC<PropsWithChildren<{ titulo: string }>> = (p) => (
     </body>
   </html>
 );
+
+/** Opciones de piezas del modelo 3D por grupo: cada conjunto y debajo sus piezas (sangradas). */
+export function OpcionesPiezas(p: { piezas?: Pieza[]; elegidas?: Iterable<string>; marca?: Set<string> }) {
+  const el = new Set(p.elegidas ?? []);
+  return (
+    <>
+      {listaDePiezas(p.piezas).map((g) => (
+        <optgroup label={g.nombre}>
+          {g.items.map((i) => <option value={i.id} selected={el.has(i.id)}>{i.nivel ? "\u00a0\u00a0└ " : ""}{i.nombre}{p.marca?.has(i.id) ? " •" : ""}</option>)}
+        </optgroup>
+      ))}
+    </>
+  );
+}

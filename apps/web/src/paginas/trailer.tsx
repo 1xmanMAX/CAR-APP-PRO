@@ -1,12 +1,12 @@
 /** @jsxRuntime automatic @jsxImportSource hono/jsx */
 import {
-  ajustarVidaParte, ErrorNegocio, GRUPOS_PIEZA, hoy, instalarParte, listarReparaciones, listarRepuestos, listarTiposParte,
+  ajustarVidaParte, conjuntosDe, ErrorNegocio, hoy, listaDePiezas, instalarParte, listarReparaciones, listarRepuestos, listarTiposParte,
   listarUnidades, listarViajesFlota, parsearMonto, partesDePieza, repuestosDePieza, partesDeUnidad, pieza, piezasDeSemirremolque, puedeEditar, TIPOS_SEMIRREMOLQUE, registrarCambio, TIPOS_REPARACION, viajesDesde, ZONAS,
-  type GrupoPieza, type ParteConDesgaste, type TipoReparacion,
+  type ParteConDesgaste, type TipoReparacion,
 } from "@sunatapp/core";
 import { raw } from "hono/html";
 import { accion, formulario, pagina, type App, type C, type Deps } from "../base";
-import { Barra, ChipEstado, Datos, ETIQUETA_ESTADO, fechaMedia, miles, Panel, soles2, Vacio } from "../ui";
+import { Barra, ChipEstado, Datos, ETIQUETA_ESTADO, fechaMedia, miles, OpcionesPiezas, Panel, soles2, Vacio } from "../ui";
 
 const entero = (v: string | undefined): number | null => {
   if (v === undefined || v.trim() === "") return null;
@@ -52,7 +52,9 @@ async function vista(c: C, d: Deps) {
   const faltantes = tipos.filter((t) => !partes.some((p) => p.tipoParteId === t.id));
 
   const PIEZAS = piezasDeSemirremolque(unidad.semirremolque, unidad.traccion);
-  const piezaSel = PIEZAS.find((p) => p.id === c.req.query("pieza")) ?? null;
+  const CONJ = conjuntosDe(PIEZAS);
+  const TODAS = [...PIEZAS, ...CONJ];
+  const piezaSel = TODAS.find((p) => p.id === c.req.query("pieza")) ?? null;
   const idRepuestoVer = Number(c.req.query("repuesto")) || null;
   const [historial, repuestos] = await Promise.all([
     listarReparaciones(ctx, { vehiculoId: unidad.id, conPieza: true, limite: 400 }),
@@ -67,7 +69,7 @@ async function vista(c: C, d: Deps) {
   }
   // Por pieza: sus partes controladas (para el color y para reiniciar su contador al registrar).
   const partesPieza: Record<string, Array<{ id: number; nombre: string; pct: number; estado: string; url: string }>> = {};
-  for (const pz of PIEZAS) {
+  for (const pz of TODAS) {
     const suyas = partesDePieza(pz, partes).sort((a, b) => b.pct - a.pct);
     if (suyas.length) partesPieza[pz.id] = suyas.map((p) => ({ id: p.id, nombre: p.nombre, pct: p.pct, estado: p.estado, url: `/trailer/${unidad.id}?parte=${p.id}` }));
   }
@@ -79,14 +81,15 @@ async function vista(c: C, d: Deps) {
     autogiro: false,
     nombresZona: ZONAS,
     piezas: PIEZAS,
+    conjuntos: CONJ.map((x) => ({ id: x.id, nombre: x.nombre, zona: x.zona, grupo: x.grupo, hijos: x.hijos })),
     historial: porPieza,
     partesPieza,
     // Qué repuestos sirven para cada pieza (con su stock), y el repuesto que se pidió ver (?repuesto=).
-    repuestosPieza: Object.fromEntries(PIEZAS.map((pz) => [pz.id, repuestosDePieza(repuestos, pz.id).map((r) => ({ id: r.id, codigo: r.codigo, nombre: r.nombre, stock: r.stock }))]).filter(([, rs]) => rs!.length)),
+    repuestosPieza: Object.fromEntries(TODAS.map((pz) => [pz.id, repuestosDePieza(repuestos, pz.id).map((r) => ({ id: r.id, codigo: r.codigo, nombre: r.nombre, stock: r.stock }))]).filter(([, rs]) => rs!.length)),
     resaltar: repuestoVer ? { titulo: `${repuestoVer.codigo} · ${repuestoVer.nombre}`, piezas: repuestoVer.piezas } : null,
   };
-  const grupos = Object.keys(GRUPOS_PIEZA) as GrupoPieza[];
   const conHistorial = new Set(Object.keys(porPieza));
+  const lista = listaDePiezas(PIEZAS);
 
   return pagina(c, d, { titulo: `Trailer 3D · ${unidad.codigo}`, seccion: "trailer", scripts: ["/static/trailer3d.js"], importmap: true }, (
     <>
@@ -134,7 +137,7 @@ async function vista(c: C, d: Deps) {
           <div class="visor" id="visor">
             <canvas aria-label={`Modelo 3D de ${unidad.codigo}: cada pieza (llantas, retrovisores, faros, puertas…) va por separado y su color es el desgaste. Arrastra para girar, pellizca o usa la rueda para acercar, toca una pieza para resaltarla y ver su historial.`} role="img"></canvas>
             <div class="cab">
-              <span class="lbl-12" style="color:var(--dark-text)"><b>{unidad.codigo} · TRACTO CARA PLANA {unidad.traccion} + {TIPOS_SEMIRREMOLQUE[unidad.semirremolque].toUpperCase()} · {PIEZAS.length} PIEZAS</b><br /><span style="color:var(--dark-muted)">TOCA UNA PIEZA PARA RESALTARLA · EL COLOR ES SU DESGASTE</span></span>
+              <span class="lbl-12" style="color:var(--dark-text)"><b>{unidad.codigo} · TRACTO CARA PLANA {unidad.traccion} + {TIPOS_SEMIRREMOLQUE[unidad.semirremolque].toUpperCase()} · {PIEZAS.length} PIEZAS · {CONJ.length} CONJUNTOS</b><br /><span style="color:var(--dark-muted)">TOCA UNA PIEZA PARA RESALTARLA · EL COLOR ES SU DESGASTE</span></span>
               <div class="der">
                 <button class="btn chico" id="btn-izq" type="button" aria-label="Girar a la izquierda">&lt;</button>
                 <button class="btn chico" id="btn-der" type="button" aria-label="Girar a la derecha">&gt;</button>
@@ -177,16 +180,16 @@ async function vista(c: C, d: Deps) {
 
         <div class="filas" style="gap:10px;min-width:0">
           <Panel titulo="PIEZA DEL MODELO" id="panel-pieza" der={<span class="lbl">TÓCALA EN EL 3D</span>}>
-            <label class="campo"><span>Buscar pieza</span>
+            <label class="campo"><span>Buscar pieza (escribe: bolsa, pulmón, amortiguador, maza…)</span>
+              <input type="search" id="buscar-pieza" placeholder="Buscar entre las piezas…" autocomplete="off" />
+            </label>
+            <label class="campo"><span>Pieza o conjunto</span>
               <select id="sel-pieza">
                 <option value="">— toca una pieza en el modelo o elígela aquí —</option>
-                {grupos.map((g) => (
-                  <optgroup label={GRUPOS_PIEZA[g]}>
-                    {PIEZAS.filter((p) => p.grupo === g).map((p) => <option value={p.id} selected={p.id === piezaSel?.id}>{p.nombre}{conHistorial.has(p.id) ? " •" : ""}</option>)}
-                  </optgroup>
-                ))}
+                <OpcionesPiezas piezas={PIEZAS} elegidas={piezaSel ? [piezaSel.id] : []} marca={conHistorial} />
               </select>
             </label>
+            <span id="buscar-resultado" class="muted" style="font-size:11px" aria-live="polite"></span>
             <div id="pieza-detalle" class="filas" hidden={!piezaSel}>
               <div>
                 <b id="pieza-nombre" class="mono-t" style="font-size:15px">{piezaSel?.nombre ?? ""}</b><br />
@@ -227,6 +230,22 @@ async function vista(c: C, d: Deps) {
                   </form>
                 </details>
               ) : null}
+            </div>
+          </Panel>
+          <Panel titulo={`TODAS LAS PIEZAS · ${PIEZAS.length}`} der={<span class="lbl">• = TIENE HISTORIAL</span>}>
+            <div class="lista-piezas">
+              {lista.map((g) => (
+                <details class="plegable">
+                  <summary><span class="lbl-12">{g.nombre.toUpperCase()} · {g.items.filter((i) => !CONJ.some((x) => x.id === i.id)).length}</span></summary>
+                  <ul>
+                    {g.items.map((i) => (
+                      <li class={i.nivel ? "hijo" : CONJ.some((x) => x.id === i.id) ? "conjunto" : ""}>
+                        <a href={`/trailer/${unidad.id}?pieza=${i.id}`} data-pieza={i.id}>{i.nombre}</a>{conHistorial.has(i.id) ? <b class="t-proximo"> •</b> : null}
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              ))}
             </div>
           </Panel>
           {sel ? (

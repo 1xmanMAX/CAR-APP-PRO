@@ -142,13 +142,16 @@ describe("repuestos y piezas del modelo 3D", () => {
       const espejo = await crearRepuesto(ctx, { nombre: "Luna de retrovisor", categoria: "Otros", piezas: ["retrovisor-izq", "retrovisor-der"] });
       await expect(crearRepuesto(ctx, { nombre: "X", categoria: "Otros", piezas: ["no-existe"] })).rejects.toThrow(/no existe/);
       let reps = await listarRepuestos(ctx);
-      expect(reps.find((r) => r.id === pastillas)).toMatchObject({ piezas: ["freno-sr1", "freno-sr2", "freno-sr3"], piezasElegidas: false });
+      expect(reps.find((r) => r.id === pastillas)).toMatchObject({ piezas: ["sr1", "sr2", "sr3"].flatMap((e) => [`tambor-${e}-izq`, `tambor-${e}-der`]), piezasElegidas: false });
+      // Sirve también para el conjunto «Frenos · semirremolque eje 2».
+      expect(repuestosDePieza(reps, "freno-sr2").map((r) => r.id)).toEqual([pastillas]);
       expect(reps.find((r) => r.id === espejo)).toMatchObject({ piezas: ["retrovisor-izq", "retrovisor-der"], piezasElegidas: true });
       expect(repuestosDePieza(reps, "retrovisor-der").map((r) => r.id)).toEqual([espejo]);
       await editarRepuesto(ctx, pastillas, { piezas: ["freno-sr1"] });
       await editarRepuesto(ctx, espejo, { piezas: null });
       reps = await listarRepuestos(ctx);
       expect(reps.find((r) => r.id === pastillas)!.piezas).toEqual(["freno-sr1"]);
+      expect(repuestosDePieza(reps, "tambor-sr1-der").map((r) => r.id)).toEqual([pastillas]); // marcado para el conjunto
       expect(reps.find((r) => r.id === espejo)).toMatchObject({ piezas: [], piezasElegidas: false });
     } finally {
       await cerrar();

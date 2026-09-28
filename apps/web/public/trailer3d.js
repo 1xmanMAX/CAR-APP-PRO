@@ -27,7 +27,8 @@ function soportaWebGL() {
 let semilla = 11;
 const rnd = () => { semilla = (semilla * 16807) % 2147483647; return semilla / 2147483647; };
 const DENSIDAD = 55; // puntos por m²
-const cuantos = (area, min, max) => Math.max(min, Math.min(max, Math.round(area * DENSIDAD)));
+// Las piezas chicas (pulmones, matracas, filtros) llevan pocos puntos pero bien juntos, para que se vean.
+const cuantos = (area, min, max) => Math.max(Math.min(min, Math.round(40 + area * DENSIDAD * 6)), Math.min(max, Math.round(area * DENSIDAD)));
 
 function muestrearCaja(f, P) {
   const [x0, y0, z0] = f.min, [x1, y1, z1] = f.max;
@@ -139,14 +140,18 @@ const panel = {
 };
 // Opciones originales del selector de repuestos, para reordenarlas según la pieza.
 const opcionesRepuesto = panel.repuesto ? [...panel.repuesto.options].map((o) => ({ value: o.value, text: o.textContent })) : [];
-const porId = new Map(datos.piezas.map((p) => [p.id, p]));
+const conjuntos = datos.conjuntos ?? [];
+const porId = new Map([...datos.piezas, ...conjuntos].map((p) => [p.id, p]));
+/** Piezas de un conjunto (o la pieza misma): al elegir «Suspensión · eje 1» se resaltan sus bolsas, brazos y amortiguadores. */
+const hijosDe = new Map(conjuntos.map((c) => [c.id, new Set(c.hijos)]));
+const piezasDe = (id) => hijosDe.get(id) ?? new Set(id ? [id] : []);
 /** Partes controladas de la pieza, de la más gastada a la menos (la primera manda el color). */
 const partesDe = (id) => datos.partesPieza[id] ?? [];
 const estadoDe = (id) => partesDe(id)[0]?.estado;
 /** ¿La pieza lleva la parte elegida en la lista de la izquierda? */
 const llevaParteElegida = (id) => datos.parteSeleccionada !== null && partesDe(id).some((x) => x.id === datos.parteSeleccionada);
 /** Piezas de un repuesto pedido con «VER EN 3D» (?repuesto=): se resaltan todas. */
-const resaltadas = new Set(datos.resaltar?.piezas ?? []);
+const resaltadas = new Set((datos.resaltar?.piezas ?? []).flatMap((id) => [...piezasDe(id)]));
 const enFoco = (id) => (resaltadas.size ? resaltadas.has(id) : llevaParteElegida(id));
 
 function el(tag, props, ...hijos) {
@@ -170,7 +175,18 @@ function mostrarPanel(id) {
   panel.partes.replaceChildren(...partes.map((x) => el("a", { className: "fila-parte", href: x.url },
     el("span", { style: "font-size:12px", textContent: x.nombre }), el("b", { className: `t-${x.estado} mono-t`, textContent: `${x.pct}%` }))));
 
-  const hist = datos.historial[id] ?? [];
+  // Historial: el de la pieza y el de su conjunto; en un conjunto, también el de cada pieza suya.
+  const conj = p.sistema ? porId.get(p.sistema) : null;
+  const hist = [
+    ...(datos.historial[id] ?? []),
+    ...(conj ? (datos.historial[conj.id] ?? []).map((h) => ({ ...h, trabajo: `${h.trabajo} (en ${conj.nombre})` })) : []),
+    ...(hijosDe.has(id) ? [...hijosDe.get(id)].flatMap((h) => (datos.historial[h] ?? []).map((x) => ({ ...x, trabajo: `${x.trabajo} (${porId.get(h).nombre})` }))) : []),
+  ];
+  const ir = (destino, texto) => el("button", { type: "button", className: "btn chico fantasma", textContent: texto, onclick: () => elegirPieza(destino) });
+  let nav = panel.detalle.querySelector(".nav-conjunto");
+  if (!nav) { nav = el("div", { className: "acciones nav-conjunto" }); panel.partes.before(nav); }
+  nav.replaceChildren(...(conj ? [ir(conj.id, `▲ Parte de: ${conj.nombre}`)] : []),
+    ...(hijosDe.has(id) ? [...hijosDe.get(id)].map((h) => ir(h, porId.get(h).nombre)) : []));
   panel.historial.replaceChildren(...(hist.length ? hist.map((h) => el("div", { className: "hist-pieza" },
     el("div", { className: "linea", style: "justify-content:space-between" },
       el("b", { textContent: h.fecha }), el("span", { className: "chip neutro", textContent: h.tipo })),
@@ -201,6 +217,48 @@ function mostrarPanel(id) {
     panel.repuesto.value = primero ? primero.value : "";
   }
   if (panel.trabajo && !panel.trabajo.value) panel.trabajo.placeholder = p.grupo === "llantas" ? "Cambio de llanta, rotación, parchado…" : "Qué pasó o qué se hizo";
+}
+
+/** Elegir una pieza desde la lista o los botones: sin 3D solo muestra el panel; con 3D la resalta. */
+let elegirPieza = (id) => { mostrarPanel(id); recordarEnUrl(id); };
+
+// Buscador: filtra el selector y la lista completa por nombre (sin tildes, varias palabras).
+const sinTildes = (t) => t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+const buscador = document.getElementById("buscar-pieza");
+const resultado = document.getElementById("buscar-resultado");
+if (buscador) {
+  buscador.addEventListener("input", () => {
+    const palabras = sinTildes(buscador.value).split(/\s+/).filter(Boolean);
+    const coincide = (texto) => palabras.every((w) => sinTildes(texto).includes(w));
+    let n = 0, primera = null;
+    if (panel.select) {
+      for (const o of panel.select.options) {
+        if (!o.value) continue;
+        const ok = !palabras.length || coincide(o.textContent);
+        o.hidden = !ok;
+        if (ok) { n++; primera ??= o.value; }
+      }
+      for (const g of panel.select.querySelectorAll("optgroup")) g.hidden = ![...g.children].some((o) => !o.hidden);
+    }
+    for (const li of document.querySelectorAll(".lista-piezas li")) li.hidden = palabras.length > 0 && !coincide(li.textContent);
+    for (const d of document.querySelectorAll(".lista-piezas details")) {
+      const alguna = [...d.querySelectorAll("li")].some((li) => !li.hidden);
+      d.hidden = !alguna;
+      if (palabras.length) d.open = alguna;
+    }
+    if (resultado) resultado.textContent = palabras.length ? `${n} ${n === 1 ? "coincidencia" : "coincidencias"}${primera ? " · Enter para ver la primera" : ""}` : "";
+    buscador.dataset.primera = primera ?? "";
+  });
+  buscador.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && buscador.dataset.primera) { e.preventDefault(); elegirPieza(buscador.dataset.primera); }
+  });
+}
+for (const a of document.querySelectorAll(".lista-piezas a[data-pieza]")) {
+  a.addEventListener("click", (e) => {
+    e.preventDefault();
+    elegirPieza(a.dataset.pieza);
+    document.getElementById("visor")?.scrollIntoView({ behavior: "smooth", block: "center" });
+  });
 }
 
 function recordarEnUrl(id) {
@@ -256,19 +314,22 @@ function iniciar() {
   escena.add(caja);
 
   let seleccion = porId.has(datos.piezaSeleccionada) ? datos.piezaSeleccionada : null;
+  let elegidas = piezasDe(seleccion);
   // «Solo esta pieza» muestra únicamente la elegida; «Despiece» separa todas para verlas una a una.
   let aislar = false;
   let despiece = 0, despieceObjetivo = 0;
   const btnAislar = document.getElementById("btn-aislar");
   const btnDespiece = document.getElementById("btn-despiece");
   let encima = null;
+  // De cerca los puntos se achican: una matraca o un pulmón de freno se ven nítidos y no como cuadrados.
+  let escala = 1;
   const pintar = () => {
     for (const o of objetos) {
       const { id } = o.userData;
       const estado = estadoDe(id);
       const m = o.material;
       const borde = o.children[0].material;
-      if (id === seleccion || (!seleccion && resaltadas.has(id))) {
+      if (elegidas.has(id) || (!seleccion && resaltadas.has(id))) {
         m.color.set(RESALTE); m.size = 0.11; m.opacity = 1;
         borde.color.set(RESALTE); borde.opacity = 0.9;
       } else if (!seleccion && resaltadas.size) {
@@ -282,11 +343,14 @@ function iniciar() {
         borde.color.copy(m.color);
         borde.opacity = seleccion ? (id === encima ? 0.6 : 0.1) : id === encima ? 0.9 : estado ? 0.45 : 0.28;
       }
+      m.size *= escala;
     }
-    const o = objetos.find((x) => x.userData.id === seleccion);
-    caja.visible = !!o;
-    if (o) caja.box.copy(o.geometry.boundingBox).translate(o.position).expandByScalar(0.08);
-    for (const x of objetos) x.visible = !aislar || !seleccion || x.userData.id === seleccion;
+    const b = cajaDe(seleccion);
+    caja.visible = !!b;
+    if (b) caja.box.copy(b).expandByScalar(0.08);
+    for (const x of objetos) x.visible = !aislar || !seleccion || elegidas.has(x.userData.id);
+    for (const a of document.querySelectorAll(".lista-piezas a.sel")) a.classList.remove("sel");
+    if (seleccion) document.querySelector(`.lista-piezas a[data-pieza="${CSS.escape(seleccion)}"]`)?.classList.add("sel");
     if (btnAislar) {
       btnAislar.disabled = !seleccion;
       btnAislar.classList.toggle("on", aislar && !!seleccion);
@@ -294,25 +358,35 @@ function iniciar() {
     }
   };
 
+  /** Caja que envuelve la pieza o todas las piezas del conjunto (en su posición del despiece). */
+  function cajaDe(id) {
+    const ids = piezasDe(id);
+    if (!ids.size) return null;
+    const b = new THREE.Box3();
+    for (const o of objetos) if (ids.has(o.userData.id)) b.union(o.geometry.boundingBox.clone().translate(o.position));
+    return b.isEmpty() ? null : b;
+  }
   // Al elegir una pieza la cámara la pone al centro (sin girar).
   const objetivo = controles.target.clone();
   let volando = false;
   let acercarA = null; // distancia a la que se acerca la cámara al elegir una pieza
   const enfocar = (id) => {
-    const o = objetos.find((x) => x.userData.id === id);
-    if (!o) return;
-    objetivo.copy(o.userData.centro).add(o.position);
-    acercarA = Math.max(4, Math.min(11, o.geometry.boundingBox.getSize(new THREE.Vector3()).length() * 1.6 + 3.5));
+    const b = cajaDe(id);
+    if (!b) return;
+    b.getCenter(objetivo);
+    acercarA = Math.max(3, Math.min(14, b.getSize(new THREE.Vector3()).length() * 1.4 + 2.5));
     volando = true;
   };
   const elegir = (id, { mover = true } = {}) => {
     seleccion = id && porId.has(id) ? id : null;
+    elegidas = piezasDe(seleccion);
     pintar();
     mostrarPanel(seleccion);
     recordarEnUrl(seleccion);
     if (seleccion && mover) enfocar(seleccion);
   };
   if (panel.select) panel.select.addEventListener("change", () => elegir(panel.select.value || null));
+  elegirPieza = (id) => elegir(id);
 
   // Selección con el dedo o el mouse: entre las piezas tocadas se prefiere la más cercana y,
   // si hay varias casi a la misma distancia (retrovisor pegado a la cabina), la más pequeña.
@@ -420,8 +494,8 @@ function iniciar() {
       if (Math.abs(despiece - despieceObjetivo) < 0.002) despiece = despieceObjetivo;
       for (const o of objetos) o.position.copy(o.userData.desplazo).multiplyScalar(despiece);
       pintar();
-      const o = seleccion && objetos.find((x) => x.userData.id === seleccion);
-      if (o) { objetivo.copy(o.userData.centro).add(o.position); volando = true; }
+      const b = seleccion && cajaDe(seleccion);
+      if (b) { b.getCenter(objetivo); volando = true; }
     }
     if (volando) {
       const antes = controles.target.clone();
@@ -437,8 +511,10 @@ function iniciar() {
       if (controles.target.distanceTo(objetivo) < 0.01 && acercarA === null) volando = false;
     }
     controles.update();
-    const oSel = seleccion && objetos.find((o) => o.userData.id === seleccion);
-    const anclaSel = oSel ? v2.copy(oSel.userData.centro).add(oSel.position) : centroZona;
+    const nuevaEscala = Math.max(0.22, Math.min(1, camara.position.distanceTo(controles.target) / 16));
+    if (Math.abs(nuevaEscala - escala) > 0.03) { escala = nuevaEscala; pintar(); }
+    const bSel = seleccion && cajaDe(seleccion);
+    const anclaSel = bSel ? bSel.getCenter(v2) : centroZona;
     if (etiqueta) {
       if (etiquetaDe !== seleccion) {
         etiquetaDe = seleccion;

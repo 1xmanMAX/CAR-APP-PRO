@@ -1,6 +1,6 @@
 import {
   buscarRepuestoPorCodigo, buscarUnidad, categoriaDesdeTexto, chatAlertas, crearEnlaceWeb, duenoTelegramId, ErrorNegocio,
-  crearInvitacion, finalizarViajeFlota, formatearSoles, liquidacionDeUnidad, usuarioPorTelegram, guardarChatAlertas, listarRepuestos, listarUnidades, NOMBRE_CATEGORIA, nombrePieza, parsearMonto, piezasDeTipo,
+  crearInvitacion, finalizarViajeFlota, formatearSoles, liquidacionDeUnidad, usuarioPorTelegram, guardarChatAlertas, listarRepuestos, listarUnidades, NOMBRE_CATEGORIA, nombrePieza, parsearMonto, pieza, piezasDeTipo,
   partesDeUnidad, registrarCambio, registrarCompra, registrarEvento, registrarGasto, registrarLecturaOdometro,
   registrarViajeFlota, tomarAlertasDesgaste, viajeEnCursoDeUnidad, type LiquidacionViaje, type Unidad,
 } from "@sunatapp/core";
@@ -340,6 +340,14 @@ async function comandoSaldo(c: ContextoBot, deps: Dependencias, texto: string): 
 
 // ── /cambio ──────────────────────────────────────────────────────────────────
 
+/** Dónde puede ir un tipo de parte: los frenos se cambian por eje (su conjunto); lo demás, pieza por pieza. */
+function piezasParaCambio(parte: { zona: Parameters<typeof piezasDeTipo>[0]["zona"]; codigoTipo: string }): string[] {
+  return [...new Set(piezasDeTipo({ zona: parte.zona, codigo: parte.codigoTipo }).map((id) => {
+    const p = pieza(id);
+    return p?.grupo === "frenos" && p.sistema ? p.sistema : id;
+  }))];
+}
+
 async function pasoCambio(c: ContextoBot, deps: Dependencias): Promise<void> {
   const f = flujoFlota(c) as Extract<EstadoFlujoFlota, { tipo: "cambio" }>;
   if (f.paso === "unidad") {
@@ -353,9 +361,9 @@ async function pasoCambio(c: ContextoBot, deps: Dependencias): Promise<void> {
   } else if (f.paso === "pieza") {
     const parte = (await partesDeUnidad(deps.ctx, f.vehiculoId!)).find((p) => p.id === f.parteId)!;
     const k = new InlineKeyboard();
-    piezasDeTipo({ zona: parte.zona, codigo: parte.codigoTipo }).slice(0, 24).forEach((id, i) => {
+    piezasParaCambio(parte).slice(0, 24).forEach((id, i) => {
       // «Llanta semirremolque eje 2 · derecha exterior» → «Eje 2 · derecha exterior» (cabe en el botón).
-      const corto = nombrePieza(id)!.replace(/^(Llanta|Frenos ·)\s*(semirremolque|tracción)?\s*/i, "");
+      const corto = nombrePieza(id)!.replace(/^(Llanta|Frenos ·)\s*(semirremolque|tracción)?\s*/i, "").replace(/\s*\(.*\)$/, "");
       k.text(corto.charAt(0).toUpperCase() + corto.slice(1), `t:cz:${id}`);
       if (i % 2 === 1) k.row();
     });
@@ -461,7 +469,7 @@ async function manejarBoton(c: CtxBoton, deps: Dependencias): Promise<void> {
   } else if (accion === "cp" && f?.tipo === "cambio" && f.paso === "parte") {
     f.parteId = id;
     const parte = id ? (await partesDeUnidad(deps.ctx, f.vehiculoId!)).find((p) => p.id === id) : undefined;
-    const piezas = parte ? piezasDeTipo({ zona: parte.zona, codigo: parte.codigoTipo }) : [];
+    const piezas = parte ? piezasParaCambio(parte) : [];
     if (piezas.length === 1) f.componente = piezas[0];
     f.paso = piezas.length > 1 ? "pieza" : "repuesto";
     await pasoCambio(c, deps);

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  nombrePieza, partesDePieza, pieza, PIEZAS, piezasDeSemirremolque, piezasDeTipo, TIPOS_SEMIRREMOLQUE, TRACCIONES, type Forma, type TipoSemirremolque, type Traccion,
+  CONJUNTOS_PIEZAS, conjuntosDe, esConjunto, listaDePiezas, nombrePieza, partesDePieza, pieza, PIEZAS, piezasDeSemirremolque, piezasDeTipo, TIPOS_SEMIRREMOLQUE, TRACCIONES, type Forma, type TipoSemirremolque, type Traccion,
 } from "../src/flota/componentes";
 
 type Caja = { min: number[]; max: number[] };
@@ -54,7 +54,7 @@ describe("piezas del modelo 3D (tracto cara plana + furgón)", () => {
   it("es cara plana: nada del tracto sobresale delante de la cabina salvo parachoques, espejos, visera y faros", () => {
     const frente = Math.min(...pieza("cabina")!.formas.map((f) => cajaDe(f).min[0]!));
     const delante = PIEZAS.filter((p) => p.formas.some((f) => cajaDe(f).min[0]! < frente - 0.05)).map((p) => p.id).sort();
-    expect(delante).toEqual(["parachoques-del", "retrovisor-der", "retrovisor-izq", "visera"]);
+    expect(delante).toEqual(["espejo-frontal", "parachoques-del", "retrovisor-der", "retrovisor-izq", "visera"]);
   });
 
   it("6x2 como la unidad real: 20 llantas + repuesto (eje de apoyo con simples); 6x4: 22 + repuesto", () => {
@@ -92,8 +92,47 @@ describe("piezas del modelo 3D (tracto cara plana + furgón)", () => {
   });
 
   it("un tipo de parte sabe en qué piezas va", () => {
-    expect(piezasDeTipo({ zona: "llantas_sr", codigo: "frenos_sr" })).toEqual(["freno-sr1", "freno-sr2", "freno-sr3"]);
+    expect(piezasDeTipo({ zona: "llantas_sr", codigo: "frenos_sr" })).toEqual(["sr1", "sr2", "sr3"].flatMap((e) => [`tambor-${e}-izq`, `tambor-${e}-der`]));
     expect(piezasDeTipo({ zona: "llantas_sr", codigo: "llantas_sr" })).toHaveLength(13); // 12 + la de repuesto
-    expect(piezasDeTipo({ zona: "motor", codigo: "aceite" })).toEqual(["motor"]);
+    expect(piezasDeTipo({ zona: "motor", codigo: "aceite" })).toEqual(["motor", "filtro-aceite"]);
+    expect(piezasDeTipo({ zona: "chasis", codigo: "amortiguadores" })).toHaveLength(12); // uno por lado en cada uno de los 6 ejes
+    expect(piezasDeTipo({ zona: "bateria", codigo: "bateria" })).toEqual(["bateria-1", "bateria-2"]);
+  });
+
+  it("piezas pequeñas por separado: bolsas de aire, amortiguadores, pulmones, matracas y mazas de cada rueda", () => {
+    const ids = new Set(piezasDeSemirremolque("plataforma", "6x2").map((p) => p.id));
+    for (const e of ["sr1", "sr2", "sr3"]) for (const l of ["izq", "der"]) {
+      for (const tipo of ["bolsa-aire", "amortiguador", "brazo", "pulmon", "matraca", "maza", "tambor"]) expect(ids.has(`${tipo}-${e}-${l}`), `${tipo}-${e}-${l}`).toBe(true);
+    }
+    for (const id of ["ballesta-t1-izq", "ballesta-t2-der", "soporte-v", "caja-direccion", "barra-acoplamiento", "turbo", "alternador", "secador-aire", "king-pin", "manguera-emergencia"]) {
+      expect(ids.has(id), id).toBe(true);
+    }
+    expect(ids.has("bolsa-aire-t1-izq")).toBe(false); // el 6x2 va con ballestas
+    expect(piezasDeSemirremolque("plataforma", "6x4").some((p) => p.id === "bolsa-aire-t1-izq")).toBe(true);
+    expect(ids.size).toBeGreaterThan(190); // antes eran 90
+  });
+
+  it("los conjuntos agrupan sus piezas y los códigos antiguos siguen existiendo (historial guardado)", () => {
+    const hojas = new Set(PIEZAS.map((p) => p.id));
+    for (const c of CONJUNTOS_PIEZAS) expect(hojas.has(c.id), `${c.id} choca con una pieza`).toBe(false);
+    for (const id of ["freno-sr1", "suspension-t1", "bateria", "tanques-aire", "mangueras", "plancha-acople", "llanta-repuesto", "estribo-bateria"]) {
+      expect(pieza(id), id).not.toBeNull();
+    }
+    expect(esConjunto("suspension-sr2")).toBe(true);
+    expect(esConjunto("bolsa-aire-sr2-izq")).toBe(false);
+    const susp = conjuntosDe(piezasDeSemirremolque()).find((c) => c.id === "suspension-sr2")!;
+    expect(susp.hijos.sort()).toEqual(["amortiguador-sr2-der", "amortiguador-sr2-izq", "bolsa-aire-sr2-der", "bolsa-aire-sr2-izq", "brazo-sr2-der", "brazo-sr2-izq"]);
+    // El conjunto de frenos se pinta con el desgaste de las pastillas; el de suspensión, con los amortiguadores.
+    const partes = [{ zona: "llantas_sr" as const, codigoTipo: "frenos_sr" }, { zona: "chasis" as const, codigoTipo: "amortiguadores" }];
+    expect(partesDePieza(pieza("freno-sr1")!, partes).map((p) => p.codigoTipo)).toEqual(["frenos_sr"]);
+    expect(partesDePieza(pieza("suspension-sr1")!, partes).map((p) => p.codigoTipo)).toEqual(["amortiguadores"]);
+  });
+
+  it("la lista para elegir tiene cada pieza una vez, con sus conjuntos", () => {
+    const piezas = piezasDeSemirremolque("furgon", "6x4");
+    const items = listaDePiezas(piezas).flatMap((g) => g.items);
+    const hojas = items.filter((i) => !esConjunto(i.id)).map((i) => i.id);
+    expect(hojas.sort()).toEqual(piezas.map((p) => p.id).sort());
+    expect(items.find((i) => i.id === "bolsa-aire-sr1-izq")!.nivel).toBe(1);
   });
 });

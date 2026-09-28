@@ -269,3 +269,14 @@ svg.graf { width: 100%; height: auto; display: block; }
 .sin-gap .header > * + *, .sin-gap .header .datos > * + *, .sin-gap .acciones > * + *, .sin-gap .nav a + a,
 .sin-gap .form-grid > *, .sin-gap form.linea > * + *, .sin-gap .usuario-menu > * + * { margin-left: 12px; }
 .sin-gap .tira i { margin: 0 3px 3px 0; }
+/* Lista completa de piezas del modelo 3D (Trailer 3D) */
+.lista-piezas { display: flex; flex-direction: column; gap: 4px; max-height: 420px; overflow-y: auto; }
+.lista-piezas ul { list-style: none; margin: 4px 0 8px; padding: 0; display: flex; flex-direction: column; }
+.lista-piezas li { font-size: 12px; padding: 3px 0; border-bottom: 1px dashed var(--divider); }
+.lista-piezas li.conjunto { font-weight: 600; margin-top: 4px; }
+.lista-piezas li.hijo { padding-left: 16px; }
+.lista-piezas li.hijo::before { content: "└ "; color: var(--muted, #888); }
+.lista-piezas a { color: var(--text); text-decoration: none; }
+.lista-piezas a:hover, .lista-piezas a.sel { text-decoration: underline; color: var(--accent); }
+.nav-conjunto { display: flex; flex-direction: column; align-items: stretch; gap: 4px; }
+.nav-conjunto .btn { white-space: normal; text-align: left; height: auto; min-height: 30px; line-height: 1.3; justify-content: flex-start; max-width: 100%; }

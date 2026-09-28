@@ -1,11 +1,11 @@
 /** @jsxRuntime automatic @jsxImportSource hono/jsx */
 import {
-  ErrorNegocio, etiquetaCambio, GRUPOS_PIEZA, hoy, pieza, PIEZAS, listarReparaciones, listarRepuestos, listarUnidades, parsearMonto, partesConDesgaste,
-  registrarCambio, TIPOS_REPARACION, type GrupoPieza, type TipoReparacion,
+  ErrorNegocio, etiquetaCambio, hoy, pieza, listarReparaciones, listarRepuestos, listarUnidades, parsearMonto, partesConDesgaste,
+  registrarCambio, TIPOS_REPARACION, type TipoReparacion,
 } from "@sunatapp/core";
 import { accion, formulario, pagina, type App, type C, type Deps } from "../base";
 import { enteroONull } from "./flota";
-import { Barra, Datos, fechaMedia, miles, Origen, Panel, soles, soles2, Vacio } from "../ui";
+import { Barra, Datos, fechaMedia, miles, OpcionesPiezas, Origen, Panel, soles, soles2, Vacio } from "../ui";
 
 async function vista(c: C, d: Deps) {
   const ctx = d.ctx;
@@ -46,9 +46,7 @@ async function vista(c: C, d: Deps) {
                 <label class="campo"><span>Pieza exacta (modelo 3D, opcional)</span>
                   <select name="componente">
                     <option value="">— sin pieza —</option>
-                    {(Object.keys(GRUPOS_PIEZA) as GrupoPieza[]).map((g) => (
-                      <optgroup label={GRUPOS_PIEZA[g]}>{PIEZAS.filter((p) => p.grupo === g).map((p) => <option value={p.id} selected={p.id === piezaSel}>{p.nombre}</option>)}</optgroup>
-                    ))}
+                    <OpcionesPiezas elegidas={piezaSel ? [piezaSel] : []} />
                   </select>
                 </label>
                 <label class="campo"><span>Odómetro actual (km)</span><input name="odometro" id="odometro" inputmode="numeric" placeholder={String(unidades.find((u) => u.id === unidadSel)?.odometroKm ?? "")} /></label>

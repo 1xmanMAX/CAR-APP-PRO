@@ -1,11 +1,11 @@
 /** @jsxRuntime automatic @jsxImportSource hono/jsx */
 import {
-  CATEGORIAS_REPUESTO, crearRepuesto, editarRepuesto, ErrorNegocio, GRUPOS_PIEZA, listarCompras, listarRepuestos, listarTiposParte, listarUnidades,
-  nombrePieza, parsearMonto, PIEZAS, puedeEditar, registrarCompra, resumirInventario, type GrupoPieza,
+  CATEGORIAS_REPUESTO, crearRepuesto, editarRepuesto, ErrorNegocio, listarCompras, listarRepuestos, listarTiposParte, listarUnidades,
+  nombrePieza, parsearMonto, puedeEditar, registrarCompra, resumirInventario,
 } from "@sunatapp/core";
 import { accion, formulario, pagina, type App, type C, type Deps } from "../base";
 import { enteroONull } from "./flota";
-import { Barra, fechaCorta, Kpi, miles, Origen, Panel, soles, soles2, Vacio } from "../ui";
+import { Barra, fechaCorta, Kpi, miles, OpcionesPiezas, Origen, Panel, soles, soles2, Vacio } from "../ui";
 
 function vidaTexto(v: { km: number | null; viajes: number | null; dias: number | null } | null): string {
   if (!v) return "—";
@@ -18,9 +18,7 @@ function SelectPiezas(p: { elegidas?: string[] }) {
   const el = new Set(p.elegidas ?? []);
   return (
     <select name="piezas" multiple size={8} aria-label="Piezas del modelo 3D donde va">
-      {(Object.keys(GRUPOS_PIEZA) as GrupoPieza[]).map((g) => (
-        <optgroup label={GRUPOS_PIEZA[g]}>{PIEZAS.filter((x) => x.grupo === g).map((x) => <option value={x.id} selected={el.has(x.id)}>{x.nombre}</option>)}</optgroup>
-      ))}
+      <OpcionesPiezas elegidas={el} />
     </select>
   );
 }

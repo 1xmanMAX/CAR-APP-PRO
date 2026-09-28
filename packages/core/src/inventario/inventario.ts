@@ -4,7 +4,7 @@ import {
 import { ErrorNegocio } from "../errores";
 import { registrarAuditoria } from "../infra/auditoria";
 import type { Contexto } from "../infra/contexto";
-import { leerPiezas, piezasDeTipo } from "../flota/componentes";
+import { leerPiezas, pieza, piezasDeTipo, type Conjunto } from "../flota/componentes";
 import { hoy } from "../flota/unidades";
 
 export interface Repuesto {
@@ -216,7 +216,14 @@ export async function repuestosConStockBajo(ctx: Contexto) {
   return ctx.db.select().from(repuesto).where(and(eq(repuesto.activo, true), sql`${repuesto.stockMinimo} > 0`, sql`${repuesto.stock} <= ${repuesto.stockMinimo}`));
 }
 
-/** Los repuestos que sirven para una pieza del modelo, los que tienen stock primero. */
+/**
+ * Los repuestos que sirven para una pieza del modelo, los que tienen stock primero. Vale también
+ * por conjunto: las pastillas de los tambores sirven para «Frenos · eje 2», y un repuesto marcado
+ * para el conjunto sirve para cada una de sus piezas.
+ */
 export function repuestosDePieza(repuestos: Repuesto[], piezaId: string): Repuesto[] {
-  return repuestos.filter((r) => r.piezas.includes(piezaId)).sort((a, b) => Number(b.stock > 0) - Number(a.stock > 0) || a.codigo.localeCompare(b.codigo));
+  const p = pieza(piezaId);
+  const hijos = new Set(p && "hijos" in p ? (p as Conjunto).hijos : []);
+  const sirve = (id: string) => id === piezaId || hijos.has(id) || (!!p?.sistema && id === p.sistema);
+  return repuestos.filter((r) => r.piezas.some(sirve)).sort((a, b) => Number(b.stock > 0) - Number(a.stock > 0) || a.codigo.localeCompare(b.codigo));
 }

@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
-  bigint, boolean, date, integer, jsonb, numeric, pgEnum, pgTable, primaryKey, serial, text, timestamp, unique,
+  bigint, boolean, date, integer, jsonb, numeric, pgEnum, pgTable, primaryKey, serial, text, timestamp, unique, type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 
 const creadoEn = () => timestamp("creado_en", { withTimezone: true }).notNull().defaultNow();
@@ -13,8 +13,9 @@ export const estadoCobroEnum = pgEnum("estado_cobro", ["pendiente", "parcial", "
 export const formaPagoEnum = pgEnum("forma_pago", ["contado", "credito"]);
 export const medioCobroEnum = pgEnum("medio_cobro", ["transferencia", "efectivo", "otro"]);
 
-export const categoriaGastoEnum = pgEnum("categoria_gasto",
-  ["combustible", "peaje", "viaticos", "hospedaje", "estiba", "balanza", "cochera", "reparacion", "otros"]);
+export const tipoCategoriaEnum = pgEnum("tipo_categoria", ["fijo", "variable"]);
+export const medioPagoEnum = pgEnum("medio_pago", ["efectivo_chofer", "efectivo", "yape_plin", "transferencia", "tarjeta", "credito"]);
+export const periodicidadEnum = pgEnum("periodicidad", ["mensual", "anual"]);
 export const estadoViajeEnum = pgEnum("estado_viaje", ["planificado", "en_curso", "cerrado"]);
 export const medioEntregaEnum = pgEnum("medio_entrega", ["efectivo", "yape", "transferencia", "otro"]);
 export const tipoMensajeEnum = pgEnum("tipo_mensaje", ["pdf", "foto", "voz", "texto"]);
@@ -34,7 +35,11 @@ export const estadoEventoEnum = pgEnum("estado_evento", ["ok", "error"]);
 export type EstadoGuia = (typeof estadoGuiaEnum.enumValues)[number];
 export type EstadoSunatFactura = (typeof estadoSunatFacturaEnum.enumValues)[number];
 export type EstadoCobro = (typeof estadoCobroEnum.enumValues)[number];
-export type CategoriaGasto = (typeof categoriaGastoEnum.enumValues)[number];
+/** Clave de `categoria_gasto` (las de fábrica y las que crea el usuario). */
+export type CategoriaGasto = string;
+export type TipoCategoria = (typeof tipoCategoriaEnum.enumValues)[number];
+export type MedioPago = (typeof medioPagoEnum.enumValues)[number];
+export type Periodicidad = (typeof periodicidadEnum.enumValues)[number];
 export type EstadoViaje = (typeof estadoViajeEnum.enumValues)[number];
 export type MedioEntrega = (typeof medioEntregaEnum.enumValues)[number];
 export type EstadoLectura = (typeof estadoLecturaEnum.enumValues)[number];
@@ -246,6 +251,16 @@ export const auditoria = pgTable("auditoria", {
   creadoEn: creadoEn(),
 });
 
+/** Categorías de gasto: las de fábrica (sistema) y las propias. Cada una es fija o variable. */
+export const categoriaGasto = pgTable("categoria_gasto", {
+  clave: text("clave").primaryKey(),
+  nombre: text("nombre").notNull(),
+  tipo: tipoCategoriaEnum("tipo").notNull(),
+  sistema: boolean("sistema").notNull().default(false),
+  activa: boolean("activa").notNull().default(true),
+  orden: integer("orden").notNull().default(100),
+});
+
 export const ruta = pgTable("ruta", {
   id: serial("id").primaryKey(),
   nombre: text("nombre").notNull().unique(),
@@ -255,7 +270,7 @@ export const ruta = pgTable("ruta", {
 
 export const rutaPresupuesto = pgTable("ruta_presupuesto", {
   rutaId: integer("ruta_id").notNull().references(() => ruta.id, { onDelete: "cascade" }),
-  categoria: categoriaGastoEnum("categoria").notNull(),
+  categoria: text("categoria").notNull().references(() => categoriaGasto.clave),
   monto: centimos("monto").notNull(),
 }, (t) => [primaryKey({ columns: [t.rutaId, t.categoria] })]);
 
@@ -281,6 +296,8 @@ export const viaje = pgTable("viaje", {
   guiaRef: text("guia_ref"),
   /** Si los km del viaje ya se sumaron al odómetro de la unidad (evita sumarlos dos veces). */
   kmAplicados: boolean("km_aplicados").notNull().default(false),
+  /** Se cerró solo al registrarse una guía nueva de la unidad: revisar km y flete. */
+  cierreAutomatico: boolean("cierre_automatico").notNull().default(false),
   origen: origenRegistroEnum("origen").notNull().default("telegram"),
   creadoEn: creadoEn(),
   actualizadoEn: actualizadoEn(),
@@ -290,7 +307,7 @@ export const viaje = pgTable("viaje", {
 
 export const viajePresupuesto = pgTable("viaje_presupuesto", {
   viajeId: integer("viaje_id").notNull().references(() => viaje.id, { onDelete: "cascade" }),
-  categoria: categoriaGastoEnum("categoria").notNull(),
+  categoria: text("categoria").notNull().references(() => categoriaGasto.clave),
   monto: centimos("monto").notNull(),
 }, (t) => [primaryKey({ columns: [t.viajeId, t.categoria] })]);
 
@@ -306,10 +323,27 @@ export const entrega = pgTable("entrega", {
   creadoEn: creadoEn(),
 });
 
+/** Costo fijo recurrente: se carga solo cada mes (el anual, 1/12 por mes). */
+export const costoFijo = pgTable("costo_fijo", {
+  id: serial("id").primaryKey(),
+  concepto: text("concepto").notNull(),
+  categoria: text("categoria").notNull().references(() => categoriaGasto.clave),
+  monto: centimos("monto").notNull(),
+  periodicidad: periodicidadEnum("periodicidad").notNull().default("mensual"),
+  /** null = fijo general de la empresa. */
+  vehiculoId: integer("vehiculo_id").references(() => vehiculo.id),
+  medioPago: medioPagoEnum("medio_pago").notNull().default("transferencia"),
+  desde: date("desde", { mode: "string" }).notNull(),
+  hasta: date("hasta", { mode: "string" }),
+  activo: boolean("activo").notNull().default(true),
+  usuarioId: integer("usuario_id").references(() => usuario.id),
+  creadoEn: creadoEn(),
+});
+
 export const gasto = pgTable("gasto", {
   id: serial("id").primaryKey(),
   viajeId: integer("viaje_id").references(() => viaje.id),
-  categoria: categoriaGastoEnum("categoria").notNull(),
+  categoria: text("categoria").notNull().references(() => categoriaGasto.clave),
   monto: centimos("monto").notNull(),
   fecha: date("fecha", { mode: "string" }).notNull(),
   proveedorRuc: text("proveedor_ruc"),
@@ -321,9 +355,21 @@ export const gasto = pgTable("gasto", {
   vehiculoId: integer("vehiculo_id").references(() => vehiculo.id),
   origen: origenRegistroEnum("origen").notNull().default("telegram"),
   rutaFoto: text("ruta_foto"),
+  guiaId: integer("guia_id").references(() => guiaTransportista.id),
+  medioPago: medioPagoEnum("medio_pago"),
+  kmVehiculo: integer("km_vehiculo"),
+  /** true = km leído del voucher o dado por el chofer; false = el último conocido. */
+  kmReal: boolean("km_real").notNull().default(false),
+  costoFijoId: integer("costo_fijo_id").references(() => costoFijo.id),
+  cuotaId: integer("cuota_id").references((): AnyPgColumn => cuotaPrestamo.id),
+  /** AAAA-MM del mes al que corresponde un gasto fijo. */
+  periodo: text("periodo"),
   creadoEn: creadoEn(),
   editadoEn: timestamp("editado_en", { withTimezone: true }),
-});
+}, (t) => [
+  unique("gasto_fijo_periodo").on(t.costoFijoId, t.periodo),
+  unique("gasto_cuota").on(t.cuotaId),
+]);
 
 export const lecturaIa = pgTable("lectura_ia", {
   id: serial("id").primaryKey(),

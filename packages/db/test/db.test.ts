@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
-  conductor, crearDb, documentoRecibido, empresa, entrega, gasto, ruta, rutaPresupuesto,
+  categoriaGasto, conductor, costoFijo, crearDb, documentoRecibido, empresa, entrega, gasto, ruta, rutaPresupuesto, sql,
   siguienteCorrelativo, vehiculo, viaje, type Db,
 } from "../src/index";
 
@@ -120,5 +120,40 @@ describe("base inicial (CF_BASE_INICIAL)", () => {
       if (antes === undefined) delete process.env.CF_BASE_INICIAL;
       else process.env.CF_BASE_INICIAL = antes;
     }
+  });
+});
+
+describe("costos fijos y categorías (0012)", () => {
+  it("trae las 27 categorías de fábrica, 14 variables y 13 fijas", async () => {
+    const cats = await db.select().from(categoriaGasto);
+    expect(cats).toHaveLength(27);
+    expect(cats.filter((c) => c.tipo === "variable")).toHaveLength(14);
+    expect(cats.find((c) => c.clave === "sueldo_chofer")).toMatchObject({ tipo: "fijo", sistema: true, activa: true });
+  });
+
+  it("un gasto guarda forma de pago y periodo; el mismo fijo no se repite en el mes", async () => {
+    const [cf] = await db.insert(costoFijo).values({ concepto: "Sueldo", categoria: "sueldo_chofer", monto: 250000, periodicidad: "mensual", desde: "2026-01-01" }).returning();
+    await db.insert(gasto).values({ categoria: "sueldo_chofer", monto: 250000, fecha: "2026-09-01", costoFijoId: cf!.id, periodo: "2026-09", medioPago: "transferencia", origen: "sistema" });
+    await expect(db.insert(gasto).values({ categoria: "sueldo_chofer", monto: 250000, fecha: "2026-09-01", costoFijoId: cf!.id, periodo: "2026-09", origen: "sistema" }))
+      .rejects.toThrow();
+    const [g] = await db.select().from(gasto);
+    expect(g).toMatchObject({ medioPago: "transferencia", kmReal: false, periodo: "2026-09" });
+  });
+
+  it("rechaza una categoría inexistente", async () => {
+    await expect(db.insert(gasto).values({ categoria: "no_existe", monto: 100, fecha: "2026-09-01", origen: "web" })).rejects.toThrow();
+  });
+
+  it("uid natural de gastos generados: el mismo fijo y mes da el mismo sinc_uid", async () => {
+    const [cf] = await db.insert(costoFijo).values({ concepto: "GPS", categoria: "gps", monto: 9000, periodicidad: "mensual", desde: "2026-01-01" }).returning();
+    const uid = async () => {
+      const r = await db.execute(sql`select sinc_uid from gasto where costo_fijo_id = ${cf!.id}`);
+      return ((r as unknown as { rows?: Array<{ sinc_uid: string }> }).rows ?? (r as unknown as Array<{ sinc_uid: string }>))[0]!.sinc_uid;
+    };
+    await db.insert(gasto).values({ categoria: "gps", monto: 9000, fecha: "2026-09-01", costoFijoId: cf!.id, periodo: "2026-09", origen: "sistema" });
+    const u1 = await uid();
+    await db.delete(gasto);
+    await db.insert(gasto).values({ categoria: "gps", monto: 9000, fecha: "2026-09-01", costoFijoId: cf!.id, periodo: "2026-09", origen: "sistema" });
+    expect(await uid()).toBe(u1);
   });
 });

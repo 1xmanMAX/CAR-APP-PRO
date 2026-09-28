@@ -7,6 +7,7 @@ import {
   listarReparaciones, resumenFinanciero, rangoMes, guardarPresupuestoMensual, presupuestoMensual,
 } from "../src";
 import type { Contexto } from "../src/infra/contexto";
+import { categoriaGasto, costoFijo, eq, gasto } from "@sunatapp/db";
 import { crearContextoPrueba } from "./helpers";
 
 const cerrables: Array<() => Promise<void>> = [];
@@ -102,6 +103,27 @@ describe("sincronizar dos dispositivos por la red local", () => {
     const invA = await inventario(a.db);
     const invB = await inventario(b.db);
     expect(new Map(invA.map((x) => [x.c, x.h]))).toEqual(new Map(invB.map((x) => [x.c, x.h])));
+  });
+
+  it("categorías propias, costos fijos y el mismo fijo del mes generado en los dos quedan una sola vez", async () => {
+    const a = await dispositivo();
+    const b = await dispositivo();
+    await grupo(a, b);
+    await a.db.insert(categoriaGasto).values({ clave: "guardiania", nombre: "Guardianía", tipo: "variable" });
+    const [cf] = await a.db.insert(costoFijo).values({ concepto: "GPS", categoria: "gps", monto: 9000, desde: "2026-01-01" }).returning();
+    await a.db.insert(gasto).values({ categoria: "guardiania", monto: 5000, fecha: "2026-09-02", origen: "web" });
+    await a.db.insert(gasto).values({ categoria: "gps", monto: 9000, fecha: "2026-09-01", costoFijoId: cf!.id, periodo: "2026-09", origen: "sistema" });
+    await sincronizar(a, b);
+    // B genera el mismo fijo del mismo mes por su cuenta (sin ver el de A): no debe duplicarse.
+    const [cfB] = await b.db.select().from(costoFijo);
+    await b.db.insert(gasto).values({ categoria: "gps", monto: 9000, fecha: "2026-09-01", costoFijoId: cfB!.id, periodo: "2026-09", origen: "sistema" }).onConflictDoNothing();
+    await sincronizar(b, a);
+    for (const x of [a, b]) {
+      expect((await x.db.select().from(categoriaGasto).where(eq(categoriaGasto.clave, "guardiania"))).length).toBe(1);
+      const gs = await x.db.select().from(gasto);
+      expect(gs.filter((g) => g.categoria === "gps")).toHaveLength(1);
+      expect(gs.filter((g) => g.categoria === "guardiania")).toHaveLength(1);
+    }
   });
 
   it("el mismo registro cambiado en los dos se junta campo por campo; lo borrado se borra en los dos", async () => {

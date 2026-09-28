@@ -1,13 +1,13 @@
 /** @jsxRuntime automatic @jsxImportSource hono/jsx */
 import {
-  actualizarPresupuestoViaje, borrarEntrega, borrarGasto, CATEGORIAS_GASTO, desenlazarGuia, editarGasto, enlazarGuia, ErrorNegocio, finalizarViajeFlota,
-  listarGuiasSinViaje, reabrirViaje, type CategoriaGasto, hoy, liquidacionViaje, MEDIOS_ENTREGA, NOMBRE_CATEGORIA, parsearMonto, puedeEditar, registrarEntrega,
+  actualizarPresupuestoViaje, borrarEntrega, borrarGasto, desenlazarGuia, editarGasto, enlazarGuia, ErrorNegocio, finalizarViajeFlota,
+  listarGuiasSinViaje, reabrirViaje, hoy, liquidacionViaje, listarCategorias, MEDIOS_ENTREGA, nombreCategoria, parsearMonto, puedeEditar, registrarEntrega,
   type LiquidacionViaje, type Semaforo,
 } from "@sunatapp/core";
 import { accion, formulario, pagina, type App, type C, type Deps } from "../base";
 import { Barra, fechaCorta, Kpi, Panel, soles2, Vacio } from "../ui";
 import { enteroONull } from "./flota";
-import { CamposPlantilla, plantillaDeFormulario } from "./rutas";
+import { CamposPlantilla, categoriasDeViaje, plantillaDeFormulario } from "./rutas";
 
 const ESTADO_SEMAFORO: Record<Semaforo, "ok" | "proximo" | "cambiar"> = { ok: "ok", alerta: "proximo", excedido: "cambiar" };
 const TEXTO_SEMAFORO: Record<Semaforo, string> = { ok: "DENTRO", alerta: "AL LÍMITE", excedido: "EXCEDIDO" };
@@ -24,6 +24,7 @@ function textoSaldo(l: LiquidacionViaje): string {
  */
 async function vista(c: C, d: Deps) {
   const l = await liquidacionViaje(d.ctx, Number(c.req.param("id")));
+  const [categorias, variables] = await Promise.all([listarCategorias(d.ctx, { soloActivas: true }), categoriasDeViaje(d)]);
   const sinViaje = await listarGuiasSinViaje(d.ctx);
   const edita = puedeEditar(c.get("usuario").rol, "viajes");
   const origen = l.presupuestoOrigen.tipo === "viaje" ? "presupuesto del viaje"
@@ -64,7 +65,7 @@ async function vista(c: C, d: Deps) {
             <details class="plegable panel" style="background:var(--white)">
               <summary><span class="lbl-12" style="text-decoration:underline;cursor:pointer">EDITAR EL PRESUPUESTO DE ESTE VIAJE</span></summary>
               <form method="post" action={`/viajes/${l.viaje.id}/presupuesto`} class="filas" style="margin-top:8px">
-                <CamposPlantilla valores={new Map(l.lineas.filter((x) => l.presupuestoOrigen.tipo === "viaje" && x.presupuesto > 0).map((x) => [x.categoria, x.presupuesto]))}
+                <CamposPlantilla categorias={variables} valores={new Map(l.lineas.filter((x) => l.presupuestoOrigen.tipo === "viaje" && x.presupuesto > 0).map((x) => [x.categoria, x.presupuesto]))}
                   promedio={new Map(l.lineas.filter((x) => l.presupuestoOrigen.tipo === "promedio").map((x) => [x.categoria, x.presupuesto]))} />
                 <button class="btn primario chico" type="submit">GUARDAR PRESUPUESTO</button>
                 <span class="muted" style="font-size:11px">Las plantillas por ruta se editan en <a href="/rutas">Rutas</a>.</span>
@@ -77,13 +78,13 @@ async function vista(c: C, d: Deps) {
                 <thead><tr><th>Fecha</th><th>Categoría</th><th>Detalle</th><th class="num">Monto</th><th></th>{edita ? <th></th> : null}</tr></thead>
                 <tbody>{l.gastos.map((g) => (
                   <tr>
-                    <td class="nowrap">{fechaCorta(g.fecha)}</td><td>{NOMBRE_CATEGORIA[g.categoria]}</td><td>{g.detalle ?? "—"}</td>
+                    <td class="nowrap">{fechaCorta(g.fecha)}</td><td>{nombreCategoria(g.categoria, categorias)}</td><td>{g.detalle ?? "—"}</td>
                     <td class="num">{soles2(g.monto)}</td><td>{g.conFoto ? <a href={`/archivo/gasto/${g.id}`} title="Ver la boleta">📷</a> : null}</td>
                     {edita ? (
                       <td>
                         <details class="plegable"><summary><span class="btn chico">EDITAR</span></summary>
                           <form method="post" action={`/viajes/${l.viaje.id}/gasto/${g.id}`} class="filas" style="margin-top:6px;min-width:220px">
-                            <label class="campo"><span>Categoría</span><select name="categoria">{CATEGORIAS_GASTO.map((k) => <option value={k} selected={k === g.categoria}>{NOMBRE_CATEGORIA[k]}</option>)}</select></label>
+                            <label class="campo"><span>Categoría</span><select name="categoria">{categorias.map((k) => <option value={k.clave} selected={k.clave === g.categoria}>{k.nombre}</option>)}</select></label>
                             <label class="campo"><span>Monto S/</span><input name="monto" inputmode="decimal" value={(g.monto / 100).toFixed(2)} /></label>
                             <label class="campo"><span>Fecha</span><input name="fecha" type="date" value={g.fecha} /></label>
                             <button class="btn primario chico" type="submit">GUARDAR</button>
@@ -174,7 +175,7 @@ export function rutasLiquidacion(app: App, d: Deps): void {
     return accion(c, `/viajes/${conId(c)}`, async () => {
       const monto = f.monto ? parsearMonto(f.monto) : undefined;
       if (monto === null) throw new ErrorNegocio("Monto no válido");
-      await editarGasto(d.ctx, Number(c.req.param("g")), { categoria: f.categoria as CategoriaGasto, monto, fecha: f.fecha || undefined }, c.get("usuario").id);
+      await editarGasto(d.ctx, Number(c.req.param("g")), { categoria: f.categoria, monto, fecha: f.fecha || undefined }, c.get("usuario").id);
       return "Gasto corregido";
     });
   });
@@ -210,7 +211,7 @@ export function rutasLiquidacion(app: App, d: Deps): void {
     const id = Number(c.req.param("id"));
     const f = await formulario(c);
     return accion(c, `/viajes/${id}`, async () => {
-      await actualizarPresupuestoViaje(d.ctx, id, plantillaDeFormulario(f), c.get("usuario").id);
+      await actualizarPresupuestoViaje(d.ctx, id, plantillaDeFormulario(f, await categoriasDeViaje(d)), c.get("usuario").id);
       return "Presupuesto del viaje guardado";
     });
   });

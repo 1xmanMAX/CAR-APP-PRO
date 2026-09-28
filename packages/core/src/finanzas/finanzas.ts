@@ -1,5 +1,5 @@
 import {
-  and, categoriaGasto, cobro, compraRepuesto, cuotaPrestamo, desc, eq, gasto, ingreso, isNull, prestamo, reinversion,
+  and, categoriaGasto, cobro, isNotNull, compraRepuesto, cuotaPrestamo, desc, eq, gasto, ingreso, isNull, prestamo, reinversion,
   reparacion, sql, vehiculo, viaje, type CategoriaGasto, type MedioPago, type OrigenRegistro,
 } from "@sunatapp/db";
 import { sumarDias } from "../dominio/fechas";
@@ -79,6 +79,13 @@ export async function registrarGasto(
   }).returning({ id: gasto.id });
   await registrarAuditoria(ctx.db, { usuarioId: e.usuarioId, accion: "gasto_registrado", entidad: "gasto", entidadId: g!.id, detalle: { ...e, contexto: c } });
   return { id: g!.id, viajeCodigo: c.viajeCodigo, contexto: c, kmReal, avisoKm };
+}
+
+/** La unidad del último gasto que registró esta persona (para proponerla en el siguiente). */
+export async function ultimaUnidadDeUsuario(ctx: Contexto, usuarioId: number): Promise<number | null> {
+  const [f] = await ctx.db.select({ v: gasto.vehiculoId }).from(gasto)
+    .where(and(eq(gasto.usuarioId, usuarioId), isNotNull(gasto.vehiculoId))).orderBy(desc(gasto.id)).limit(1);
+  return f?.v ?? null;
 }
 
 export async function borrarGasto(ctx: Contexto, id: number, usuarioId?: number): Promise<void> {

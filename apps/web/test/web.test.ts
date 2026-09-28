@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
-  buscarUnidad, crearEnlaceWeb, guardarUsuario, registrarGasto, registrarViajeFlota, listarEventos, listarUsuarios, listarViajesFlota, obtenerEmpresa, partesDeUnidad, instalarParte, listarTiposParte,
+  buscarUnidad, crearCategoria, crearEnlaceWeb, guardarUsuario, registrarGasto, registrarViajeFlota, listarEventos, listarUsuarios, listarViajesFlota, obtenerEmpresa, partesDeUnidad, instalarParte, listarTiposParte,
   type Contexto,
 } from "@sunatapp/core";
-import { crearDb } from "../../../packages/db/src/index";
+import { crearDb, gasto } from "../../../packages/db/src/index";
 import { crearContextoPrueba } from "../../../packages/core/test/helpers";
 import { crearWeb } from "../src/app";
 
@@ -59,6 +59,30 @@ describe("web", () => {
   describe("con el dueño configurado", () => {
     beforeEach(async () => {
       await guardarUsuario(ctx, { id: 1, nombre: "Dueño", email: "dueno@demo.pe", rol: "dueno", clave: "clave-segura" });
+    });
+
+    it("gasto mínimo: solo monto y categoría; el resto se completa solo", async () => {
+      const cookie = await entrar();
+      await registrarViajeFlota(ctx, { vehiculoId: 1, origenLugar: "Juliaca", destinoLugar: "Arequipa", estado: "en_curso", origen: "web" });
+      const html = await (await app.request("/finanzas", { headers: { cookie } })).text();
+      expect(html).toContain("Se guarda con");
+      const fd = new FormData();
+      fd.set("categoria", "peaje");
+      fd.set("monto", "28.50");
+      fd.set("vehiculoId", "1");
+      const r = await app.request("/finanzas/gasto", { method: "POST", headers: { cookie, origin: ORIGEN }, body: fd });
+      expect(r.status).toBe(303);
+      const [g] = await ctx.db.select().from(gasto);
+      expect(g).toMatchObject({ categoria: "peaje", monto: 2850, medioPago: "efectivo_chofer" });
+      expect(g!.viajeId).not.toBeNull();
+    });
+
+    it("las categorías propias aparecen en el formulario de gasto, en rutas y en el presupuesto", async () => {
+      const cookie = await entrar();
+      await crearCategoria(ctx, { nombre: "Guardianía", tipo: "variable" });
+      for (const ruta of ["/finanzas", "/rutas", "/rentabilidad"]) {
+        expect(await (await app.request(ruta, { headers: { cookie } })).text(), ruta).toContain("Guardianía");
+      }
     });
 
     it("todas las pantallas cargan", async () => {
@@ -170,7 +194,7 @@ describe("web", () => {
       const cookie = await entrar();
       const v = await registrarViajeFlota(ctx, { vehiculoId: 1, origenLugar: "Juliaca", destinoLugar: "Cusco", estado: "en_curso", origen: "web" });
       const g1 = await registrarGasto(ctx, { viajeId: v.id, categoria: "combustible", monto: 30000, origen: "telegram" });
-      const g2 = await registrarGasto(ctx, { viajeId: v.id, categoria: "otros", monto: 5000, origen: "telegram" });
+      const g2 = await registrarGasto(ctx, { viajeId: v.id, categoria: "otros_viaje", monto: 5000, origen: "telegram" });
       expect(aviso(await post(cookie, `/viajes/${v.id}/gasto/${g1.id}`, { categoria: "combustible", monto: "305", fecha: "2026-09-13" }))).toContain("ok=");
       expect(aviso(await post(cookie, `/viajes/${v.id}/gasto/${g2.id}/borrar`, {}))).toContain("ok=");
       let html = await (await app.request(`/viajes/${v.id}`, { headers: { cookie } })).text();

@@ -1,7 +1,7 @@
 /** @jsxRuntime automatic @jsxImportSource hono/jsx */
 import ExcelJS from "exceljs";
 import {
-  estadisticas, hoy, listarCobrosPendientes, listarViajesFlota, liquidacionViaje, NOMBRE_CATEGORIA, sumarDias, type Estadisticas,
+  estadisticas, hoy, listarCobrosPendientes, listarViajesFlota, liquidacionViaje, sumarDias, type Estadisticas,
 } from "@sunatapp/core";
 import { pagina, type App, type C, type Deps } from "../base";
 import { Barra, Kpi, Panel, soles, soles2, Vacio } from "../ui";
@@ -143,7 +143,6 @@ export async function excelEstadisticas(d: Deps, desde: string, hasta: string): 
   const cobros = await listarCobrosPendientes(d.ctx);
   hoja("Cobros pendientes", [{ header: "Factura", key: "serieNumero", width: 14 }, { header: "Cliente", key: "cliente", width: 30 }, { header: "Saldo", key: "saldo", soles: true }],
     cobros.filas.map((f) => ({ serieNumero: f.serieNumero, cliente: f.cliente, saldo: cen(f.saldo) })));
-  void NOMBRE_CATEGORIA;
   return Buffer.from(await libro.xlsx.writeBuffer());
 }
 

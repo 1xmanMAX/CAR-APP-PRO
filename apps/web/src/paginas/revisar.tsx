@@ -1,7 +1,7 @@
 /** @jsxRuntime automatic @jsxImportSource hono/jsx */
 import {
-  archivoDeDocumento, asignarViajeGasto, CATEGORIAS_GASTO, confirmarLectura, costoIaDelMes, descartarLectura, ErrorNegocio, fijarLectura,
-  gastosSinViaje, hoy, listarPorRevisar, listarUnidades, listarViajesFlota, MEDIOS_ENTREGA, NOMBRE_CATEGORIA, parsearMonto, puedeEditar, sumarDias,
+  archivoDeDocumento, asignarViajeGasto, confirmarLectura, costoIaDelMes, descartarLectura, ErrorNegocio, fijarLectura,
+  gastosSinViaje, hoy, listarCategorias, listarPorRevisar, listarUnidades, listarViajesFlota, MEDIOS_ENTREGA, nombreCategoria, parsearMonto, puedeEditar, sumarDias,
   type Lectura,
 } from "@sunatapp/core";
 import { accion, formulario, pagina, servirDeAlmacen, type App, type C, type Deps } from "../base";
@@ -12,14 +12,15 @@ const ESTADO: Record<string, string> = { error: "NO SE PUDO LEER", por_confirmar
 
 function valores(l: Lectura | null): { tipo: "gasto" | "entrega"; categoria: string; monto: string; medio: string; nota: string } {
   if (l?.tipo === "gasto") return { tipo: "gasto", categoria: l.categoria, monto: l.monto.toFixed(2), medio: "efectivo", nota: [l.proveedorNombre, l.comprobante, l.nota].filter(Boolean).join(" · ") };
-  if (l?.tipo === "entrega") return { tipo: "entrega", categoria: "otros", monto: l.monto.toFixed(2), medio: l.medio, nota: "" };
-  return { tipo: "gasto", categoria: "otros", monto: "", medio: "efectivo", nota: "" };
+  if (l?.tipo === "entrega") return { tipo: "entrega", categoria: "otros_viaje", monto: l.monto.toFixed(2), medio: l.medio, nota: "" };
+  return { tipo: "gasto", categoria: "otros_viaje", monto: "", medio: "efectivo", nota: "" };
 }
 
 /** **Por revisar**: lo que quedó a medias en Telegram, para terminarlo desde la web. */
 async function vista(c: C, d: Deps) {
   const ctx = d.ctx;
   const h = hoy(ctx);
+  const categorias = await listarCategorias(ctx, { soloActivas: true });
   const [items, sinViaje, unidades, viajes, ia] = await Promise.all([
     listarPorRevisar(ctx), gastosSinViaje(ctx), listarUnidades(ctx),
     listarViajesFlota(ctx, { desde: sumarDias(h, -90), hasta: h }), costoIaDelMes(ctx, h.slice(0, 7)),
@@ -51,7 +52,7 @@ async function vista(c: C, d: Deps) {
                     <form method="post" action={`/revisar/${it.documentoId}`} class="filas">
                       <div class="form-grid">
                         <label class="campo"><span>Es</span><select name="tipo"><option value="gasto" selected={v.tipo === "gasto"}>Gasto</option><option value="entrega" selected={v.tipo === "entrega"}>Dinero entregado</option></select></label>
-                        <label class="campo"><span>Categoría</span><select name="categoria">{CATEGORIAS_GASTO.map((k) => <option value={k} selected={k === v.categoria}>{NOMBRE_CATEGORIA[k]}</option>)}</select></label>
+                        <label class="campo"><span>Categoría</span><select name="categoria">{categorias.map((k) => <option value={k.clave} selected={k.clave === v.categoria}>{k.nombre}</option>)}</select></label>
                         <label class="campo"><span>Monto S/</span><input name="monto" inputmode="decimal" value={v.monto} required /></label>
                         <label class="campo"><span>Medio (si es entrega)</span><select name="medio">{Object.entries(MEDIOS_ENTREGA).map(([k, n]) => <option value={k} selected={k === v.medio}>{n}</option>)}</select></label>
                         <label class="campo"><span>Unidad</span><select name="vehiculoId">{unidades.map((u) => <option value={u.id}>{u.codigo} · {u.placa}</option>)}</select></label>
@@ -73,7 +74,7 @@ async function vista(c: C, d: Deps) {
                 const opciones = viajes.filter((v) => !g.vehiculoId || v.vehiculoId === g.vehiculoId);
                 return (
                   <form method="post" action={`/revisar/gasto/${g.id}`} class="linea" style="flex-wrap:wrap;align-items:center;border-bottom:1px solid var(--divider);padding-bottom:6px">
-                    <span style="flex:2;min-width:180px;font-size:12px"><b>{fechaCorta(g.fecha)}</b> · {NOMBRE_CATEGORIA[g.categoria]} · <b>{soles2(g.monto)}</b>
+                    <span style="flex:2;min-width:180px;font-size:12px"><b>{fechaCorta(g.fecha)}</b> · {nombreCategoria(g.categoria, categorias)} · <b>{soles2(g.monto)}</b>
                       {g.nota || g.proveedorNombre ? <span class="muted"> · {[g.proveedorNombre, g.nota].filter(Boolean).join(" · ")}</span> : null}
                       {g.conFoto ? <> <a href={`/archivo/gasto/${g.id}`} target="_blank">📷</a></> : null}</span>
                     {edita ? (
@@ -108,7 +109,7 @@ export function rutasRevisar(app: App, d: Deps): void {
       const soles = monto / 100;
       const lectura: Lectura = f.tipo === "entrega"
         ? { tipo: "entrega", monto: soles, medio: (f.medio as "efectivo") ?? "efectivo", fecha: null, dudas: [] }
-        : { tipo: "gasto", categoria: (f.categoria as "otros") ?? "otros", monto: soles, fecha: null, proveedorRuc: null, proveedorNombre: null, comprobante: null, nota: f.nota || null, dudas: [] };
+        : { tipo: "gasto", categoria: f.categoria || "otros_viaje", monto: soles, fecha: null, proveedorRuc: null, proveedorNombre: null, comprobante: null, nota: f.nota || null, dudas: [], medioPago: null, kmOdometro: null };
       await fijarLectura(d.ctx, id, lectura);
       const r = await confirmarLectura(d.ctx, id, { vehiculoId: Number(f.vehiculoId) || null, usuarioId: c.get("usuario").id });
       if (r.tipo === "ya_confirmado") return "Ya estaba guardado";

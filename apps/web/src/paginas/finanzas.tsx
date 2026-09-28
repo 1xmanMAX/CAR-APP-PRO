@@ -1,8 +1,8 @@
 /** @jsxRuntime automatic @jsxImportSource hono/jsx */
 import {
-  borrarGasto, CATEGORIAS_GASTO, crearPrestamo, deudaPrestamos, ErrorNegocio, flujoCaja, hoy, listarMovimientos, listarPrestamos,
-  listarReinversiones, listarUnidades, NOMBRE_CATEGORIA, obtenerGasto, pagarCuota, parsearMonto, puedeEditar, rangoMes,
-  registrarGasto, registrarIngreso, registrarReinversion, reinvertidoEnAnio, resumenFinanciero, type CategoriaGasto,
+  borrarGasto, capturarContexto, crearPrestamo, describirContexto, deudaPrestamos, ErrorNegocio, flujoCaja, hoy, listarMovimientos, listarPrestamos,
+  listarCategorias, listarReinversiones, listarUnidades, NOMBRE_MEDIO_PAGO, obtenerGasto, pagarCuota, parsearMonto, puedeEditar, rangoMes,
+  registrarGasto, registrarIngreso, registrarReinversion, reinvertidoEnAnio, resumenFinanciero, ultimaUnidadDeUsuario, type MedioPago,
 } from "@sunatapp/core";
 import { accion, formulario, formularioMultiparte, pagina, servirDeAlmacen, type App, type C, type Deps } from "../base";
 import { enteroONull } from "./flota";
@@ -43,6 +43,10 @@ async function vista(c: C, d: Deps) {
     listarMovimientos(ctx, desde, hasta, 200), listarPrestamos(ctx), listarReinversiones(ctx, anio), listarUnidades(ctx),
   ]);
   const edita = puedeEditar(c.get("usuario").rol, "finanzas");
+  const categorias = await listarCategorias(ctx, { soloActivas: true });
+  // Lo que el gasto tomará solo, con la unidad que se usó la última vez (se puede cambiar).
+  const unidadDef = (await ultimaUnidadDeUsuario(ctx, c.get("usuario").id)) ?? unidades[0]?.id ?? null;
+  const previa = describirContexto(await capturarContexto(ctx, { vehiculoId: unidadDef }));
   const SelUnidad = () => (
     <label class="campo"><span>Unidad</span><select name="vehiculoId"><option value="">— general —</option>{unidades.map((u) => <option value={u.id}>{u.codigo}</option>)}</select></label>
   );
@@ -101,12 +105,22 @@ async function vista(c: C, d: Deps) {
             <div class="grid g-3" id="nuevo">
               <form method="post" action="/finanzas/gasto" class="panel" enctype="multipart/form-data">
                 <b class="lbl-12">+ GASTO</b>
-                <label class="campo"><span>Categoría</span><select name="categoria">{CATEGORIAS_GASTO.map((k) => <option value={k}>{NOMBRE_CATEGORIA[k]}</option>)}</select></label>
                 <label class="campo"><span>Monto S/</span><input name="monto" inputmode="decimal" required /></label>
-                <SelUnidad />
-                <label class="campo"><span>Fecha</span><input type="date" name="fecha" value={h} /></label>
-                <label class="campo"><span>Detalle</span><input name="nota" /></label>
+                <label class="campo"><span>Categoría</span><select name="categoria">
+                  <optgroup label="Variables (del viaje)">{categorias.filter((k) => k.tipo === "variable").map((k) => <option value={k.clave}>{k.nombre}</option>)}</optgroup>
+                  <optgroup label="Fijos (del mes)">{categorias.filter((k) => k.tipo === "fijo").map((k) => <option value={k.clave}>{k.nombre}</option>)}</optgroup>
+                </select></label>
                 <label class="campo"><span>Foto del voucher</span><input type="file" name="foto" accept="image/*,application/pdf" /></label>
+                <span class="muted" style="font-size:11px">Se guarda con: {previa} · ahora</span>
+                <details class="plegable"><summary><span class="btn chico fantasma">cambiar</span></summary>
+                  <div class="filas" style="margin-top:6px">
+                    <label class="campo"><span>Unidad</span><select name="vehiculoId"><option value="">— general —</option>{unidades.map((u) => <option value={u.id} selected={u.id === unidadDef}>{u.codigo}</option>)}</select></label>
+                    <label class="campo"><span>Forma de pago</span><select name="medioPago"><option value="">automática</option>{Object.entries(NOMBRE_MEDIO_PAGO).map(([k, n]) => <option value={k}>{n}</option>)}</select></label>
+                    <label class="campo"><span>Km del tablero</span><input name="km" inputmode="numeric" /></label>
+                    <label class="campo"><span>Fecha</span><input type="date" name="fecha" value={h} /></label>
+                    <label class="campo"><span>Detalle</span><input name="nota" /></label>
+                  </div>
+                </details>
                 <button class="btn primario" type="submit">GUARDAR GASTO</button>
               </form>
               <form method="post" action="/finanzas/ingreso" class="panel">
@@ -192,11 +206,12 @@ export function rutasFinanzas(app: App, d: Deps): void {
         const ext = (foto.name.split(".").pop() ?? "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
         rutaFoto = await d.ctx.almacen.guardar(`vouchers/${Date.now()}-web.${ext}`, Buffer.from(await foto.arrayBuffer()));
       }
-      await registrarGasto(d.ctx, {
-        categoria: f.categoria as CategoriaGasto, monto: montoObligatorio(f.monto), vehiculoId: f.vehiculoId ? Number(f.vehiculoId) : null,
+      const r = await registrarGasto(d.ctx, {
+        categoria: f.categoria ?? "", monto: montoObligatorio(f.monto), vehiculoId: f.vehiculoId ? Number(f.vehiculoId) : null,
         fecha: f.fecha || undefined, nota: f.nota || null, rutaFoto, origen: "web", usuarioId: c.get("usuario").id,
+        medioPago: (f.medioPago || undefined) as MedioPago | undefined, kmVehiculo: f.km ? enteroONull(f.km) : null,
       });
-      return "Gasto guardado";
+      return r.avisoKm ? `Gasto guardado. ${r.avisoKm}` : "Gasto guardado";
     });
   });
   app.post("/finanzas/gasto/:id/borrar", async (c) => accion(c, "/finanzas", async () => {

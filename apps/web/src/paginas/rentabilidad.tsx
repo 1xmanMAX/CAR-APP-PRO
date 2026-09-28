@@ -1,8 +1,8 @@
 /** @jsxRuntime automatic @jsxImportSource hono/jsx */
 import {
-  CATEGORIAS_GASTO, ErrorNegocio, guardarCotizacion, guardarParametrosCotizador, guardarPresupuestoMensual, hoy, listarCotizaciones,
-  listarUnidades, marcarCotizacionEnviada, NOMBRE_CATEGORIA, parametrosCotizador, parsearMonto, pdfDeCotizacion, presupuestoMensual,
-  presupuestoVsReal, proyeccion, puedeEditar, rangoMes, rentabilidadPorUnidad, type CategoriaGasto,
+  ErrorNegocio, guardarCotizacion, guardarParametrosCotizador, guardarPresupuestoMensual, hoy, listarCotizaciones,
+  listarCategorias, listarUnidades, marcarCotizacionEnviada, parametrosCotizador, parsearMonto, pdfDeCotizacion, presupuestoMensual,
+  presupuestoVsReal, proyeccion, puedeEditar, rangoMes, rentabilidadPorUnidad,
 } from "@sunatapp/core";
 import { accion, formulario, pagina, type App, type C, type Deps } from "../base";
 import { Barra, Datos, fechaCorta, nombreMes, Panel, soles, soles2, Vacio } from "../ui";
@@ -34,6 +34,7 @@ async function vista(c: C, d: Deps) {
   const ctx = d.ctx;
   const h = hoy(ctx);
   const { desde, hasta } = rangoMes(h);
+  const categorias = await listarCategorias(ctx, { soloActivas: true });
   const [unidades, params, rent, proy, pvr, cotizaciones, presupuesto] = await Promise.all([
     listarUnidades(ctx), parametrosCotizador(ctx), rentabilidadPorUnidad(ctx, desde, hasta), proyeccion(ctx), presupuestoVsReal(ctx, h),
     listarCotizaciones(ctx, 8), presupuestoMensual(ctx),
@@ -142,8 +143,8 @@ async function vista(c: C, d: Deps) {
               </Panel>
               <Panel titulo="PRESUPUESTO MENSUAL POR CATEGORÍA" id="presupuesto">
                 <form method="post" action="/rentabilidad/presupuesto" class="form-grid">
-                  {CATEGORIAS_GASTO.map((k) => (
-                    <label class="campo"><span>{NOMBRE_CATEGORIA[k]}</span><input name={k} inputmode="decimal" value={presupuesto[k] !== undefined ? String(presupuesto[k]! / 100) : ""} /></label>
+                  {categorias.map(({ clave: k, nombre }) => (
+                    <label class="campo"><span>{nombre}</span><input name={k} inputmode="decimal" value={presupuesto[k] !== undefined ? String(presupuesto[k]! / 100) : ""} /></label>
                   ))}
                   <button class="btn" type="submit">GUARDAR</button>
                 </form>
@@ -203,11 +204,11 @@ export function rutasRentabilidad(app: App, d: Deps): void {
   app.post("/rentabilidad/presupuesto", async (c) => {
     const f = await formulario(c);
     return accion(c, "/rentabilidad", async () => {
-      const p: Partial<Record<CategoriaGasto, number>> = {};
-      for (const k of CATEGORIAS_GASTO) {
+      const p: Partial<Record<string, number>> = {};
+      for (const { clave: k, nombre } of await listarCategorias(d.ctx, { soloActivas: true })) {
         if (!f[k]) continue;
         const m = parsearMonto(f[k]!);
-        if (m === null && f[k] !== "0") throw new ErrorNegocio(`Monto no válido en ${NOMBRE_CATEGORIA[k]}`);
+        if (m === null && f[k] !== "0") throw new ErrorNegocio(`Monto no válido en ${nombre}`);
         p[k] = m ?? 0;
       }
       await guardarPresupuestoMensual(d.ctx, p);

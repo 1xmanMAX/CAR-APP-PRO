@@ -1,5 +1,5 @@
 import {
-  and, cobro, compraRepuesto, cuotaPrestamo, desc, eq, gasto, ingreso, isNull, prestamo, reinversion,
+  and, categoriaGasto, cobro, compraRepuesto, cuotaPrestamo, desc, eq, gasto, ingreso, isNull, prestamo, reinversion,
   reparacion, sql, vehiculo, viaje, type CategoriaGasto, type MedioPago, type OrigenRegistro,
 } from "@sunatapp/db";
 import { sumarDias } from "../dominio/fechas";
@@ -9,22 +9,12 @@ import type { Contexto } from "../infra/contexto";
 import { hoy, registrarLecturaOdometro } from "../flota/unidades";
 import { listarViajesFlota } from "../flota/viajes-flota";
 import { capturarContexto, type ContextoGasto } from "./captura";
+import { asegurarFijos } from "./costos-fijos";
 import { categoriaValida, nombreCategoria } from "./categorias";
 
 export { NOMBRE_CATEGORIA, categoriaDesdeTexto } from "./categorias";
 
-export function rangoMes(fecha: string): { desde: string; hasta: string; mes: string } {
-  const mes = fecha.slice(0, 7);
-  const [y, m] = mes.split("-").map(Number);
-  const ultimo = new Date(Date.UTC(y!, m!, 0)).getUTCDate();
-  return { desde: `${mes}-01`, hasta: `${mes}-${String(ultimo).padStart(2, "0")}`, mes };
-}
-
-export function mesAnterior(mes: string, n = 1): string {
-  const [y, m] = mes.split("-").map(Number);
-  const d = new Date(Date.UTC(y!, m! - 1 - n, 1));
-  return d.toISOString().slice(0, 7);
-}
+export { rangoMes, mesAnterior } from "../dominio/fechas";
 
 // ── Gastos ───────────────────────────────────────────────────────────────────
 
@@ -119,11 +109,12 @@ export async function obtenerGasto(ctx: Contexto, id: number) {
   return f ?? null;
 }
 
-async function sumaGastos(ctx: Contexto, desde: string, hasta: string, vehiculoId?: number): Promise<number> {
+async function sumaGastosPorTipo(ctx: Contexto, desde: string, hasta: string, vehiculoId?: number): Promise<{ fijo: number; variable: number }> {
   const filtros = [sql`${gasto.fecha} >= ${desde}`, sql`${gasto.fecha} <= ${hasta}`];
   if (vehiculoId !== undefined) filtros.push(eq(gasto.vehiculoId, vehiculoId));
-  const [f] = await ctx.db.select({ t: sql<string>`coalesce(sum(${gasto.monto}), 0)` }).from(gasto).where(and(...filtros));
-  return Number(f?.t ?? 0);
+  const filas = await ctx.db.select({ tipo: categoriaGasto.tipo, t: sql<string>`coalesce(sum(${gasto.monto}), 0)` }).from(gasto)
+    .innerJoin(categoriaGasto, eq(categoriaGasto.clave, gasto.categoria)).where(and(...filtros)).groupBy(categoriaGasto.tipo);
+  return { fijo: Number(filas.find((f) => f.tipo === "fijo")?.t ?? 0), variable: Number(filas.find((f) => f.tipo === "variable")?.t ?? 0) };
 }
 
 export async function gastosPorCategoria(ctx: Contexto, desde: string, hasta: string, vehiculoId?: number) {
@@ -283,6 +274,8 @@ export interface ResumenFinanciero {
   otrosIngresos: number;
   ingresos: number;
   gastos: number;
+  gastosVariables: number;
+  gastosFijos: number;
   ganancia: number;
   margenPct: number | null;
   viajes: number;
@@ -294,10 +287,12 @@ export async function resumenFinanciero(ctx: Contexto, desde: string, hasta: str
   const ingresosFletes = viajes.reduce((s, v) => s + v.flete, 0);
   const otrosIngresos = await sumaTabla(ctx, ingreso, desde, hasta, vehiculoId);
   const ingresos = ingresosFletes + otrosIngresos;
-  const gastos = await sumaGastos(ctx, desde, hasta, vehiculoId);
+  await asegurarFijos(ctx, desde, hasta);
+  const t = await sumaGastosPorTipo(ctx, desde, hasta, vehiculoId);
+  const gastos = t.fijo + t.variable;
   const ganancia = ingresos - gastos;
   return {
-    ingresosFletes, otrosIngresos, ingresos, gastos, ganancia,
+    ingresosFletes, otrosIngresos, ingresos, gastos, gastosVariables: t.variable, gastosFijos: t.fijo, ganancia,
     margenPct: ingresos > 0 ? Math.round((ganancia / ingresos) * 100) : null,
     viajes: viajes.length, km: viajes.reduce((s, v) => s + (v.km ?? 0), 0),
   };
@@ -336,7 +331,8 @@ export async function listarMovimientos(ctx: Contexto, desde: string, hasta: str
   for (const i of await ctx.db.select().from(ingreso).where(rango(ingreso.fecha))) {
     r.push({ fecha: i.fecha, tipo: "INGRESO", detalle: i.concepto, unidad: u(i.vehiculoId), monto: i.monto, origen: i.origen, ref: { entidad: "ingreso", id: i.id } });
   }
-  for (const g of await ctx.db.select().from(gasto).where(rango(gasto.fecha))) {
+  // Los gastos que genera una cuota no se listan: la cuota aparece como CUOTA al pagarse.
+  for (const g of await ctx.db.select().from(gasto).where(and(rango(gasto.fecha), isNull(gasto.cuotaId)))) {
     r.push({ fecha: g.fecha, tipo: "GASTO", detalle: `${nombreCategoria(g.categoria)}${g.nota ? ` · ${g.nota}` : ""}`, unidad: u(g.vehiculoId), monto: -g.monto, origen: g.origen, ref: { entidad: "gasto", id: g.id } });
   }
   for (const x of await ctx.db.select().from(reinversion).where(rango(reinversion.fecha))) {
@@ -374,7 +370,8 @@ export async function flujoCaja(ctx: Contexto, semanas = 12): Promise<Array<{ de
   for (const v of await listarViajesFlota(ctx, { desde: inicio, hasta: fin, limite: 5000 })) {
     if (v.factura === "SIN FACTURA" && v.flete > 0) add(v.fecha, "entra", v.flete);
   }
-  for (const g of await ctx.db.select().from(gasto).where(rango(gasto.fecha))) add(g.fecha, "sale", g.monto);
+  // Los fijos y cuotas generados solos no son salida de caja (la cuota sale al pagarse).
+  for (const g of await ctx.db.select().from(gasto).where(and(rango(gasto.fecha), isNull(gasto.cuotaId), isNull(gasto.costoFijoId)))) add(g.fecha, "sale", g.monto);
   for (const rp of await ctx.db.select().from(reparacion).where(rango(reparacion.fecha))) add(rp.fecha, "sale", -rp.costoRepuestos);
   for (const c of await ctx.db.select().from(compraRepuesto).where(rango(compraRepuesto.fecha))) add(c.fecha, "sale", c.cantidad * c.costoUnitario);
   for (const x of await ctx.db.select().from(reinversion).where(rango(reinversion.fecha))) add(x.fecha, "sale", x.monto);

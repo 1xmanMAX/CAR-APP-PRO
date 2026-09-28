@@ -2,7 +2,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { GrammyError, HttpError, type Bot } from "grammy";
 import {
-  cargarConfig, crearContexto, duenoTelegramId, encolarAviso, guardarEnv, hayDueno, hayUsuarios, leerEnv, marcarLatidoBot,
+  cargarConfig, crearContexto, duenoTelegramId, encolarAviso, generarFijosDelMes, guardarEnv, hayDueno, hoy, hayUsuarios, leerEnv, marcarLatidoBot,
   obtenerUbigeo, procesarLecturasPendientes, reconfigurarSunat, tomarAvisos, validarRuc, type Config, type Contexto, type ResultadoEmision,
 } from "@sunatapp/core";
 import { cargarConfigIa, crearLectorReglas, crearProveedorIA, crearTranscriptor } from "@sunatapp/ia";
@@ -182,6 +182,8 @@ export async function arrancarApp(o: OpcionesArranque): Promise<AppEnMarcha> {
     const fondo = crearTareaFondo(deps, notificarAlDueno, [
       { nombre: "latido", tarea: async () => { if (enLinea()) await marcarLatidoBot(ctx, { usuario: estado.bot.usuario }); } },
       { nombre: "alertas de desgaste", tarea: async () => { if (enLinea()) await avisarDesgaste(bot!.api, deps); } },
+      // Los costos fijos del mes se cargan solos (idempotente: una vez por mes aunque corra cada minuto).
+      { nombre: "fijos del mes", tarea: () => generarFijosDelMes(ctx, hoy(ctx).slice(0, 7)) },
       {
         // Boletas que quedaron en cola porque la IA no respondía: se reintentan y se avisa el resumen.
         nombre: "lecturas en cola",

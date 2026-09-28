@@ -19,3 +19,16 @@ export function sumarDias(fecha: string, dias: number): string {
   d.setUTCDate(d.getUTCDate() + dias);
   return d.toISOString().slice(0, 10);
 }
+
+export function rangoMes(fecha: string): { desde: string; hasta: string; mes: string } {
+  const mes = fecha.slice(0, 7);
+  const [y, m] = mes.split("-").map(Number);
+  const ultimo = new Date(Date.UTC(y!, m!, 0)).getUTCDate();
+  return { desde: `${mes}-01`, hasta: `${mes}-${String(ultimo).padStart(2, "0")}`, mes };
+}
+
+export function mesAnterior(mes: string, n = 1): string {
+  const [y, m] = mes.split("-").map(Number);
+  const d = new Date(Date.UTC(y!, m! - 1 - n, 1));
+  return d.toISOString().slice(0, 7);
+}

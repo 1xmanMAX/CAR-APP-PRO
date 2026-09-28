@@ -44,4 +44,5 @@ export * from "./acceso/acceso";
 export type { RolUsuario, EstadoUnidad, OrigenRegistro, ZonaModelo, TipoReparacion, CategoriaGasto, TipoCategoria, MedioPago, Periodicidad } from "@sunatapp/db";
 export * from "./finanzas/categorias";
 export * from "./finanzas/captura";
+export * from "./finanzas/costos-fijos";
 export * from "./sincro/index";

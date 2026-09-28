@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { eq, guiaTransportista, viaje } from "@sunatapp/db";
-import { alRegistrarGuia, ciudadDeUbigeo, editarViajeFlota, registrarGuiaBorrador, registrarViajeFlota, viajesPorRevisar, type Contexto } from "../src/index";
+import { alRegistrarGuia, avisoViajeDeGuia, ciudadDeUbigeo, editarViajeFlota, obtenerUnidad, registrarGasto, registrarGuiaBorrador, registrarViajeFlota, viajesPorRevisar, type Contexto } from "../src/index";
 import { crearContextoPrueba, entradaGuia } from "./helpers";
 
 let ctx: Contexto;
@@ -44,6 +44,24 @@ describe("el viaje nace de la guía", () => {
     // Al corregir el viaje sale de «Por revisar».
     await editarViajeFlota(ctx, a.viajeId!, { flete: 500000 });
     expect((await viajesPorRevisar(ctx)).some((x) => x.motivo === "cierre_automatico" && x.viajeId === a.viajeId)).toBe(false);
+  });
+
+  it("el viaje cerrado solo usa el último km conocido", async () => {
+    const a = await deGuia(await guia("EG01-1"));
+    const km0 = (await obtenerUnidad(ctx, a.vehiculoId)).odometroKm;
+    await registrarGasto(ctx, { categoria: "combustible", monto: 10000, vehiculoId: a.vehiculoId, kmVehiculo: km0 + 800, origen: "telegram" });
+    await guia("EG01-2");
+    await guia("EG01-3");
+    const [cerrado] = await ctx.db.select().from(viaje).where(eq(viaje.id, a.viajeId!));
+    expect(cerrado).toMatchObject({ odometroFin: km0 + 800, km: 800 });
+  });
+
+  it("avisa qué hizo con el viaje al registrar la guía", async () => {
+    const a = await guia("EG01-1");
+    expect(await avisoViajeDeGuia(ctx, a)).toMatch(/^🚛 Viaje VJ-\d{4} abierto: Lima → Calleria/);
+    const b = await guia("EG01-2");
+    expect(await avisoViajeDeGuia(ctx, b)).toMatch(/^↩️ Guía de retorno de VJ-\d{4}/);
+    await guia("EG01-3").then(async (c) => expect(await avisoViajeDeGuia(ctx, c)).toMatch(/se cerró solo/));
   });
 
   it("idempotencia: llamarla otra vez para la misma guía no crea otro viaje", async () => {

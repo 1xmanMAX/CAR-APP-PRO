@@ -110,7 +110,10 @@ export async function registrarGuiaBorrador(ctx: Contexto, e: EntradaGuia, usuar
       return guia!.id;
     });
     // El viaje nace de la guía (spec §5). Si falla, la guía queda sin viaje y sale en «Por revisar».
-    await alRegistrarGuia(ctx, id, usuarioId).catch(() => null);
+    await alRegistrarGuia(ctx, id, usuarioId).catch((error: unknown) => registrarAuditoria(ctx.db, {
+      usuarioId, accion: "viaje_desde_guia_error", entidad: "guia_transportista", entidadId: id,
+      detalle: { mensaje: error instanceof Error ? error.message : String(error) },
+    }).catch(() => undefined));
     return id;
   } catch (error) {
     // Carrera: otra llamada registró primero una guía para el mismo documentoRecibidoId

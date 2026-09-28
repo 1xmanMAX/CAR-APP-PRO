@@ -89,6 +89,10 @@ export async function ultimaUnidadDeUsuario(ctx: Contexto, usuarioId: number): P
 }
 
 export async function borrarGasto(ctx: Contexto, id: number, usuarioId?: number): Promise<void> {
+  // Los que se generan solos volverían a aparecer: se cambian desde su origen.
+  const [g] = await ctx.db.select({ fijo: gasto.costoFijoId, cuota: gasto.cuotaId }).from(gasto).where(eq(gasto.id, id));
+  if (g?.fijo) throw new ErrorNegocio("Este gasto lo genera un costo fijo: cámbialo o desactívalo en Ajustes → Costos fijos");
+  if (g?.cuota) throw new ErrorNegocio("Este gasto es una cuota de préstamo: se maneja en Finanzas → Préstamos");
   const [r] = await ctx.db.select({ id: reparacion.id }).from(reparacion).where(eq(reparacion.gastoId, id));
   if (r) throw new ErrorNegocio("Este gasto viene de un cambio de parte; no se puede borrar suelto");
   const [f] = await ctx.db.delete(gasto).where(eq(gasto.id, id)).returning();
@@ -377,8 +381,8 @@ export async function flujoCaja(ctx: Contexto, semanas = 12): Promise<Array<{ de
   for (const v of await listarViajesFlota(ctx, { desde: inicio, hasta: fin, limite: 5000 })) {
     if (v.factura === "SIN FACTURA" && v.flete > 0) add(v.fecha, "entra", v.flete);
   }
-  // Los fijos y cuotas generados solos no son salida de caja (la cuota sale al pagarse).
-  for (const g of await ctx.db.select().from(gasto).where(and(rango(gasto.fecha), isNull(gasto.cuotaId), isNull(gasto.costoFijoId)))) add(g.fecha, "sale", g.monto);
+  // La cuota generada no se cuenta aquí: sale de caja al pagarse (más abajo).
+  for (const g of await ctx.db.select().from(gasto).where(and(rango(gasto.fecha), isNull(gasto.cuotaId)))) add(g.fecha, "sale", g.monto);
   for (const rp of await ctx.db.select().from(reparacion).where(rango(reparacion.fecha))) add(rp.fecha, "sale", -rp.costoRepuestos);
   for (const c of await ctx.db.select().from(compraRepuesto).where(rango(compraRepuesto.fecha))) add(c.fecha, "sale", c.cantidad * c.costoUnitario);
   for (const x of await ctx.db.select().from(reinversion).where(rango(reinversion.fecha))) add(x.fecha, "sale", x.monto);

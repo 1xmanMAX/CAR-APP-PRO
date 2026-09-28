@@ -138,7 +138,8 @@ export async function leerDocumento(ctx: Contexto, documentoId: number): Promise
       texto, imagenes: imagenes.length ? imagenes : d.tipo === "foto" ? [{ contenido: Buffer.alloc(0), mime: d.mime }] : undefined,
       contexto: {
         hoy: hoy(ctx), correcciones, ...(anterior.success ? { lecturaAnterior: anterior.data } : {}),
-        categorias: (await listarCategorias(ctx, { soloActivas: true })).map(({ clave, nombre }) => ({ clave, nombre })),
+        // Lo que manda el chofer es un gasto del viaje: solo categorías variables.
+        categorias: (await listarCategorias(ctx, { tipo: "variable", soloActivas: true })).map(({ clave, nombre }) => ({ clave, nombre })),
       },
     });
     await ctx.db.insert(lecturaIa).values({ documentoId, ...r.uso, respuesta: r.lectura });

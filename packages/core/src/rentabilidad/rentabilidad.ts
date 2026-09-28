@@ -212,7 +212,10 @@ export async function proyeccion(ctx: Contexto, mesesHistoria = 3, mesesFuturo =
 // ── Presupuesto vs real ──────────────────────────────────────────────────────
 
 export async function presupuestoMensual(ctx: Contexto): Promise<Partial<Record<CategoriaGasto, number>>> {
-  return leerAjuste<Partial<Record<CategoriaGasto, number>>>(ctx, "presupuesto_mensual", {});
+  const p = await leerAjuste<Partial<Record<CategoriaGasto, number>>>(ctx, "presupuesto_mensual", {});
+  // Claves anteriores a las categorías del rubro (migración 0012).
+  const LEGADO: Record<string, string> = { reparacion: "reparacion_ruta", otros: "otros_viaje" };
+  return Object.fromEntries(Object.entries(p).map(([k, v]) => [LEGADO[k] ?? k, v]));
 }
 
 export async function guardarPresupuestoMensual(ctx: Contexto, p: Partial<Record<CategoriaGasto, number>>): Promise<void> {

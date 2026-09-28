@@ -75,6 +75,17 @@ describe("lecturas de mensajes", () => {
     expect(g!.nota).toContain("inventada");
   });
 
+  it("a la IA se le ofrecen solo las categorías variables (lo que manda el chofer es del viaje)", async () => {
+    let ofrecidas: string[] = [];
+    const lector = crearLectorReglas();
+    ctx.ia = { ...lector, async leer(e) { ofrecidas = (e.contexto.categorias ?? []).map((c) => c.clave); return lector.leer(e); } };
+    const { id } = await texto("grifo 100");
+    await leerDocumento(ctx, id);
+    expect(ofrecidas).toContain("combustible");
+    expect(ofrecidas).not.toContain("mantenimiento");
+    expect(ofrecidas).not.toContain("soat");
+  });
+
   it("corregir cambia el monto y deja rastro; descartar no guarda nada", async () => {
     const { id } = await texto("peaje 30");
     await leerDocumento(ctx, id);

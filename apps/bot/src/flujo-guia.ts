@@ -1,5 +1,6 @@
 import {
   aplicarLugar,
+  avisoViajeDeGuia,
   aplicarRespuesta,
   borradorDesdeExtraccion,
   borradorDesdeGuia,
@@ -362,6 +363,9 @@ async function emitir(c: Ctx, deps: Dependencias, f: EstadoFlujoGuia): Promise<v
   // el envío tarda y el dueño no ve todavía ninguna confirmación. Al resolverse la guía, el
   // siguiente mensaje limpia la sesión (siguePendiente).
   f.guiaId = guiaId;
+  // El viaje nace de la guía: se dice qué viaje se abrió, de cuál es retorno o cuál se cerró solo.
+  const avisoViaje = await avisoViajeDeGuia(deps.ctx, guiaId).catch(() => null);
+  if (avisoViaje) await c.reply(avisoViaje);
   await c.reply(textos.enviandoSunat);
   const chatId = c.chat!.id;
   const api = c.api;

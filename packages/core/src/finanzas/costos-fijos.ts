@@ -45,8 +45,19 @@ export async function editarCostoFijo(
   usuarioId?: number,
 ): Promise<void> {
   if (cambios.monto !== undefined && (!Number.isInteger(cambios.monto) || cambios.monto <= 0)) throw new ErrorNegocio("El monto debe ser mayor que 0");
-  const [f] = await ctx.db.update(costoFijo).set(cambios).where(eq(costoFijo.id, id)).returning({ id: costoFijo.id });
+  const [f] = await ctx.db.update(costoFijo).set(cambios).where(eq(costoFijo.id, id)).returning();
   if (!f) throw new ErrorNegocio("El costo fijo no existe");
+  // Lo ya generado desde el mes en curso sigue al fijo (los meses anteriores quedan como estaban).
+  const desdeMes = hoy(ctx).slice(0, 7);
+  const generados = and(eq(gasto.costoFijoId, id), gte(gasto.periodo, desdeMes));
+  if (!f.activo) {
+    await ctx.db.delete(gasto).where(generados);
+  } else {
+    for (const g of await ctx.db.select({ id: gasto.id, periodo: gasto.periodo }).from(gasto).where(generados)) {
+      await ctx.db.update(gasto).set({ monto: montoDelMes(f.monto, f.periodicidad, g.periodo!), nota: f.concepto, medioPago: f.medioPago, vehiculoId: f.vehiculoId })
+        .where(eq(gasto.id, g.id));
+    }
+  }
   await registrarAuditoria(ctx.db, { usuarioId, accion: "costo_fijo_editado", entidad: "costo_fijo", entidadId: id, detalle: cambios });
 }
 

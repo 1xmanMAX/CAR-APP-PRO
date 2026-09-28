@@ -1,16 +1,19 @@
 /** @jsxRuntime automatic @jsxImportSource hono/jsx */
 import {
-  ErrorNegocio, guardarEmpresa, guardarTipoParte, guardarUsuario, listarTiposParte, listarUsuarios, NOMBRE_ROL, ZONAS, type RolUsuario, type ZonaModelo,
+  crearCategoria, crearCostoFijo, desactivarCategoria, editarCostoFijo, ErrorNegocio, guardarEmpresa, guardarTipoParte, guardarUsuario, listarCategorias,
+  listarCostosFijos, listarTiposParte, listarUnidades, listarUsuarios, nombreCategoria, NOMBRE_ROL, parsearMonto, ZONAS, type RolUsuario, type ZonaModelo,
 } from "@sunatapp/core";
 import { accion, empresaActual, formulario, pagina, type App, type C, type Deps } from "../base";
 import { enteroONull } from "./flota";
-import { miles, Panel } from "../ui";
+import { miles, Panel, soles2 } from "../ui";
 
 const ROLES = Object.keys(NOMBRE_ROL) as RolUsuario[];
 
 async function vista(c: C, d: Deps) {
   const ctx = d.ctx;
-  const [usuarios, tipos, emp] = await Promise.all([listarUsuarios(ctx), listarTiposParte(ctx, true), empresaActual(ctx)]);
+  const [usuarios, tipos, emp, categorias, fijos, unidades] = await Promise.all([
+    listarUsuarios(ctx), listarTiposParte(ctx, true), empresaActual(ctx), listarCategorias(ctx), listarCostosFijos(ctx, false), listarUnidades(ctx),
+  ]);
   const yo = c.get("usuario");
   const e = d.servicios?.estado();
   return pagina(c, d, { titulo: "Ajustes", seccion: "ajustes" }, (
@@ -80,6 +83,53 @@ async function vista(c: C, d: Deps) {
           ) : null}
         </Panel>
       </div>
+      <Panel titulo="COSTOS FIJOS · SE CARGAN SOLOS CADA MES" der={<span class="lbl">EL ANUAL SE REPARTE 1/12 POR MES · LAS CUOTAS DE PRÉSTAMO ENTRAN SOLAS</span>}>
+        {fijos.length ? (
+          <div class="tabla-wrap"><table class="t">
+            <thead><tr><th>Concepto</th><th>Categoría</th><th>Unidad</th><th class="num">Monto</th><th>Cada</th><th>Desde</th><th></th></tr></thead>
+            <tbody>{fijos.map((f) => (
+              <tr>
+                <td><b>{f.concepto}</b>{!f.activo ? <span class="chip neutro" style="margin-left:4px">INACTIVO</span> : null}</td>
+                <td>{nombreCategoria(f.categoria, categorias)}</td><td>{f.unidad ?? "General"}</td><td class="num">{soles2(f.monto)}</td>
+                <td>{f.periodicidad === "anual" ? "año (1/12 por mes)" : "mes"}</td><td>{f.desde}</td>
+                <td><details class="plegable"><summary><span class="btn chico">EDITAR</span></summary>
+                  <form method="post" action={`/ajustes/costo-fijo/${f.id}`} class="filas" style="margin-top:6px;min-width:200px">
+                    <label class="campo"><span>Monto S/</span><input name="monto" inputmode="decimal" value={(f.monto / 100).toFixed(2)} /></label>
+                    <label class="campo" style="flex-direction:row;gap:6px;align-items:center"><input type="checkbox" name="activo" value="1" checked={f.activo} style="width:auto;min-height:0" /><span style="text-transform:none">Activo</span></label>
+                    <button class="btn primario chico" type="submit">GUARDAR</button>
+                  </form>
+                </details></td>
+              </tr>
+            ))}</tbody>
+          </table></div>
+        ) : <span class="muted" style="font-size:12px">Todavía no hay costos fijos: agrega sueldos, SOAT, seguro, GPS, contador…</span>}
+        <form method="post" action="/ajustes/costo-fijo" class="form-grid" style="margin-top:8px">
+          <label class="campo"><span>Concepto *</span><input name="concepto" required placeholder="Sueldo chofer T-01" /></label>
+          <label class="campo"><span>Categoría</span><select name="categoria">{categorias.filter((k) => k.tipo === "fijo" && k.activa).map((k) => <option value={k.clave}>{k.nombre}</option>)}</select></label>
+          <label class="campo"><span>Monto S/ *</span><input name="monto" inputmode="decimal" required /></label>
+          <label class="campo"><span>Cada</span><select name="periodicidad"><option value="mensual">mes</option><option value="anual">año</option></select></label>
+          <label class="campo"><span>Unidad</span><select name="vehiculoId"><option value="">General</option>{unidades.map((u) => <option value={u.id}>{u.codigo}</option>)}</select></label>
+          <label class="campo"><span>Desde</span><input type="date" name="desde" /></label>
+          <button class="btn primario" type="submit">AGREGAR FIJO</button>
+        </form>
+      </Panel>
+      <Panel titulo="CATEGORÍAS DE GASTO" der={<span class="lbl">VARIABLE = DEL VIAJE · FIJO = DEL MES</span>}>
+        <div class="tabla-wrap"><table class="t">
+          <thead><tr><th>Nombre</th><th>Tipo</th><th></th></tr></thead>
+          <tbody>{categorias.map((k) => (
+            <tr>
+              <td>{k.nombre}{k.sistema ? <span class="chip neutro" style="margin-left:4px">DE FÁBRICA</span> : null}{!k.activa ? <span class="chip neutro" style="margin-left:4px">INACTIVA</span> : null}</td>
+              <td>{k.tipo === "fijo" ? "Fijo" : "Variable"}</td>
+              <td>{k.activa ? <form method="post" action={`/ajustes/categoria/${k.clave}/desactivar`}><button class="btn chico fantasma" type="submit">DESACTIVAR</button></form> : null}</td>
+            </tr>
+          ))}</tbody>
+        </table></div>
+        <form method="post" action="/ajustes/categoria" class="linea" style="gap:6px;margin-top:8px;flex-wrap:wrap">
+          <input name="nombre" required placeholder="Nueva categoría" style="flex:2;min-width:160px" />
+          <select name="tipo" style="flex:1;min-width:140px"><option value="variable">Variable (del viaje)</option><option value="fijo">Fijo (del mes)</option></select>
+          <button class="btn primario chico" type="submit">CREAR</button>
+        </form>
+      </Panel>
       <Panel titulo="CATÁLOGO DE PARTES · VIDA ÚTIL POR DEFECTO" der={<span class="lbl">MANDA EL CONTADOR QUE SE CUMPLA PRIMERO · VACÍO = NO APLICA</span>}>
         <div class="tabla-wrap"><table class="t">
           <thead><tr><th>Parte</th><th>Zona del modelo 3D</th><th class="num">Km</th><th class="num">Viajes</th><th class="num">Días</th><th></th></tr></thead>
@@ -156,4 +206,36 @@ export function rutasAjustes(app: App, d: Deps): void {
   };
   app.post("/ajustes/parte", (c) => guardarParte(c));
   app.post("/ajustes/parte/:id", (c) => guardarParte(c, Number(c.req.param("id"))));
+  app.post("/ajustes/categoria", async (c) => {
+    const f = await formulario(c);
+    return accion(c, "/ajustes", async () => {
+      await crearCategoria(d.ctx, { nombre: f.nombre ?? "", tipo: f.tipo === "fijo" ? "fijo" : "variable", usuarioId: c.get("usuario").id });
+      return "Categoría creada";
+    });
+  });
+  app.post("/ajustes/categoria/:clave/desactivar", async (c) => accion(c, "/ajustes", async () => {
+    await desactivarCategoria(d.ctx, c.req.param("clave"), c.get("usuario").id);
+    return "Categoría desactivada";
+  }));
+  app.post("/ajustes/costo-fijo", async (c) => {
+    const f = await formulario(c);
+    return accion(c, "/ajustes", async () => {
+      const monto = parsearMonto(f.monto ?? "");
+      if (monto === null) throw new ErrorNegocio("Monto no válido");
+      await crearCostoFijo(d.ctx, {
+        concepto: f.concepto ?? "", categoria: f.categoria ?? "", monto, periodicidad: f.periodicidad === "anual" ? "anual" : "mensual",
+        vehiculoId: f.vehiculoId ? Number(f.vehiculoId) : null, desde: f.desde || undefined, usuarioId: c.get("usuario").id,
+      });
+      return "Costo fijo agregado: se carga solo cada mes";
+    });
+  });
+  app.post("/ajustes/costo-fijo/:id", async (c) => {
+    const f = await formulario(c);
+    return accion(c, "/ajustes", async () => {
+      const monto = f.monto ? parsearMonto(f.monto) : undefined;
+      if (monto === null) throw new ErrorNegocio("Monto no válido");
+      await editarCostoFijo(d.ctx, Number(c.req.param("id")), { ...(monto !== undefined ? { monto } : {}), activo: f.activo === "1" }, c.get("usuario").id);
+      return "Costo fijo guardado";
+    });
+  });
 }

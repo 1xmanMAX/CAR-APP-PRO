@@ -101,6 +101,17 @@ describe("web", () => {
       expect(x.status).toBe(200);
     });
 
+    it("ajustes: crear categoría y costo fijo; por revisar muestra viajes sin guía", async () => {
+      const cookie = await entrar();
+      expect((await post(cookie, "/ajustes/categoria", { nombre: "Guardianía", tipo: "variable" })).status).toBe(303);
+      expect((await post(cookie, "/ajustes/costo-fijo", { concepto: "Sueldo T-01", categoria: "sueldo_chofer", monto: "2500", periodicidad: "mensual", vehiculoId: "1", desde: "2026-09-01" })).status).toBe(303);
+      const html = await (await app.request("/ajustes", { headers: { cookie } })).text();
+      expect(html).toContain("Guardianía");
+      expect(html).toContain("Sueldo T-01");
+      await registrarViajeFlota(ctx, { vehiculoId: 1, origenLugar: "Juliaca", destinoLugar: "Puno", estado: "en_curso", origen: "web" });
+      expect(await (await app.request("/revisar", { headers: { cookie } })).text()).toContain("SIN GUÍA");
+    });
+
     it("todas las pantallas cargan", async () => {
       const cookie = await entrar();
       for (const ruta of ["/", "/trailer", "/flota", "/inventario", "/reparaciones", "/viajes", "/finanzas", "/rentabilidad", "/telegram", "/ajustes", "/api/feed"]) {

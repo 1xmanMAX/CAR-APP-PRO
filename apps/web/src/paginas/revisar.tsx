@@ -1,7 +1,7 @@
 /** @jsxRuntime automatic @jsxImportSource hono/jsx */
 import {
   archivoDeDocumento, asignarViajeGasto, confirmarLectura, costoIaDelMes, descartarLectura, ErrorNegocio, fijarLectura,
-  gastosSinViaje, hoy, listarCategorias, listarPorRevisar, listarUnidades, listarViajesFlota, MEDIOS_ENTREGA, nombreCategoria, parsearMonto, puedeEditar, sumarDias,
+  gastosSinViaje, hoy, listarCategorias, listarPorRevisar, viajesPorRevisar, listarUnidades, listarViajesFlota, MEDIOS_ENTREGA, nombreCategoria, parsearMonto, puedeEditar, sumarDias,
   type Lectura,
 } from "@sunatapp/core";
 import { accion, formulario, pagina, servirDeAlmacen, type App, type C, type Deps } from "../base";
@@ -21,18 +21,26 @@ async function vista(c: C, d: Deps) {
   const ctx = d.ctx;
   const h = hoy(ctx);
   const categorias = await listarCategorias(ctx, { soloActivas: true });
-  const [items, sinViaje, unidades, viajes, ia] = await Promise.all([
+  const [items, sinViaje, unidades, viajes, ia, viajesRev] = await Promise.all([
     listarPorRevisar(ctx), gastosSinViaje(ctx), listarUnidades(ctx),
-    listarViajesFlota(ctx, { desde: sumarDias(h, -90), hasta: h }), costoIaDelMes(ctx, h.slice(0, 7)),
+    listarViajesFlota(ctx, { desde: sumarDias(h, -90), hasta: h }), costoIaDelMes(ctx, h.slice(0, 7)), viajesPorRevisar(ctx),
   ]);
   const edita = puedeEditar(c.get("usuario").rol, "viajes");
   return pagina(c, d, { titulo: "Por revisar", seccion: "viajes" }, (
     <>
       <section class="panel" style="flex-direction:row;align-items:center;flex-wrap:wrap;gap:10px">
         <a class="btn chico" href="/viajes">← VIAJES</a>
-        <b class="mono-t" style="font-size:16px">🔎 POR REVISAR · {items.length + sinViaje.length}</b>
+        <b class="mono-t" style="font-size:16px">🔎 POR REVISAR · {items.length + sinViaje.length + viajesRev.length}</b>
         <span class="muted" style="font-size:12px;margin-left:auto">IA este mes: US$ {ia.usd.toFixed(3)} · {ia.lecturas} lecturas</span>
       </section>
+      <Panel titulo={`VIAJES Y GUÍAS · ${viajesRev.length}`}>
+        {viajesRev.length === 0 ? <Vacio>Todos los viajes tienen su guía y sus datos completos.</Vacio> : viajesRev.map((x) => (
+          <div class="linea" style="justify-content:space-between;gap:8px;border-bottom:1px solid var(--divider);padding:6px 0;flex-wrap:wrap">
+            <span style="font-size:12px"><span class={`chip ${x.motivo === "guia_rechazada" ? "cambiar" : "proximo"}`}>{{ sin_guia: "SIN GUÍA", guia_rechazada: "GUÍA RECHAZADA", cierre_automatico: "CERRADO SOLO", guia_sin_viaje: "GUÍA SIN VIAJE" }[x.motivo]}</span> <b>{x.codigo}</b> · {x.detalle}</span>
+            {x.viajeId ? <a class="btn chico" href={`/viajes/${x.viajeId}`}>ABRIR</a> : null}
+          </div>
+        ))}
+      </Panel>
       <div class="grid g-2">
         <Panel titulo={`MENSAJES DE TELEGRAM · ${items.length}`}>
           {items.length === 0 ? <Vacio>Nada pendiente: todo lo que mandaron por Telegram está confirmado o descartado.</Vacio> : items.map((it) => {

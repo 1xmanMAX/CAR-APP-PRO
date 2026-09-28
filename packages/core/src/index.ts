@@ -47,4 +47,5 @@ export * from "./finanzas/captura";
 export * from "./finanzas/costos-fijos";
 export * from "./viajes/desde-guia";
 export * from "./viajes/revisar-viajes";
+export * from "./rentabilidad/por-viaje-mes";
 export * from "./sincro/index";

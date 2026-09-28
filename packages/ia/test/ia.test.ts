@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   cargarConfigIa, costoMicroUsd, crearLectorReglas, crearProveedorDeepSeek, crearTranscriptor, EJEMPLO_JSON, ErrorConfigIa, esquemaLectura,
-  IaCredencialesError, IaNoDisponibleError, leerPorReglas, montoDe, TranscripcionNoDisponibleError, type ContextoLectura,
+  IaCredencialesError, IaNoDisponibleError, instruccionesSistema, leerPorReglas, montoDe, TranscripcionNoDisponibleError, type ContextoLectura,
 } from "../src/index";
 
 const ctx: ContextoLectura = { hoy: "2026-09-18", correcciones: [] };
@@ -14,7 +14,8 @@ describe("esquema de la lectura", () => {
   it("acepta el ejemplo del prompt y rechaza lo mal formado", () => {
     expect(esquemaLectura.safeParse(EJEMPLO_JSON).success).toBe(true);
     expect(esquemaLectura.safeParse({ ...EJEMPLO_JSON, monto: 0 }).success).toBe(false);
-    expect(esquemaLectura.safeParse({ ...EJEMPLO_JSON, categoria: "golosinas" }).success).toBe(false);
+    // La categoría es texto libre (hay categorías propias); se valida contra la base al confirmar.
+    expect(esquemaLectura.safeParse({ ...EJEMPLO_JSON, categoria: "" }).success).toBe(false);
     const { dudas: _, ...sinDudas } = EJEMPLO_JSON;
     expect(esquemaLectura.safeParse(sinDudas).success).toBe(false);
   });
@@ -24,7 +25,7 @@ describe("lector por reglas", () => {
   const leer = (texto: string) => leerPorReglas({ texto, contexto: ctx });
   it.each([
     ["grifo 350", "combustible", 350], ["peaje 28.50", "peaje", 28.5], ["almuerzo S/ 15", "viaticos", 15], ["hotel 60", "hospedaje", 60],
-    ["estiba 120", "estiba", 120], ["balanza 25", "balanza", 25], ["cochera 20", "cochera", 20], ["parchado de llanta 35", "reparacion", 35],
+    ["estiba 120", "estiba", 120], ["balanza 25", "balanza", 25], ["cochera 20", "cochera", 20], ["parchado de llanta 35", "llantas_ruta", 35],
     ["petróleo 1,250.00", "combustible", 1250],
   ])("«%s» → %s %d", (texto, categoria, monto) => {
     expect(leer(texto)).toMatchObject({ tipo: "gasto", categoria, monto });
@@ -126,5 +127,30 @@ describe("notas de voz", () => {
     expect(await t.transcribir(Buffer.from("ogg"), "audio/ogg")).toBe("grifo 350");
     expect(readdirSync(tmpdir()).filter((f) => f.startsWith("voz-")).length).toBe(antes);
     expect(existsSync(dir)).toBe(true);
+  });
+});
+
+describe("categorías del rubro, forma de pago y km", () => {
+  const l = (t: string) => leerPorReglas({ texto: t, contexto: { hoy: "2026-09-27", correcciones: [] } });
+  it("reglas: categorías nuevas del rubro", () => {
+    expect(l("vulcanizado 25")).toMatchObject({ tipo: "gasto", categoria: "llantas_ruta" });
+    expect(l("mecanico 180")).toMatchObject({ tipo: "gasto", categoria: "reparacion_ruta" });
+    expect(l("papeleta 400")).toMatchObject({ tipo: "gasto", categoria: "multas" });
+    expect(l("grifo 350")).toMatchObject({ categoria: "combustible", medioPago: null, kmOdometro: null });
+  });
+
+  it("el esquema acepta una categoría propia, la forma de pago y el km", () => {
+    const r = esquemaLectura.parse({
+      tipo: "gasto", categoria: "guardiania", monto: 50, fecha: null, proveedorRuc: null, proveedorNombre: null, comprobante: null, nota: null, dudas: [],
+      medioPago: "tarjeta", kmOdometro: 402380,
+    });
+    expect(r).toMatchObject({ categoria: "guardiania", medioPago: "tarjeta", kmOdometro: 402380 });
+    // Una lectura guardada antes de este cambio (sin los campos nuevos) sigue siendo válida.
+    const vieja = esquemaLectura.parse({ tipo: "gasto", categoria: "peaje", monto: 5, fecha: null, proveedorRuc: null, proveedorNombre: null, comprobante: null, nota: null, dudas: [] });
+    expect(vieja).toMatchObject({ medioPago: null, kmOdometro: null });
+  });
+
+  it("el prompt lista las categorías que se le pasan", () => {
+    expect(instruccionesSistema({ hoy: "2026-09-27", correcciones: [], categorias: [{ clave: "guardiania", nombre: "Guardianía" }] })).toContain("guardiania");
   });
 });

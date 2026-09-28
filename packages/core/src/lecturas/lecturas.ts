@@ -14,6 +14,8 @@ import { finalizarViajeFlota, registrarViajeFlota, viajeEnCursoDeUnidad } from "
 import { registrarAuditoria } from "../infra/auditoria";
 import type { Contexto } from "../infra/contexto";
 import { viajesPorRevisar } from "../viajes/revisar-viajes";
+import { categoriaValida, listarCategorias } from "../finanzas/categorias";
+import { capturarContexto, describirContexto } from "../finanzas/captura";
 import { registrarEntrega } from "../viajes/entregas";
 
 /**
@@ -47,11 +49,11 @@ export interface EstadoDocumento {
 }
 
 export type ResultadoLeer =
-  | { ok: true; documentoId: number; lectura: Lectura }
+  | { ok: true; documentoId: number; lectura: Lectura; /** Lo que el gasto tomará solo: «T-02 · VJ-0129 (guía …, ida) · efectivo del chofer · 402,380 km». */ contexto?: string | null }
   | { ok: false; documentoId: number; error: "pendiente" | "credenciales" | "voz" | "sin_ia" | "ya_confirmado"; mensaje: string };
 
 export type ResultadoConfirmacion =
-  | { tipo: "gasto"; gastoId: number; viajeCodigo: string | null; monto: number }
+  | { tipo: "gasto"; gastoId: number; viajeCodigo: string | null; monto: number; avisoKm: string | null }
   | { tipo: "entrega"; entregaId: number; viajeCodigo: string; monto: number }
   | { tipo: "inicio_viaje"; viajeId: number; viajeCodigo: string; ruta: string; adelanto: number }
   | { tipo: "fin_viaje"; viajeId: number; viajeCodigo: string }
@@ -134,13 +136,17 @@ export async function leerDocumento(ctx: Contexto, documentoId: number): Promise
     // Un lector que no ve fotos igual sabe que llegó una (y responde «otro» para preguntar los datos).
     const r = await ia.leer({
       texto, imagenes: imagenes.length ? imagenes : d.tipo === "foto" ? [{ contenido: Buffer.alloc(0), mime: d.mime }] : undefined,
-      contexto: { hoy: hoy(ctx), correcciones, ...(anterior.success ? { lecturaAnterior: anterior.data } : {}) },
+      contexto: {
+        hoy: hoy(ctx), correcciones, ...(anterior.success ? { lecturaAnterior: anterior.data } : {}),
+        categorias: (await listarCategorias(ctx, { soloActivas: true })).map(({ clave, nombre }) => ({ clave, nombre })),
+      },
     });
     await ctx.db.insert(lecturaIa).values({ documentoId, ...r.uso, respuesta: r.lectura });
     await ctx.db.update(documentoRecibido).set({
       estadoLectura: "por_confirmar", datosExtraidos: r.lectura, clasificacion: r.lectura.tipo, intentosLectura: d.intentosLectura + 1, proximoIntentoEn: null,
     }).where(eq(documentoRecibido.id, documentoId));
-    return { ok: true, documentoId, lectura: r.lectura };
+    const contexto = describirContexto(await capturarContexto(ctx, { usuarioId: d.usuarioId ?? undefined }));
+    return { ok: true, documentoId, lectura: r.lectura, contexto };
   } catch (e) {
     if (e instanceof IaCredencialesError) {
       await marcarError(ctx, documentoId, ia.nombre, e.message);
@@ -200,13 +206,16 @@ export async function confirmarLectura(ctx: Contexto, documentoId: number, o: { 
     const l = esquemaLectura.parse(d.datosExtraidos);
     const hoyStr = hoy(ctx);
     if (l.tipo === "gasto") {
-      const fecha = l.fecha && l.fecha <= hoyStr ? l.fecha : hoyStr;
+      // Se registra en el momento: la fecha es hoy (la de la boleta queda en la lectura).
+      const cat = await categoriaValida(ctx.db, l.categoria).catch(() => null);
       const r = await registrarGasto(ctx, {
-        categoria: l.categoria, monto: aCentimos(l.monto), fecha, vehiculoId: o.vehiculoId ?? null, nota: l.nota, proveedorNombre: l.proveedorNombre,
+        categoria: cat ? l.categoria : "otros_viaje", monto: aCentimos(l.monto), fecha: hoyStr, vehiculoId: o.vehiculoId ?? null,
+        nota: [cat ? null : `categoría leída: ${l.categoria}`, l.nota].filter(Boolean).join(" · ") || null, proveedorNombre: l.proveedorNombre,
         proveedorRuc: l.proveedorRuc && validarRuc(l.proveedorRuc) ? l.proveedorRuc : null, comprobante: l.comprobante,
+        medioPago: l.medioPago ?? undefined, kmVehiculo: l.kmOdometro,
         rutaFoto: d.tipo === "foto" ? d.rutaArchivo : null, documentoId, origen: "telegram", usuarioId: o.usuarioId,
       });
-      return { tipo: "gasto", gastoId: r.id, viajeCodigo: r.viajeCodigo, monto: aCentimos(l.monto) };
+      return { tipo: "gasto", gastoId: r.id, viajeCodigo: r.viajeCodigo, monto: aCentimos(l.monto), avisoKm: r.avisoKm };
     }
     if (l.tipo === "entrega") {
       if (!o.vehiculoId) throw new ErrorNegocio("¿De qué unidad es el viaje?");

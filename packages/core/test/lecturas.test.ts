@@ -4,7 +4,7 @@ import { documentoRecibido, entrega, eq, gasto } from "@sunatapp/db";
 import {
   confirmarLectura, corregirLectura, descartarLectura, fijarLectura, leerDocumento, obtenerDocumento, procesarLecturasPendientes,
   recibirMensaje, registrarViajeFlota, listarPorRevisar, gastosSinViaje, asignarViajeGasto, contarPorRevisar, costoIaDelMes, crearRuta, liquidacionDeUnidad,
-  crearInvitacion, usarInvitacion, type Contexto,
+  crearInvitacion, obtenerUnidad, usarInvitacion, type Contexto,
 } from "../src/index";
 import { crearContextoPrueba } from "./helpers";
 
@@ -45,6 +45,36 @@ describe("lecturas de mensajes", () => {
     expect(gastos.map((g) => [g.monto, g.categoria, g.nota])).toEqual([[35050, "combustible", "grifo Primax"]]);
   });
 
+  it("combustible con km del voucher: se guarda como km real, con la forma de pago leída y la fecha de hoy", async () => {
+    const u = await obtenerUnidad(ctx, 1);
+    const { id } = await texto("grifo 350");
+    await leerDocumento(ctx, id);
+    await fijarLectura(ctx, id, {
+      tipo: "gasto", categoria: "combustible", monto: 350, fecha: "2026-01-01", proveedorRuc: null, proveedorNombre: null, comprobante: null, nota: null, dudas: [],
+      medioPago: "tarjeta", kmOdometro: u.odometroKm + 100,
+    });
+    const r = await confirmarLectura(ctx, id, { vehiculoId: 1 });
+    expect(r).toMatchObject({ tipo: "gasto", avisoKm: null });
+    const [g] = await ctx.db.select().from(gasto).where(eq(gasto.documentoId, id));
+    expect(g).toMatchObject({ fecha: "2026-09-18", medioPago: "tarjeta", kmVehiculo: u.odometroKm + 100, kmReal: true });
+  });
+
+  it("la lectura trae el contexto (unidad, viaje, pago y km) y una categoría desconocida va a «otros del viaje»", async () => {
+    await registrarViajeFlota(ctx, { vehiculoId: 1, origenLugar: "Juliaca", destinoLugar: "Arequipa", estado: "en_curso", origen: "web" });
+    const { id } = await texto("peaje 28");
+    const leida = await leerDocumento(ctx, id);
+    // Sin usuario (texto suelto) no se sabe la unidad: el contexto dice «sin viaje».
+    expect(leida).toMatchObject({ ok: true, contexto: expect.stringContaining("sin viaje") });
+    await fijarLectura(ctx, id, {
+      tipo: "gasto", categoria: "inventada", monto: 28, fecha: null, proveedorRuc: null, proveedorNombre: null, comprobante: null, nota: null, dudas: [],
+      medioPago: null, kmOdometro: null,
+    });
+    await confirmarLectura(ctx, id, { vehiculoId: 1 });
+    const [g] = await ctx.db.select().from(gasto).where(eq(gasto.documentoId, id));
+    expect(g).toMatchObject({ categoria: "otros_viaje", medioPago: "efectivo_chofer" });
+    expect(g!.nota).toContain("inventada");
+  });
+
   it("corregir cambia el monto y deja rastro; descartar no guarda nada", async () => {
     const { id } = await texto("peaje 30");
     await leerDocumento(ctx, id);
@@ -60,7 +90,7 @@ describe("lecturas de mensajes", () => {
     const { id } = await recibirMensaje(ctx, { tipo: "foto", contenido: Buffer.from("boleta"), mime: "image/jpeg", telegramChatId: 111, telegramMessageId: 50 });
     expect(await leerDocumento(ctx, id)).toMatchObject({ ok: true, lectura: { tipo: "otro" } });
     await expect(confirmarLectura(ctx, id, { vehiculoId: 1 })).rejects.toThrow(/No hay un gasto/);
-    await fijarLectura(ctx, id, { tipo: "gasto", categoria: "hospedaje", monto: 60, fecha: null, proveedorRuc: null, proveedorNombre: null, comprobante: null, nota: null, dudas: [] });
+    await fijarLectura(ctx, id, { tipo: "gasto", categoria: "hospedaje", monto: 60, fecha: null, proveedorRuc: null, proveedorNombre: null, comprobante: null, nota: null, dudas: [], medioPago: null, kmOdometro: null });
     const c = await confirmarLectura(ctx, id, { vehiculoId: 1 });
     expect(c).toMatchObject({ tipo: "gasto", monto: 6000 });
     const [g] = await ctx.db.select().from(gasto).where(eq(gasto.documentoId, id));

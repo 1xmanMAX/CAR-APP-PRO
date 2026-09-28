@@ -4,18 +4,25 @@ import { z } from "zod";
  * **Lo que la IA entiende de un mensaje del chofer** (foto de boleta, texto o nota de voz). Nada se
  * guarda con esto solo: el bot muestra el resumen y la persona confirma.
  */
-export const CATEGORIAS = ["combustible", "peaje", "viaticos", "hospedaje", "estiba", "balanza", "cochera", "reparacion", "otros"] as const;
-export type Categoria = (typeof CATEGORIAS)[number];
+/** Claves de fábrica: ejemplo para el prompt y el lector por reglas; la lista real (con las propias) viene de la base. */
+export const CATEGORIAS_BASE = [
+  "combustible", "peaje", "viaticos", "hospedaje", "estiba", "balanza", "cochera", "lavado", "llantas_ruta", "reparacion_ruta",
+  "lubricantes", "resguardo", "multas", "otros_viaje",
+] as const;
+export type Categoria = string;
 export const MEDIOS = ["efectivo", "yape", "transferencia", "otro"] as const;
 export type Medio = (typeof MEDIOS)[number];
+export const MEDIOS_PAGO = ["efectivo_chofer", "efectivo", "yape_plin", "transferencia", "tarjeta", "credito"] as const;
 
 const texto = z.string().trim().min(1).nullable();
 
 export const esquemaLectura = z.discriminatedUnion("tipo", [
   z.object({
-    tipo: z.literal("gasto"), categoria: z.enum(CATEGORIAS), monto: z.number().positive().max(50_000),
+    tipo: z.literal("gasto"), categoria: z.string().trim().min(1), monto: z.number().positive().max(50_000),
     fecha: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable(), proveedorRuc: texto, proveedorNombre: texto, comprobante: texto,
     nota: texto, dudas: z.array(z.string()),
+    medioPago: z.enum(MEDIOS_PAGO).nullable().default(null),
+    kmOdometro: z.number().int().positive().max(5_000_000).nullable().default(null),
   }),
   z.object({ tipo: z.literal("entrega"), monto: z.number().positive().max(50_000), medio: z.enum(MEDIOS), fecha: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable(), dudas: z.array(z.string()) }),
   z.object({ tipo: z.literal("inicio_viaje"), origen: texto, destino: texto, adelanto: z.number().positive().max(50_000).nullable(), dudas: z.array(z.string()) }),
@@ -33,6 +40,8 @@ export interface ContextoLectura {
   /** Lo que la persona escribió al corregir, en orden. */
   correcciones: string[];
   lecturaAnterior?: Lectura;
+  /** Categorías activas (clave y nombre); sin ellas se usan las de fábrica. */
+  categorias?: Array<{ clave: string; nombre: string }>;
 }
 
 export interface EntradaLectura { texto?: string; imagenes?: Imagen[]; contexto: ContextoLectura }

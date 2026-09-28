@@ -12,7 +12,12 @@ const REGLAS: Array<[RegExp, Categoria]> = [
   [/\b(estiba|estibadores?|descarga|carga)\b/, "estiba"],
   [/\b(balanza|pesaje)\b/, "balanza"],
   [/\b(cochera|parqueo|estacionamiento)\b/, "cochera"],
-  [/\b(llantas?|mecanico|reparacion|repuestos?|taller|parchado)\b/, "reparacion"],
+  [/\b(lavado|lavada)\b/, "lavado"],
+  [/\b(llantas?|parche|parchado|vulcanizado|vulcanizadora)\b/, "llantas_ruta"],
+  [/\b(aceite|engrase|grasa|lubricantes?)\b/, "lubricantes"],
+  [/\b(custodia|resguardo)\b/, "resguardo"],
+  [/\b(multa|papeleta)\b/, "multas"],
+  [/\b(mecanico|reparacion|repuestos?|taller|auxilio)\b/, "reparacion_ruta"],
 ];
 
 const normal = (t: string) => t.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
@@ -58,7 +63,7 @@ export function leerPorReglas(e: EntradaLectura): Lectura {
   // La nota es lo que queda sin el monto; si solo quedaba la palabra de la categoría, no hay nota.
   let nota = (e.texto ?? "").replace(/(?:s\/\.?\s*)?\d[\d.,]*/i, "").replace(/\s+/g, " ").trim();
   if (!normal(nota).replace(regla[0], "").trim()) nota = "";
-  return { tipo: "gasto", categoria: cat, monto, fecha: null, proveedorRuc: null, proveedorNombre: null, comprobante: null, nota: nota || null, dudas: [] };
+  return { tipo: "gasto", categoria: cat, monto, fecha: null, proveedorRuc: null, proveedorNombre: null, comprobante: null, nota: nota || null, dudas: [], medioPago: null, kmOdometro: null };
 }
 
 export function crearLectorReglas(): ProveedorIA {

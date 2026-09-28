@@ -122,9 +122,14 @@ Hoy las reparaciones de la página Reparaciones generan un gasto `reparacion`. D
 | `km_vehiculo` | entero, nulo | km del vehículo en ese momento |
 | `km_real` | bool, por defecto false | true si el km se leyó del voucher o lo dio el chofer; false si es el último conocido |
 | `costo_fijo_id` | FK `costo_fijo`, nula | fijo recurrente que generó este gasto |
+| `cuota_id` | FK `cuota_prestamo`, nula | cuota de préstamo que generó este gasto |
 | `periodo` | texto `AAAA-MM`, nulo | mes al que corresponde un gasto fijo |
 
-Restricción: `(costo_fijo_id, periodo)` es único, para que el mismo fijo nunca se genere dos veces en el mismo mes.
+Restricciones: `(costo_fijo_id, periodo)` y `cuota_id` son únicos, para que el mismo fijo o la misma cuota nunca se generen dos veces.
+
+Dos dispositivos pueden generar el mismo fijo del mismo mes sin verse. Por eso el `sinc_uid` de esos gastos es **natural**: `md5('gf:' || uid del fijo || ':' || periodo)` o `md5('gc:' || uid de la cuota)`. Así la sincronización los reconoce como la misma fila en vez de chocar con la restricción única.
+
+`viaje` suma la columna `cierre_automatico` (bool, por defecto false) para el caso del §5 en que un viaje se cierra solo.
 
 La **hora** es `creado_en`, que ya existe. `fecha` sigue siendo el día contable.
 
@@ -166,7 +171,7 @@ Es idempotente gracias a la restricción única. Se ejecuta:
 
 ## 5. El viaje nace de la guía
 
-`alRegistrarGuia(ctx, guiaId)` (en `viajes/desde-guia.ts`) se llama al final de `registrarGuiaBorrador`, dentro de la misma transacción. No espera la respuesta de SUNAT.
+`alRegistrarGuia(ctx, guiaId)` (en `viajes/desde-guia.ts`) se llama justo después de que `registrarGuiaBorrador` guarda la guía, cuando su transacción ya terminó (porque `registrarViajeFlota` abre la suya). No espera la respuesta de SUNAT. Si falla, la guía queda guardada sin viaje y aparece en **Por revisar** como «guía sin viaje»: la guía nunca se pierde.
 
 | Situación de la unidad de la guía | Acción |
 |---|---|
@@ -247,10 +252,11 @@ La IA extrae dos datos nuevos: `medioPago` y `kmOdometro`. La lista de categorí
 
 ## 8. Por revisar
 
-Se agregan tres motivos:
+Se agregan cuatro motivos:
 - viaje **sin guía**;
 - viaje con **guía rechazada o anulada**;
-- viaje **cerrado automáticamente** al registrarse una guía nueva: hay que ajustar el km y el flete.
+- viaje **cerrado automáticamente** al registrarse una guía nueva: hay que ajustar el km y el flete;
+- **guía sin viaje**, si falló la creación automática.
 
 ## 9. Errores y bordes
 

@@ -1,7 +1,7 @@
 /** @jsxRuntime automatic @jsxImportSource hono/jsx */
 import {
   actualizarPresupuestoViaje, borrarEntrega, borrarGasto, desenlazarGuia, editarGasto, enlazarGuia, ErrorNegocio, finalizarViajeFlota,
-  listarGuiasSinViaje, reabrirViaje, hoy, liquidacionViaje, listarCategorias, MEDIOS_ENTREGA, nombreCategoria, parsearMonto, puedeEditar, registrarEntrega,
+  listarGuiasSinViaje, reabrirViaje, hoy, liquidacionViaje, rentabilidadDeViaje, listarCategorias, MEDIOS_ENTREGA, nombreCategoria, parsearMonto, puedeEditar, registrarEntrega,
   type LiquidacionViaje, type Semaforo,
 } from "@sunatapp/core";
 import { accion, formulario, pagina, type App, type C, type Deps } from "../base";
@@ -26,6 +26,7 @@ async function vista(c: C, d: Deps) {
   const l = await liquidacionViaje(d.ctx, Number(c.req.param("id")));
   const [categorias, variables] = await Promise.all([listarCategorias(d.ctx, { soloActivas: true }), categoriasDeViaje(d)]);
   const sinViaje = await listarGuiasSinViaje(d.ctx);
+  const rent = await rentabilidadDeViaje(d.ctx, l.viaje.id);
   const edita = puedeEditar(c.get("usuario").rol, "viajes");
   const origen = l.presupuestoOrigen.tipo === "viaje" ? "presupuesto del viaje"
     : l.presupuestoOrigen.tipo === "promedio" ? `promedio de los últimos ${l.presupuestoOrigen.viajes} viajes de esta ruta` : "sin presupuesto ni viajes anteriores de esta ruta";
@@ -41,7 +42,15 @@ async function vista(c: C, d: Deps) {
         <Kpi oscuro etiqueta="ENTREGADO AL CHOFER" valor={soles2(l.entregado)} />
         <Kpi etiqueta="GASTADO" valor={soles2(l.gastado)} sub={l.presupuestoTotal ? `de ${soles2(l.presupuestoTotal)} previstos` : undefined} negativo={l.semaforoTotal === "excedido"} />
         <Kpi etiqueta="SALDO" valor={soles2(Math.abs(l.saldo))} sub={textoSaldo(l)} negativo={l.saldo < 0} />
-        <Kpi etiqueta="GANANCIA DEL VIAJE" valor={l.ganancia === null ? "—" : soles2(l.ganancia)} sub={l.margenPct === null ? "falta el flete" : `margen ${l.margenPct}% · flete ${soles2(l.flete)}`} negativo={(l.ganancia ?? 0) < 0} />
+        {rent ? (
+          <>
+            <Kpi etiqueta="CONTRIBUCIÓN" valor={soles2(rent.contribucion)} sub={`flete ${soles2(rent.flete)} − variables ${soles2(rent.variables)}`} negativo={rent.contribucion < 0} />
+            <Kpi etiqueta="FIJO ASIGNADO" valor={soles2(rent.fijoAsignado)} sub={rent.provisional ? "provisional: cambia hasta fin de mes" : "del mes de cierre"} />
+            <Kpi etiqueta="GANANCIA" valor={soles2(rent.ganancia)} sub={rent.margenPct === null ? "falta el flete" : `margen ${rent.margenPct}%`} negativo={rent.ganancia < 0} />
+          </>
+        ) : (
+          <Kpi etiqueta="GANANCIA DEL VIAJE" valor={l.ganancia === null ? "—" : soles2(l.ganancia)} sub={l.margenPct === null ? "falta el flete" : `margen ${l.margenPct}% · flete ${soles2(l.flete)}`} negativo={(l.ganancia ?? 0) < 0} />
+        )}
       </section>
       <div class="grid g-lado">
         <div class="filas" style="gap:10px;min-width:0">

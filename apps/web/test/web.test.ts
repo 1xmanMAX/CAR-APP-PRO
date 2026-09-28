@@ -85,6 +85,22 @@ describe("web", () => {
       }
     });
 
+    it("rentabilidad: conmutador por viaje y por mes, y el Excel", async () => {
+      const cookie = await entrar();
+      const v = await registrarViajeFlota(ctx, { vehiculoId: 1, origenLugar: "Juliaca", destinoLugar: "Arequipa", estado: "cerrado", km: 300, flete: 500000, origen: "web" });
+      await registrarGasto(ctx, { viajeId: v.id, categoria: "combustible", monto: 150000, origen: "web" });
+      let html = await (await app.request("/rentabilidad?vista=viaje", { headers: { cookie } })).text();
+      expect(html).toContain("POR VIAJE");
+      expect(html).toContain(v.codigo);
+      expect(html).toContain("PROVISIONAL");
+      html = await (await app.request("/rentabilidad?vista=mes", { headers: { cookie } })).text();
+      expect(html).toContain("GANANCIA NETA");
+      html = await (await app.request(`/viajes/${v.id}`, { headers: { cookie } })).text();
+      expect(html).toContain("FIJO ASIGNADO");
+      const x = await app.request("/estadisticas.xlsx?desde=2026-09-01&hasta=2026-09-30", { headers: { cookie } });
+      expect(x.status).toBe(200);
+    });
+
     it("todas las pantallas cargan", async () => {
       const cookie = await entrar();
       for (const ruta of ["/", "/trailer", "/flota", "/inventario", "/reparaciones", "/viajes", "/finanzas", "/rentabilidad", "/telegram", "/ajustes", "/api/feed"]) {

@@ -56,7 +56,7 @@ async function vista(c: C, d: Deps) {
       <a class="aviso info" href="/estadisticas" style="display:block;text-decoration:none">📊 <b>Estadísticas</b>: mes a mes, por ruta, combustible por grifo y descarga en Excel →</a>
       <section class="kpis">
         <Kpi etiqueta="INGRESOS DEL MES" valor={soles(fin.ingresos)} />
-        <Kpi etiqueta="GASTOS DEL MES" valor={soles(fin.gastos)} />
+        <Kpi etiqueta="GASTOS DEL MES" valor={soles(fin.gastos)} sub={`variables ${soles(fin.gastosVariables)} · fijos ${soles(fin.gastosFijos)}`} />
         <Kpi oscuro etiqueta="GANANCIA NETA" valor={soles(fin.ganancia)} sub={fin.margenPct !== null ? `margen ${fin.margenPct}%` : undefined} />
         <Kpi etiqueta={`REINVERTIDO ${anio}`} valor={soles(reinv)} />
         <Kpi etiqueta="DEUDA PRÉSTAMOS" valor={soles(deuda)} />

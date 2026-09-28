@@ -1,8 +1,8 @@
 /** @jsxRuntime automatic @jsxImportSource hono/jsx */
 import {
   ErrorNegocio, guardarCotizacion, guardarParametrosCotizador, guardarPresupuestoMensual, hoy, listarCotizaciones,
-  listarCategorias, listarUnidades, marcarCotizacionEnviada, parametrosCotizador, parsearMonto, pdfDeCotizacion, presupuestoMensual,
-  presupuestoVsReal, proyeccion, puedeEditar, rangoMes, rentabilidadPorUnidad,
+  listarCategorias, listarUnidades, marcarCotizacionEnviada, mesAnterior, parametrosCotizador, parsearMonto, pdfDeCotizacion, presupuestoMensual,
+  presupuestoVsReal, proyeccion, puedeEditar, rangoMes, rentabilidadPorMes, rentabilidadPorUnidad, rentabilidadPorViaje,
 } from "@sunatapp/core";
 import { accion, formulario, pagina, type App, type C, type Deps } from "../base";
 import { Barra, Datos, fechaCorta, nombreMes, Panel, soles, soles2, Vacio } from "../ui";
@@ -35,6 +35,16 @@ async function vista(c: C, d: Deps) {
   const h = hoy(ctx);
   const { desde, hasta } = rangoMes(h);
   const categorias = await listarCategorias(ctx, { soloActivas: true });
+  // Rentabilidad por viaje o por mes, con el fijo repartido (spec §7).
+  const vistaSel = c.req.query("vista") === "mes" ? "mes" : "viaje";
+  const unidadSel = c.req.query("unidad") ? Number(c.req.query("unidad")) : undefined;
+  const mesValido = (m: string | undefined) => (m && /^\d{4}-\d{2}$/.test(m) ? m : undefined);
+  const desdeMes = mesValido(c.req.query("desde")) ?? mesAnterior(h.slice(0, 7), 2);
+  const hastaMes = mesValido(c.req.query("hasta")) ?? h.slice(0, 7);
+  const rango = { desde: `${desdeMes}-01`, hasta: rangoMes(`${hastaMes}-01`).hasta, vehiculoId: unidadSel };
+  const filasViaje = vistaSel === "viaje" ? await rentabilidadPorViaje(ctx, rango) : [];
+  const filasMes = vistaSel === "mes" ? await rentabilidadPorMes(ctx, rango) : [];
+  const enlace = (v: string) => `/rentabilidad?vista=${v}&desde=${desdeMes}&hasta=${hastaMes}${unidadSel ? `&unidad=${unidadSel}` : ""}`;
   const [unidades, params, rent, proy, pvr, cotizaciones, presupuesto] = await Promise.all([
     listarUnidades(ctx), parametrosCotizador(ctx), rentabilidadPorUnidad(ctx, desde, hasta), proyeccion(ctx), presupuestoVsReal(ctx, h),
     listarCotizaciones(ctx, 8), presupuestoMensual(ctx),
@@ -49,6 +59,47 @@ async function vista(c: C, d: Deps) {
 
   return pagina(c, d, { titulo: "Rentabilidad y fletes", seccion: "rentabilidad", scripts: ["/static/cotizador.js"] }, (
     <>
+      <Panel titulo="RENTABILIDAD" der={
+        <form method="get" action="/rentabilidad" class="linea" style="gap:6px;flex-wrap:wrap">
+          <a class={`btn chico${vistaSel === "viaje" ? " primario" : ""}`} href={enlace("viaje")}>POR VIAJE</a>
+          <a class={`btn chico${vistaSel === "mes" ? " primario" : ""}`} href={enlace("mes")}>POR MES</a>
+          <input type="hidden" name="vista" value={vistaSel} />
+          <select name="unidad" aria-label="Unidad" style="width:auto"><option value="">TODAS</option>{unidades.map((u) => <option value={u.id} selected={u.id === unidadSel}>{u.codigo}</option>)}</select>
+          <input type="month" name="desde" value={desdeMes} aria-label="Desde" style="width:auto" />
+          <input type="month" name="hasta" value={hastaMes} aria-label="Hasta" style="width:auto" />
+          <button class="btn chico">VER</button>
+        </form>
+      }>
+        {vistaSel === "viaje" ? (
+          filasViaje.length === 0 ? <Vacio>No hay viajes cerrados en esos meses.</Vacio> : (
+            <div class="tabla-wrap"><table class="t">
+              <thead><tr><th>Viaje</th><th>Guía</th><th>Unid.</th><th>Ruta</th><th class="num">Flete</th><th class="num">Variables</th><th class="num">Contribución</th><th class="num">Fijo asignado</th><th class="num">Ganancia</th><th class="num">Margen</th></tr></thead>
+              <tbody>{filasViaje.map((f) => (
+                <tr>
+                  <td><a href={`/viajes/${f.viajeId}`}>{f.codigo}</a></td><td>{f.guia ?? <span class="chip cambiar">SIN GUÍA</span>}</td><td>{f.unidad}</td><td>{f.ruta}</td>
+                  <td class="num">{soles(f.flete)}</td><td class="num">{soles(f.variables)}</td><td class="num">{soles(f.contribucion)}</td>
+                  <td class="num">{soles(f.fijoAsignado)}{f.provisional ? <span class="chip proximo" style="margin-left:4px">PROVISIONAL</span> : null}</td>
+                  <td class="num"><b style={f.ganancia < 0 ? "color:var(--accent)" : ""}>{soles(f.ganancia)}</b></td><td class="num">{f.margenPct === null ? "—" : `${f.margenPct}%`}</td>
+                </tr>
+              ))}</tbody>
+            </table></div>
+          )
+        ) : (
+          <div class="tabla-wrap"><table class="t">
+            <thead><tr><th>Mes</th><th>Unid.</th><th class="num">Viajes</th><th class="num">Ingresos</th><th class="num">Variables</th><th class="num">Contribución</th><th class="num">Fijos</th><th class="num">GANANCIA NETA</th><th class="num">Margen</th></tr></thead>
+            <tbody>{filasMes.map((m) => (
+              <tr>
+                <td>{nombreMes(m.mes)}{m.provisional ? <span class="chip proximo" style="margin-left:4px">PROVISIONAL</span> : null}</td><td>{m.unidad}</td>
+                <td class="num">{m.viajes}</td><td class="num">{soles(m.ingresos)}</td><td class="num">{soles(m.variables)}</td><td class="num">{soles(m.contribucion)}</td>
+                <td class="num">{m.fijosDetalle.length ? (
+                  <details class="plegable"><summary>{soles(m.fijos)}</summary>{m.fijosDetalle.map((x) => <div style="font-size:11px">{x.nombre}: {soles(x.monto)}</div>)}</details>
+                ) : soles(m.fijos)}</td>
+                <td class="num"><b style={m.ganancia < 0 ? "color:var(--accent)" : ""}>{soles(m.ganancia)}</b></td><td class="num">{m.margenPct === null ? "—" : `${m.margenPct}%`}</td>
+              </tr>
+            ))}</tbody>
+          </table></div>
+        )}
+      </Panel>
       <Datos id="datos-coti" valor={datos} />
       {/^\d+$/.test(c.req.query("pdf") ?? "") ? (
         <div class="aviso info">Presupuesto listo: <a href={`/cotizacion/${c.req.query("pdf")}.pdf`} target="_blank" rel="noopener"><b>ABRIR PDF P-{c.req.query("pdf")!.padStart(4, "0")}</b></a></div>

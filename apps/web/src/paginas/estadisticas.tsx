@@ -1,7 +1,7 @@
 /** @jsxRuntime automatic @jsxImportSource hono/jsx */
 import ExcelJS from "exceljs";
 import {
-  estadisticas, hoy, listarCobrosPendientes, listarViajesFlota, liquidacionViaje, sumarDias, type Estadisticas,
+  estadisticas, hoy, listarCobrosPendientes, listarViajesFlota, liquidacionViaje, rentabilidadPorMes, rentabilidadPorViaje, sumarDias, type Estadisticas,
 } from "@sunatapp/core";
 import { pagina, type App, type C, type Deps } from "../base";
 import { Barra, Kpi, Panel, soles, soles2, Vacio } from "../ui";
@@ -143,6 +143,18 @@ export async function excelEstadisticas(d: Deps, desde: string, hasta: string): 
   const cobros = await listarCobrosPendientes(d.ctx);
   hoja("Cobros pendientes", [{ header: "Factura", key: "serieNumero", width: 14 }, { header: "Cliente", key: "cliente", width: 30 }, { header: "Saldo", key: "saldo", soles: true }],
     cobros.filas.map((f) => ({ serieNumero: f.serieNumero, cliente: f.cliente, saldo: cen(f.saldo) })));
+  const pv = await rentabilidadPorViaje(d.ctx, { desde, hasta });
+  hoja("Por viaje", [
+    { header: "Viaje", key: "codigo", width: 10 }, { header: "Guía", key: "guia", width: 12 }, { header: "Unidad", key: "unidad", width: 8 }, { header: "Ruta", key: "ruta", width: 26 },
+    { header: "Flete", key: "flete", soles: true }, { header: "Variables", key: "variables", soles: true }, { header: "Contribución", key: "contribucion", soles: true },
+    { header: "Fijo asignado", key: "fijoAsignado", soles: true }, { header: "Ganancia", key: "ganancia", soles: true }, { header: "Margen %", key: "margenPct", width: 10 },
+  ], pv.map((f) => ({ ...f, flete: cen(f.flete), variables: cen(f.variables), contribucion: cen(f.contribucion), fijoAsignado: cen(f.fijoAsignado), ganancia: cen(f.ganancia) })));
+  const pm = await rentabilidadPorMes(d.ctx, { desde, hasta });
+  hoja("Por mes", [
+    { header: "Mes", key: "mes", width: 10 }, { header: "Viajes", key: "viajes", width: 8 }, { header: "Ingresos", key: "ingresos", soles: true },
+    { header: "Variables", key: "variables", soles: true }, { header: "Contribución", key: "contribucion", soles: true }, { header: "Fijos", key: "fijos", soles: true },
+    { header: "Ganancia neta", key: "ganancia", soles: true }, { header: "Margen %", key: "margenPct", width: 10 },
+  ], pm.map((m) => ({ ...m, ingresos: cen(m.ingresos), variables: cen(m.variables), contribucion: cen(m.contribucion), fijos: cen(m.fijos), ganancia: cen(m.ganancia) })));
   return Buffer.from(await libro.xlsx.writeBuffer());
 }
 

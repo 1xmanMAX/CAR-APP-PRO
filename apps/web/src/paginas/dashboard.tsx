@@ -62,7 +62,7 @@ async function vista(c: C, d: Deps) {
       <section class="kpis" aria-label="Resumen del mes">
         <Kpi oscuro etiqueta="GANANCIA NETA · MES" valor={soles(fin.ganancia)} sub={fin.margenPct !== null ? `margen ${fin.margenPct}%` : undefined} />
         <Kpi etiqueta="INGRESOS · FLETES" valor={soles(fin.ingresos)} sub={`${fin.viajes} viajes · ${fin.km.toLocaleString("en-US")} km`} />
-        <Kpi etiqueta="GASTOS" valor={soles(fin.gastos)} />
+        <Kpi etiqueta="GASTOS" valor={soles(fin.gastos)} sub={`variables ${soles(fin.gastosVariables)} · fijos ${soles(fin.gastosFijos)}`} />
         <Kpi etiqueta="INVERTIDO EN REPUESTOS" valor={soles(inv.inversionTotal)} sub={`${soles(inv.enAlmacen)} en almacén`} />
         <Kpi etiqueta="DEUDA PRÉSTAMOS" valor={soles(deuda)} />
       </section>

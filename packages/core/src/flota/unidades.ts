@@ -7,7 +7,7 @@ import { fechaHoraLima } from "../dominio/fechas";
 import { ErrorNegocio } from "../errores";
 import { registrarAuditoria } from "../infra/auditoria";
 import type { Contexto } from "../infra/contexto";
-import { esTipoSemirremolque, type TipoSemirremolque } from "./componentes";
+import { esTipoSemirremolque, esTraccion, type Traccion, type TipoSemirremolque } from "./componentes";
 import { calcularDesgaste, diasEntre, estadoDe, type EstadoDesgaste, type ResultadoDesgaste } from "./desgaste";
 
 export function hoy(ctx: Contexto): string {
@@ -28,6 +28,8 @@ export interface Unidad {
   carreta: { id: number; placa: string } | null;
   /** Tipo de semirremolque (modelo 3D). */
   semirremolque: TipoSemirremolque;
+  /** Tracción del tracto (modelo 3D): 6x2 o 6x4. */
+  traccion: Traccion;
 }
 
 export interface ParteConDesgaste extends ResultadoDesgaste {
@@ -66,7 +68,8 @@ async function aUnidad(db: Ejecutor, f: typeof vehiculo.$inferSelect): Promise<U
     id: f.id, codigo: f.codigo ?? `#${f.id}`, placa: f.placa, marca: f.marca, modelo: f.modelo, anio: f.anio,
     estado: f.estadoUnidad, odometroKm: f.odometroKm, viajesTotales: await viajesTotales(db, f.id),
     rendimientoKmGal: f.rendimientoKmGal === null ? null : Number(f.rendimientoKmGal), carreta,
-    semirremolque: esTipoSemirremolque(f.semirremolque) ? f.semirremolque : "furgon",
+    semirremolque: esTipoSemirremolque(f.semirremolque) ? f.semirremolque : "plataforma",
+    traccion: esTraccion(f.traccion) ? f.traccion : "6x2",
   };
 }
 
@@ -121,6 +124,7 @@ export interface EntradaUnidad {
   rendimientoKmGal?: number | null;
   placaCarreta?: string | null;
   semirremolque?: TipoSemirremolque;
+  traccion?: Traccion;
 }
 
 async function siguienteCodigoUnidad(db: Ejecutor): Promise<string> {
@@ -154,7 +158,7 @@ export async function crearUnidad(ctx: Contexto, e: EntradaUnidad, usuarioId?: n
     const [f] = await tx.insert(vehiculo).values({
       placa, codigo, tipo: "tracto", marca: e.marca ?? null, modelo: e.modelo ?? null, anio: e.anio ?? null,
       odometroKm: e.odometroKm ?? 0, viajesBase: e.viajesBase ?? 0,
-      rendimientoKmGal: e.rendimientoKmGal == null ? null : String(e.rendimientoKmGal), carretaId, semirremolque: e.semirremolque ?? "furgon",
+      rendimientoKmGal: e.rendimientoKmGal == null ? null : String(e.rendimientoKmGal), carretaId, semirremolque: e.semirremolque ?? "plataforma", traccion: e.traccion ?? "6x2",
     }).returning({ id: vehiculo.id });
     await registrarAuditoria(tx, { usuarioId, accion: "unidad_creada", entidad: "vehiculo", entidadId: f!.id, detalle: { codigo, placa } });
     return f!.id;
@@ -180,6 +184,10 @@ export async function actualizarUnidad(
     if (e.semirremolque !== undefined) {
       if (!esTipoSemirremolque(e.semirremolque)) throw new ErrorNegocio("Tipo de semirremolque no válido");
       cambios.semirremolque = e.semirremolque;
+    }
+    if (e.traccion !== undefined) {
+      if (!esTraccion(e.traccion)) throw new ErrorNegocio("Tracción no válida");
+      cambios.traccion = e.traccion;
     }
     const [f] = await tx.update(vehiculo).set(cambios).where(eq(vehiculo.id, id)).returning({ id: vehiculo.id });
     if (!f) throw new ErrorNegocio("La unidad no existe");

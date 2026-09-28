@@ -80,7 +80,9 @@ export const vehiculo = pgTable("vehiculo", {
   rendimientoKmGal: numeric("rendimiento_km_gal", { precision: 6, scale: 2 }),
   carretaId: integer("carreta_id"),
   /** Tipo de semirremolque que jala (para el modelo 3D): furgon, plataforma, cama_baja o cisterna. */
-  semirremolque: text("semirremolque").notNull().default("furgon"),
+  semirremolque: text("semirremolque").notNull().default("plataforma"),
+  /** Tracción del tracto (modelo 3D): 6x2 (tracción + eje de apoyo) o 6x4. */
+  traccion: text("traccion").notNull().default("6x2"),
 });
 
 export const conductor = pgTable("conductor", {

@@ -51,7 +51,7 @@ async function vista(c: C, d: Deps) {
   const tipos = await listarTiposParte(ctx);
   const faltantes = tipos.filter((t) => !partes.some((p) => p.tipoParteId === t.id));
 
-  const PIEZAS = piezasDeSemirremolque(unidad.semirremolque);
+  const PIEZAS = piezasDeSemirremolque(unidad.semirremolque, unidad.traccion);
   const piezaSel = PIEZAS.find((p) => p.id === c.req.query("pieza")) ?? null;
   const idRepuestoVer = Number(c.req.query("repuesto")) || null;
   const [historial, repuestos] = await Promise.all([
@@ -134,7 +134,7 @@ async function vista(c: C, d: Deps) {
           <div class="visor" id="visor">
             <canvas aria-label={`Modelo 3D de ${unidad.codigo}: cada pieza (llantas, retrovisores, faros, puertas…) va por separado y su color es el desgaste. Arrastra para girar, pellizca o usa la rueda para acercar, toca una pieza para resaltarla y ver su historial.`} role="img"></canvas>
             <div class="cab">
-              <span class="lbl-12" style="color:var(--dark-text)"><b>{unidad.codigo} · TRACTO CARA PLANA + {TIPOS_SEMIRREMOLQUE[unidad.semirremolque].toUpperCase()} · {PIEZAS.length} PIEZAS</b><br /><span style="color:var(--dark-muted)">TOCA UNA PIEZA PARA RESALTARLA · EL COLOR ES SU DESGASTE</span></span>
+              <span class="lbl-12" style="color:var(--dark-text)"><b>{unidad.codigo} · TRACTO CARA PLANA {unidad.traccion} + {TIPOS_SEMIRREMOLQUE[unidad.semirremolque].toUpperCase()} · {PIEZAS.length} PIEZAS</b><br /><span style="color:var(--dark-muted)">TOCA UNA PIEZA PARA RESALTARLA · EL COLOR ES SU DESGASTE</span></span>
               <div class="der">
                 <button class="btn chico" id="btn-izq" type="button" aria-label="Girar a la izquierda">&lt;</button>
                 <button class="btn chico" id="btn-der" type="button" aria-label="Girar a la derecha">&gt;</button>

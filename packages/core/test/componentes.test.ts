@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  nombrePieza, partesDePieza, pieza, PIEZAS, piezasDeSemirremolque, piezasDeTipo, TIPOS_SEMIRREMOLQUE, type Forma, type TipoSemirremolque,
+  nombrePieza, partesDePieza, pieza, PIEZAS, piezasDeSemirremolque, piezasDeTipo, TIPOS_SEMIRREMOLQUE, TRACCIONES, type Forma, type TipoSemirremolque, type Traccion,
 } from "../src/flota/componentes";
 
 type Caja = { min: number[]; max: number[] };
@@ -28,8 +28,9 @@ describe("piezas del modelo 3D (tracto cara plana + furgón)", () => {
     }
   });
 
-  it.each(Object.keys(TIPOS_SEMIRREMOLQUE) as TipoSemirremolque[])("con semirremolque %s todas las piezas quedan unidas: un solo vehículo, sin piezas flotando", (tipo) => {
-    const PIEZAS = piezasDeSemirremolque(tipo);
+  const COMBINACIONES = (Object.keys(TRACCIONES) as Traccion[]).flatMap((tr) => (Object.keys(TIPOS_SEMIRREMOLQUE) as TipoSemirremolque[]).map((t) => [tr, t] as const));
+  it.each(COMBINACIONES)("tracto %s con semirremolque %s: todas las piezas quedan unidas, un solo vehículo, sin piezas flotando", (traccion, tipo) => {
+    const PIEZAS = piezasDeSemirremolque(tipo, traccion);
     expect(new Set(PIEZAS.map((p) => p.id)).size).toBe(PIEZAS.length);
     const cajas = PIEZAS.map((p) => p.formas.map(cajaDe));
     const unidas = (i: number, j: number) => cajas[i]!.some((a) => cajas[j]!.some((b) => tocan(a, b)));
@@ -56,8 +57,22 @@ describe("piezas del modelo 3D (tracto cara plana + furgón)", () => {
     expect(delante).toEqual(["parachoques-del", "retrovisor-der", "retrovisor-izq", "visera"]);
   });
 
-  it("22 llantas + repuesto, y cada eje con sus frenos y suspensión", () => {
-    expect(PIEZAS.filter((p) => p.grupo === "llantas").length).toBe(23);
+  it("6x2 como la unidad real: 20 llantas + repuesto (eje de apoyo con simples); 6x4: 22 + repuesto", () => {
+    const llantas = (tr: Traccion) => piezasDeSemirremolque("plataforma", tr).filter((p) => p.grupo === "llantas").map((p) => p.id);
+    expect(llantas("6x2")).toHaveLength(21);
+    expect(llantas("6x2")).toContain("llanta-t2-izq");
+    expect(llantas("6x2")).toContain("llanta-t1-der-int");
+    expect(llantas("6x4")).toHaveLength(23);
+    expect(nombrePieza("llanta-t2-der")).toBe("Llanta eje de apoyo (simple 315/70) · derecha");
+    // Por defecto: plataforma y 6x2, sin chimenea vertical (escape bajo) ni furgón.
+    const ids = piezasDeSemirremolque().map((p) => p.id);
+    expect(ids).toContain("mampara-frontal");
+    expect(ids).not.toContain("caja-techo");
+    expect(pieza("escape")!.formas.every((f) => f.t !== "cil" || f.eje === "x")).toBe(true);
+  });
+
+  it("cada eje con sus frenos y suspensión", () => {
+    expect(PIEZAS.filter((p) => p.grupo === "llantas").length).toBe(25);
     for (const e of ["del", "t1", "t2", "sr1", "sr2", "sr3"]) {
       for (const tipo of ["eje", "freno", "suspension"]) expect(pieza(`${tipo}-${e}`), `${tipo}-${e}`).not.toBeNull();
     }

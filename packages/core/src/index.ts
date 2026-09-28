@@ -41,5 +41,6 @@ export * from "./finanzas/finanzas";
 export * from "./rentabilidad/rentabilidad";
 export * from "./eventos/eventos";
 export * from "./acceso/acceso";
-export type { RolUsuario, EstadoUnidad, OrigenRegistro, ZonaModelo, TipoReparacion, CategoriaGasto } from "@sunatapp/db";
+export type { RolUsuario, EstadoUnidad, OrigenRegistro, ZonaModelo, TipoReparacion, CategoriaGasto, TipoCategoria, MedioPago, Periodicidad } from "@sunatapp/db";
+export * from "./finanzas/categorias";
 export * from "./sincro/index";

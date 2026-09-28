@@ -1,5 +1,5 @@
 import { and, desc, eq, gasto, sql, viaje } from "@sunatapp/db";
-import { gastosPorCategoria, mesAnterior, NOMBRE_CATEGORIA, rangoMes, resumenFinanciero } from "../finanzas/finanzas";
+import { gastosPorCategoria, mesAnterior, rangoMes, resumenFinanciero } from "../finanzas/finanzas";
 import { listarViajesFlota } from "../flota/viajes-flota";
 import type { Contexto } from "../infra/contexto";
 import { rutaDeViaje } from "./rutas";
@@ -67,7 +67,7 @@ export async function estadisticas(ctx: Contexto, desde: string, hasta: string):
     { ingresos: 0, gastos: 0, ganancia: 0, viajes: 0 });
   return {
     desde, hasta, meses,
-    porCategoria: (await gastosPorCategoria(ctx, desde, hasta)).map((x) => ({ categoria: x.categoria, nombre: NOMBRE_CATEGORIA[x.categoria], monto: x.monto })),
+    porCategoria: (await gastosPorCategoria(ctx, desde, hasta)).map((x) => ({ categoria: x.categoria, nombre: x.nombre, monto: x.monto })),
     porRuta,
     combustiblePorGrifo: grifos.map((g) => ({ grifo: g.grifo, veces: Number(g.veces), monto: Number(g.monto) })),
     porProveedor: proveedores.map((p) => ({ proveedor: p.proveedor, veces: Number(p.veces), monto: Number(p.monto) })),

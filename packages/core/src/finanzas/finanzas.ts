@@ -1,5 +1,5 @@
 import {
-  and, categoriaGastoEnum, cobro, compraRepuesto, cuotaPrestamo, desc, eq, gasto, ingreso, isNull, prestamo, reinversion,
+  and, cobro, compraRepuesto, cuotaPrestamo, desc, eq, gasto, ingreso, isNull, prestamo, reinversion,
   reparacion, sql, vehiculo, viaje, type CategoriaGasto, type OrigenRegistro,
 } from "@sunatapp/db";
 import { sumarDias } from "../dominio/fechas";
@@ -8,30 +8,9 @@ import { registrarAuditoria } from "../infra/auditoria";
 import type { Contexto } from "../infra/contexto";
 import { hoy } from "../flota/unidades";
 import { listarViajesFlota } from "../flota/viajes-flota";
+import { categoriaValida, nombreCategoria } from "./categorias";
 
-export const CATEGORIAS_GASTO = categoriaGastoEnum.enumValues;
-export const NOMBRE_CATEGORIA: Record<CategoriaGasto, string> = {
-  combustible: "Combustible", peaje: "Peajes", viaticos: "Viáticos", hospedaje: "Hospedaje", estiba: "Estiba",
-  balanza: "Balanza", cochera: "Cochera", reparacion: "Repuestos y reparación", otros: "Otros",
-};
-
-const SINONIMOS: Array<[RegExp, CategoriaGasto]> = [
-  [/^(combustible|petroleo|petróleo|diesel|diésel|gasolina|grifo|gas)/i, "combustible"],
-  [/^(peaje|peajes)/i, "peaje"],
-  [/^(viatico|viático|viaticos|viáticos|comida|alimentos?|menu|menú)/i, "viaticos"],
-  [/^(hospedaje|hotel|alojamiento)/i, "hospedaje"],
-  [/^(estiba|descarga|carga)/i, "estiba"],
-  [/^(balanza|pesaje)/i, "balanza"],
-  [/^(cochera|parqueo|estacionamiento)/i, "cochera"],
-  [/^(reparacion|reparación|repuesto|mecanico|mecánico|taller|llanta)/i, "reparacion"],
-  [/^(otro|otros|varios)/i, "otros"],
-];
-
-export function categoriaDesdeTexto(texto: string): CategoriaGasto | null {
-  const t = texto.trim();
-  for (const [re, c] of SINONIMOS) if (re.test(t)) return c;
-  return null;
-}
+export { NOMBRE_CATEGORIA, categoriaDesdeTexto } from "./categorias";
 
 export function rangoMes(fecha: string): { desde: string; hasta: string; mes: string } {
   const mes = fecha.slice(0, 7);
@@ -72,7 +51,7 @@ export interface EntradaGasto {
 export async function registrarGasto(ctx: Contexto, e: EntradaGasto): Promise<{ id: number; viajeCodigo: string | null }> {
   if (!Number.isInteger(e.monto) || e.monto <= 0) throw new ErrorNegocio("El monto debe ser mayor que 0");
   if (e.monto > 5_000_000) throw new ErrorNegocio("El monto parece demasiado alto; revísalo");
-  if (!CATEGORIAS_GASTO.includes(e.categoria)) throw new ErrorNegocio("Categoría de gasto no válida");
+  await categoriaValida(ctx.db, e.categoria);
   let vehiculoId = e.vehiculoId ?? null;
   let viajeId = e.viajeId ?? null;
   let viajeCodigo: string | null = null;
@@ -110,7 +89,7 @@ export async function editarGasto(
   ctx: Contexto, id: number, e: { categoria?: CategoriaGasto; monto?: number; fecha?: string; nota?: string | null }, usuarioId?: number,
 ): Promise<void> {
   if (e.monto !== undefined && (!Number.isInteger(e.monto) || e.monto <= 0 || e.monto > 5_000_000)) throw new ErrorNegocio("El monto no es válido");
-  if (e.categoria !== undefined && !CATEGORIAS_GASTO.includes(e.categoria)) throw new ErrorNegocio("Categoría de gasto no válida");
+  if (e.categoria !== undefined) await categoriaValida(ctx.db, e.categoria);
   if (e.fecha !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(e.fecha)) throw new ErrorNegocio("Fecha no válida");
   const [antes] = await ctx.db.select().from(gasto).where(eq(gasto.id, id));
   if (!antes) throw new ErrorNegocio("El gasto no existe");
@@ -137,7 +116,7 @@ export async function gastosPorCategoria(ctx: Contexto, desde: string, hasta: st
   if (vehiculoId !== undefined) filtros.push(eq(gasto.vehiculoId, vehiculoId));
   const filas = await ctx.db.select({ categoria: gasto.categoria, total: sql<string>`sum(${gasto.monto})` }).from(gasto)
     .where(and(...filtros)).groupBy(gasto.categoria);
-  return filas.map((f) => ({ categoria: f.categoria, nombre: NOMBRE_CATEGORIA[f.categoria], monto: Number(f.total) }))
+  return filas.map((f) => ({ categoria: f.categoria, nombre: nombreCategoria(f.categoria), monto: Number(f.total) }))
     .sort((a, b) => b.monto - a.monto);
 }
 
@@ -343,7 +322,7 @@ export async function listarMovimientos(ctx: Contexto, desde: string, hasta: str
     r.push({ fecha: i.fecha, tipo: "INGRESO", detalle: i.concepto, unidad: u(i.vehiculoId), monto: i.monto, origen: i.origen, ref: { entidad: "ingreso", id: i.id } });
   }
   for (const g of await ctx.db.select().from(gasto).where(rango(gasto.fecha))) {
-    r.push({ fecha: g.fecha, tipo: "GASTO", detalle: `${NOMBRE_CATEGORIA[g.categoria]}${g.nota ? ` · ${g.nota}` : ""}`, unidad: u(g.vehiculoId), monto: -g.monto, origen: g.origen, ref: { entidad: "gasto", id: g.id } });
+    r.push({ fecha: g.fecha, tipo: "GASTO", detalle: `${nombreCategoria(g.categoria)}${g.nota ? ` · ${g.nota}` : ""}`, unidad: u(g.vehiculoId), monto: -g.monto, origen: g.origen, ref: { entidad: "gasto", id: g.id } });
   }
   for (const x of await ctx.db.select().from(reinversion).where(rango(reinversion.fecha))) {
     r.push({ fecha: x.fecha, tipo: "REINVERSIÓN", detalle: x.concepto, unidad: u(x.vehiculoId), monto: -x.monto, origen: x.origen, ref: { entidad: "reinversion", id: x.id } });

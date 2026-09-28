@@ -1,5 +1,5 @@
 import {
-  and, desc, documentoRecibido, eq, gasto, gte, inArray, isNull, lecturaIa, lt, lte, ne, or, sql, viaje, type EstadoLectura, type TipoMensaje,
+  and, desc, documentoRecibido, eq, gasto, gte, inArray, isNull, lecturaIa, lt, lte, ne, notInArray, or, sql, viaje, type EstadoLectura, type TipoMensaje,
 } from "@sunatapp/db";
 import { fechaHoraLima } from "../dominio/fechas";
 import {
@@ -310,7 +310,7 @@ export async function gastosSinViaje(ctx: Contexto, dias = 60) {
     id: gasto.id, fecha: gasto.fecha, categoria: gasto.categoria, monto: gasto.monto, vehiculoId: gasto.vehiculoId, nota: gasto.nota,
     proveedorNombre: gasto.proveedorNombre, conFoto: sql<boolean>`${gasto.rutaFoto} is not null`,
   }).from(gasto)
-    .where(and(isNull(gasto.viajeId), eq(gasto.origen, "telegram"), ne(gasto.categoria, "reparacion"), gte(gasto.fecha, desde)))
+    .where(and(isNull(gasto.viajeId), eq(gasto.origen, "telegram"), notInArray(gasto.categoria, ["reparacion_ruta", "mantenimiento"]), gte(gasto.fecha, desde)))
     .orderBy(desc(gasto.fecha), desc(gasto.id));
 }
 

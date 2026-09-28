@@ -1,6 +1,6 @@
 import { and, desc, entrega, eq, factura, facturaGuia, gasto, guiaTransportista, ne, sql, vehiculo, viaje, viajePresupuesto, type CategoriaGasto, type MedioEntrega } from "@sunatapp/db";
 import { ErrorNegocio } from "../errores";
-import { CATEGORIAS_GASTO, NOMBRE_CATEGORIA } from "../finanzas/finanzas";
+import { listarCategorias, nombreCategoria } from "../finanzas/categorias";
 import { listarViajesFlota, viajeEnCursoDeUnidad } from "../flota/viajes-flota";
 import type { Contexto } from "../infra/contexto";
 
@@ -92,11 +92,12 @@ export async function liquidacionViaje(ctx: Contexto, viajeId: number): Promise<
   }
   const realPor = new Map<CategoriaGasto, number>();
   for (const g of gastos) realPor.set(g.categoria, (realPor.get(g.categoria) ?? 0) + g.monto);
-  const lineas: LineaLiquidacion[] = CATEGORIAS_GASTO
+  const categorias = await listarCategorias(ctx);
+  const lineas: LineaLiquidacion[] = categorias.map((c) => c.clave)
     .filter((c) => (montos.get(c) ?? 0) > 0 || (realPor.get(c) ?? 0) > 0)
     .map((c) => {
       const p = montos.get(c) ?? 0, r = realPor.get(c) ?? 0;
-      return { categoria: c, nombre: NOMBRE_CATEGORIA[c], presupuesto: p, real: r, pct: p > 0 ? Math.round((r / p) * 100) : null, semaforo: semaforo(r, p) };
+      return { categoria: c, nombre: nombreCategoria(c, categorias), presupuesto: p, real: r, pct: p > 0 ? Math.round((r / p) * 100) : null, semaforo: semaforo(r, p) };
     })
     .sort((a, b) => b.real - a.real || b.presupuesto - a.presupuesto);
   const entregado = entregas.reduce((s, e) => s + e.monto, 0);

@@ -121,7 +121,7 @@ export async function registrarCambio(ctx: Contexto, e: EntradaCambio): Promise<
     }
 
     const [g] = await tx.insert(gasto).values({
-      categoria: "reparacion", monto: costoTotal, fecha, vehiculoId: unidad.id, origen: e.origen, usuarioId: e.usuarioId ?? null,
+      categoria: e.tipo === "preventivo" ? "mantenimiento" : "reparacion_ruta", monto: costoTotal, fecha, vehiculoId: unidad.id, origen: e.origen, usuarioId: e.usuarioId ?? null,
       proveedorNombre: e.taller ?? null, nota: `${unidad.codigo ?? unidad.placa} · ${trabajo}`,
     }).returning({ id: gasto.id });
     const [rep] = await tx.insert(reparacion).values({

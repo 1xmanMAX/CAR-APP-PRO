@@ -6,7 +6,8 @@ import { ErrorNegocio } from "../errores";
 import type { Contexto } from "../infra/contexto";
 import { hoy, listarUnidades, partesConDesgaste } from "../flota/unidades";
 import { listarViajesFlota } from "../flota/viajes-flota";
-import { gastosPorCategoria, mesAnterior, NOMBRE_CATEGORIA, rangoMes, resumenFinanciero } from "../finanzas/finanzas";
+import { gastosPorCategoria, mesAnterior, rangoMes, resumenFinanciero } from "../finanzas/finanzas";
+import { nombreCategoria } from "../finanzas/categorias";
 import { desgastePorKm } from "../reparaciones/reparaciones";
 
 // ── Cotizador (handoff §6) ───────────────────────────────────────────────────
@@ -181,7 +182,7 @@ export async function proyeccion(ctx: Contexto, mesesHistoria = 3, mesesFuturo =
   const kmPorViaje = conKm.length ? kmTotal / conKm.length : 0;
   // Costo operativo por km sin reparaciones (esas se proyectan con los contadores de desgaste).
   const [g] = await ctx.db.select({ t: sql<string>`coalesce(sum(${gasto.monto}), 0)` }).from(gasto)
-    .where(and(sql`${gasto.fecha} >= ${desde}`, sql`${gasto.categoria} <> 'reparacion'`));
+    .where(and(sql`${gasto.fecha} >= ${desde}`, sql`${gasto.categoria} not in ('reparacion_ruta', 'mantenimiento')`));
   const costoPorKm = kmTotal > 0 ? Number(g?.t ?? 0) / kmTotal : 0;
   const costoMesSinKm = kmTotal > 0 ? 0 : muestra.reduce((s, m) => s + m.costos, 0) / nMeses;
 
@@ -237,7 +238,7 @@ export async function presupuestoVsReal(ctx: Contexto, fecha: string) {
   return [...categorias].map((c) => {
     const p = presupuesto[c] ?? 0;
     const r = real.find((x) => x.categoria === c)?.monto ?? 0;
-    return { categoria: c, nombre: NOMBRE_CATEGORIA[c], presupuesto: p, real: r, pct: p > 0 ? Math.round((r / p) * 100) : null };
+    return { categoria: c, nombre: nombreCategoria(c), presupuesto: p, real: r, pct: p > 0 ? Math.round((r / p) * 100) : null };
   }).sort((a, b) => b.real - a.real);
 }
 

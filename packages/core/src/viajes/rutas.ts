@@ -1,7 +1,8 @@
-import { categoriaGastoEnum, eq, ruta, rutaPresupuesto, type CategoriaGasto, type Ejecutor } from "@sunatapp/db";
+import { eq, ruta, rutaPresupuesto, type CategoriaGasto, type Ejecutor } from "@sunatapp/db";
 import { ErrorNegocio } from "../errores";
 import { registrarAuditoria } from "../infra/auditoria";
 import type { Contexto } from "../infra/contexto";
+import { CATEGORIAS_SISTEMA } from "../finanzas/categorias";
 
 export interface LineaPlantilla {
   categoria: CategoriaGasto;
@@ -15,7 +16,9 @@ export interface Ruta {
   plantilla: LineaPlantilla[];
 }
 
-const ORDEN_CATEGORIAS = categoriaGastoEnum.enumValues;
+const ORDEN_CATEGORIAS: string[] = CATEGORIAS_SISTEMA.map((c) => c.clave);
+/** Las propias (fuera de la lista de fábrica) van al final. */
+const posicion = (c: string) => { const i = ORDEN_CATEGORIAS.indexOf(c); return i < 0 ? 999 : i; };
 
 function normalizar(texto: string): string {
   return texto
@@ -45,7 +48,7 @@ async function plantillaDe(ctx: Contexto, rutaId: number): Promise<LineaPlantill
   // El orden de despliegue es el de la enumeración (combustible, peaje, viáticos, ...), no el
   // alfabético que da el ORDER BY de arriba; ese ORDER BY solo hace determinista el resultado
   // de la consulta antes de reordenar en JS.
-  return [...filas].sort((a, b) => ORDEN_CATEGORIAS.indexOf(a.categoria) - ORDEN_CATEGORIAS.indexOf(b.categoria));
+  return [...filas].sort((a, b) => posicion(a.categoria) - posicion(b.categoria));
 }
 
 async function todasLasRutas(ctx: Contexto): Promise<Array<typeof ruta.$inferSelect>> {

@@ -99,7 +99,8 @@ async function portatil(cat: Catalogo, tr: Traductor, t: string, j: Record<strin
     if ((col === "id" && cat.conId.has(t)) || col === "sinc_uid" || col === "sinc_tocado") continue;
     let v = j[col] ?? null;
     const ref = refs?.get(col);
-    if (ref && v !== null) v = await tr.uid(ref, Number(v));
+    // Solo se traducen las referencias a filas con id propio; las de clave natural (categoria_gasto.clave) viajan tal cual.
+    if (ref && v !== null && cat.conId.has(ref)) v = await tr.uid(ref, Number(v));
     d[col] = v;
   }
   return d;
@@ -222,7 +223,7 @@ export async function aplicar(db: Ejecutor, entrantes: Fila[], borrados: Borrado
       let saltar = false;
       for (const [col, ref] of refs ?? []) {
         const v = d[col];
-        if (v === null || v === undefined) continue;
+        if (v === null || v === undefined || !cat.conId.has(ref)) continue;
         const id = await tr.id(ref, String(v));
         if (id === null && obligatorias.has(col)) {
           r.avisos.push(`${f.t}: falta ${ref} ${String(v).slice(0, 8)}; se aplicará la próxima vez`);

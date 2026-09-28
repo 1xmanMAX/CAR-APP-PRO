@@ -4,6 +4,7 @@ import { tipoDocumentoDe } from "../dominio/validaciones";
 import { ErrorNegocio, ErrorValidacion, FALTA_EMPRESA } from "../errores";
 import { registrarAuditoria } from "../infra/auditoria";
 import type { Contexto } from "../infra/contexto";
+import { alRegistrarGuia } from "../viajes/desde-guia";
 import { validarEntradaGuia, type EntradaGuia } from "./validar";
 
 /**
@@ -80,7 +81,7 @@ export async function registrarGuiaBorrador(ctx: Contexto, e: EntradaGuia, usuar
     if (existente !== null) return existente;
   }
   try {
-    return await ctx.db.transaction(async (tx) => {
+    const id = await ctx.db.transaction(async (tx) => {
       const [emp] = await tx.select().from(empresa).limit(1);
       if (!emp) throw new ErrorNegocio(FALTA_EMPRESA);
       const transporte = await resolverTransporte(tx, emp, e.transporte);
@@ -108,6 +109,9 @@ export async function registrarGuiaBorrador(ctx: Contexto, e: EntradaGuia, usuar
       await registrarAuditoria(tx, { usuarioId, accion: "guia_registrada", entidad: "guia_transportista", entidadId: guia!.id });
       return guia!.id;
     });
+    // El viaje nace de la guía (spec §5). Si falla, la guía queda sin viaje y sale en «Por revisar».
+    await alRegistrarGuia(ctx, id, usuarioId).catch(() => null);
+    return id;
   } catch (error) {
     // Carrera: otra llamada registró primero una guía para el mismo documentoRecibidoId
     // (violación de la restricción única "guia_documento_recibido").

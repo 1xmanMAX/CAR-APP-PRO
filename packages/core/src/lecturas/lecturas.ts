@@ -13,6 +13,7 @@ import { hoy } from "../flota/unidades";
 import { finalizarViajeFlota, registrarViajeFlota, viajeEnCursoDeUnidad } from "../flota/viajes-flota";
 import { registrarAuditoria } from "../infra/auditoria";
 import type { Contexto } from "../infra/contexto";
+import { viajesPorRevisar } from "../viajes/revisar-viajes";
 import { registrarEntrega } from "../viajes/entregas";
 
 /**
@@ -339,6 +340,6 @@ export async function archivoDeDocumento(ctx: Contexto, documentoId: number): Pr
 
 /** Cuántas cosas esperan revisión (para el aviso del inicio). */
 export async function contarPorRevisar(ctx: Contexto): Promise<number> {
-  const [a, b] = await Promise.all([listarPorRevisar(ctx), gastosSinViaje(ctx)]);
-  return a.length + b.length;
+  const [a, b, c] = await Promise.all([listarPorRevisar(ctx), gastosSinViaje(ctx), viajesPorRevisar(ctx)]);
+  return a.length + b.length + c.length;
 }

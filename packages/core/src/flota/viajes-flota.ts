@@ -20,6 +20,8 @@ export interface EntradaViajeFlota {
   guiaRef?: string | null;
   fecha?: string;
   conductorId?: number;
+  /** Carreta del viaje; sin indicarla, la carreta habitual de la unidad. */
+  vehiculoSecundarioId?: number | null;
   /** "cerrado" = el viaje ya se hizo (suma sus km al odómetro); "en_curso" = sale ahora. */
   estado?: "cerrado" | "en_curso";
   origen: OrigenRegistro;
@@ -66,7 +68,7 @@ export async function registrarViajeFlota(ctx: Contexto, e: EntradaViajeFlota): 
       const codigo = CODIGO_VIAJE(numero);
       const aplicarKm = estado === "cerrado" && e.km != null;
       const [f] = await tx.insert(viaje).values({
-        codigo, vehiculoId: v.id, vehiculoSecundarioId: v.carretaId, conductorId, fechaSalida: fecha,
+        codigo, vehiculoId: v.id, vehiculoSecundarioId: e.vehiculoSecundarioId !== undefined ? e.vehiculoSecundarioId : v.carretaId, conductorId, fechaSalida: fecha,
         fechaRegreso: estado === "cerrado" ? fecha : null, estado,
         origenLugar: e.origenLugar.trim(), destinoLugar: e.destinoLugar.trim(), km: e.km ?? null,
         toneladas: e.toneladas == null ? null : String(e.toneladas), flete: e.flete ?? null, guiaRef: e.guiaRef?.trim() || null,
@@ -149,6 +151,8 @@ export async function editarViajeFlota(
   if (e.origenLugar !== undefined) cambios.origenLugar = e.origenLugar;
   if (e.destinoLugar !== undefined) cambios.destinoLugar = e.destinoLugar;
   if (e.nota !== undefined) cambios.nota = e.nota;
+  // Corregido a mano: deja de estar «cerrado solo» en Por revisar.
+  cambios.cierreAutomatico = false;
   const [f] = await ctx.db.update(viaje).set(cambios).where(eq(viaje.id, viajeId)).returning({ id: viaje.id });
   if (!f) throw new ErrorNegocio("El viaje no existe");
   await registrarAuditoria(ctx.db, { usuarioId, accion: "viaje_editado", entidad: "viaje", entidadId: viajeId, detalle: e });
@@ -176,7 +180,7 @@ export interface FilaViajeFlota {
 }
 
 /** Datos de facturación de las guías de cada viaje. */
-async function facturasPorViaje(ctx: Contexto, viajeIds: number[]) {
+export async function facturasPorViaje(ctx: Contexto, viajeIds: number[]) {
   const r = new Map<number, Array<{ serieNumero: string; subtotal: number; estadoSunat: string; estadoCobro: string; vence: string | null; guia: string }>>();
   if (viajeIds.length === 0) return r;
   const filas = await ctx.db

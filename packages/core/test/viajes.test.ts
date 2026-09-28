@@ -62,11 +62,13 @@ describe("viajes", () => {
 
   it("enlazarGuiaAlViajeEnCurso asigna ida y luego retorno, y null al tercer intento", async () => {
     const ctx = await contexto();
-    await crearViaje(ctx, {});
-    const viaje = await viajeEnCurso(ctx);
+    // Registrar la guía ya la enlaza sola (spec §5): la tercera cierra el viaje y abre otro. Aquí se
+    // prueba el enlace manual, así que se liberan las tres y se usa el viaje que quedó en curso.
     const g1 = await registrarGuiaBorrador(ctx, entradaGuia());
     const g2 = await registrarGuiaBorrador(ctx, entradaGuia());
     const g3 = await registrarGuiaBorrador(ctx, entradaGuia());
+    for (const g of [g1, g2, g3]) await desenlazarGuia(ctx, g);
+    const viaje = await viajeEnCurso(ctx);
     expect(await enlazarGuiaAlViajeEnCurso(ctx, g1)).toEqual({ viajeId: viaje!.id, tramo: "ida" });
     expect(await enlazarGuiaAlViajeEnCurso(ctx, g2)).toEqual({ viajeId: viaje!.id, tramo: "retorno" });
     expect(await enlazarGuiaAlViajeEnCurso(ctx, g3)).toBeNull();
@@ -79,6 +81,7 @@ describe("viajes", () => {
     const { id: viajeId2 } = await crearViaje(ctx, {});
     const g1 = await registrarGuiaBorrador(ctx, entradaGuia());
     const g2 = await registrarGuiaBorrador(ctx, entradaGuia());
+    for (const g of [g1, g2]) await desenlazarGuia(ctx, g);
     await enlazarGuia(ctx, g1, viajeId2, "ida");
     await expect(enlazarGuia(ctx, g2, viajeId2, "ida")).rejects.toThrow("El viaje ya tiene una guía en el tramo ida");
     await enlazarGuia(ctx, g2, viajeId1, "ida");

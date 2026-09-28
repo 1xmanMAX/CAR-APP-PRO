@@ -45,4 +45,6 @@ export type { RolUsuario, EstadoUnidad, OrigenRegistro, ZonaModelo, TipoReparaci
 export * from "./finanzas/categorias";
 export * from "./finanzas/captura";
 export * from "./finanzas/costos-fijos";
+export * from "./viajes/desde-guia";
+export * from "./viajes/revisar-viajes";
 export * from "./sincro/index";

@@ -122,7 +122,8 @@ describe("lecturas de mensajes", () => {
     const v = await registrarViajeFlota(ctx, { vehiculoId: 1, origenLugar: "A", destinoLugar: "B", estado: "cerrado", km: 10, origen: "web" });
     expect(await asignarViajeGasto(ctx, g!.id, v.id)).toBe(v.codigo);
     expect(await gastosSinViaje(ctx)).toEqual([]);
-    expect(await contarPorRevisar(ctx)).toBe(1);
+    // 1 mensaje sin confirmar + el viaje A → B, creado a mano sin guía.
+    expect(await contarPorRevisar(ctx)).toBe(2);
     const mes = new Date(Date.now() - 5 * 3_600_000).toISOString().slice(0, 7); // mes de Lima
     expect(await costoIaDelMes(ctx, mes)).toEqual({ usd: 0, lecturas: 2 });
   });

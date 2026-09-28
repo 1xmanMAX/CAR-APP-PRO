@@ -8,11 +8,12 @@
 import { existsSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
-import { crearDb, type Db } from "@sunatapp/db";
+import { ajuste, crearDb, type Db } from "@sunatapp/db";
 import {
   crearAlmacenLocal, crearPrestamo, crearRepuesto, crearUnidad, guardarUsuario, instalarParte, listarTiposParte, pagarCuota,
   partesDeUnidad, registrarCambio, registrarCompra, registrarEvento, registrarGasto, registrarIngreso, registrarLecturaOdometro,
   registrarReinversion, registrarViajeFlota, sembrarDatosIniciales, sumarDias, fechaHoraLima, buscarUnidad, finalizarViajeFlota,
+  crearCostoFijo, registrarGuiaBorrador, obtenerUnidad, viajeEnCursoDeUnidad,
   type Contexto, type CategoriaGasto,
 } from "../src";
 import { cargarPfx, generarCertificadoPrueba, SunatSimulado } from "@sunatapp/sunat";
@@ -34,7 +35,7 @@ let relojFecha = hoyReal;
 const ctx: Contexto = {
   db: db as Db,
   gateway: new SunatSimulado({ demoraMs: 0 }),
-  certificado: cargarPfx(generarCertificadoPrueba({ ruc: "20601234567", razonSocial: "TRANSPORTES ANDINOS SAC", password: "x" }), "x"),
+  certificado: cargarPfx(generarCertificadoPrueba({ ruc: "20601234565", razonSocial: "TRANSPORTES ANDINOS SAC", password: "x" }), "x"),
   almacen: crearAlmacenLocal(join(dir, "storage")),
   // El reloj avanza con los datos que se generan, para que las fechas sean coherentes.
   reloj: () => new Date(`${relojFecha}T17:00:00Z`),
@@ -44,7 +45,7 @@ const ctx: Contexto = {
 };
 
 await sembrarDatosIniciales(db as Db, {
-  empresa: { ruc: "20601234567", razonSocial: "TRANSPORTES ANDINOS SAC", nombreComercial: "ANDINOS", direccion: "AV. CIRCUNVALACIÓN 480, JULIACA", ubigeo: "211101", registroMtc: "1512345CNG", cuentaDetraccionBn: "00-101-123456" },
+  empresa: { ruc: "20601234565", razonSocial: "TRANSPORTES ANDINOS SAC", nombreComercial: "ANDINOS", direccion: "AV. CIRCUNVALACIÓN 480, JULIACA", ubigeo: "211101", registroMtc: "1512345CNG", cuentaDetraccionBn: "00-101-123456" },
   vehiculo: { placa: "F2F-848", marca: "VOLVO" },
   vehiculoSecundario: { placa: "V1X-971" },
   conductor: { numeroDoc: "45288569", nombres: "JUAN", apellidos: "QUISPE MAMANI", licencia: "Q45288569" },
@@ -68,6 +69,16 @@ const otras = [
   { placa: "E3R-760", placaCarreta: "V3F-559", marca: "FREIGHTLINER", modelo: "CASCADIA", anio: 2017, odometroKm: 455000, viajesBase: 171 },
 ];
 for (const o of otras) unidades.push((await crearUnidad(ctx, o)).id);
+
+// Costos fijos que se cargan solos cada mes (el SOAT es anual: 1/12 por mes).
+for (const [k, vid] of unidades.entries()) {
+  const codigo = `T-0${k + 1}`;
+  await crearCostoFijo(ctx, { concepto: `Sueldo chofer ${codigo}`, categoria: "sueldo_chofer", monto: 250000, periodicidad: "mensual", vehiculoId: vid, desde: inicio });
+  await crearCostoFijo(ctx, { concepto: `SOAT ${codigo}`, categoria: "soat", monto: 140000, periodicidad: "anual", vehiculoId: vid, desde: inicio });
+  await crearCostoFijo(ctx, { concepto: `GPS ${codigo}`, categoria: "gps", monto: 9000, periodicidad: "mensual", vehiculoId: vid, desde: inicio });
+}
+await crearCostoFijo(ctx, { concepto: "Contador", categoria: "contador", monto: 80000, periodicidad: "mensual", desde: inicio });
+await crearCostoFijo(ctx, { concepto: "Oficina y cochera Juliaca", categoria: "local", monto: 120000, periodicidad: "mensual", desde: inicio });
 
 const tipos = await listarTiposParte(ctx);
 // Inventario.
@@ -151,10 +162,41 @@ await instalarParte(ctx, {
   vehiculoId: t01.id, tipoParteId: frenos.id, fecha: sumarDias(hoyReal, -140), km: unidadT01.odometroKm - 46800,
   viajes: unidadT01.viajesTotales - 22, repuestoId: reps.frenos_sr, costo: 6 * 18000,
 });
-// Una unidad en ruta ahora mismo.
-const enRuta = await registrarViajeFlota(ctx, { vehiculoId: unidades[1]!, origenLugar: "Juliaca", destinoLugar: "Arequipa", toneladas: 30, estado: "en_curso", origen: "telegram" });
-void enRuta;
-void finalizarViajeFlota;
+// Viajes que nacen de su guía: la de ida crea el viaje, la de retorno se enlaza sola.
+const CHOFER = { numeroDoc: "45288569", nombres: "JUAN", apellidos: "QUISPE MAMANI", licencia: "Q45288569" };
+let refGuia = 5000;
+const guiaDemo = (placa: string, carreta: string, partida: string, llegada: string) => registrarGuiaBorrador(ctx, {
+  fechaTraslado: relojFecha,
+  remitente: { numeroDoc: "20131312955", razonSocial: "DISTRIBUIDORA DEL SUR SAC" },
+  destinatario: { numeroDoc: "20602712592", razonSocial: "COMERCIAL ANDINA SAC" },
+  partida: { direccion: "PARQUE INDUSTRIAL MZ A LT 4", ubigeo: partida },
+  llegada: { direccion: "AV. EJERCITO 1020", ubigeo: llegada },
+  pesoBruto: String(entre(26000, 31000)), unidadPeso: "KGM", greRemitenteRef: `EG01-${refGuia++}`,
+  items: [{ descripcion: "CAJAS DE CERAMICA", cantidad: String(entre(500, 700)), unidadMedida: "BX" }],
+  transporte: { rucTransportista: "20601234565", placaPrincipal: placa, placasSecundarias: [carreta], conductor: CHOFER },
+});
+const JULIACA = "211101", AREQUIPA = "040101", CUSCO = "080101";
+for (const [vid, placa, carreta, destino, flete] of [
+  [unidades[2]!, "B7M-515", "V5C-812", AREQUIPA, 780000], [unidades[3]!, "C9P-221", "V8D-104", CUSCO, 690000],
+] as const) {
+  relojFecha = sumarDias(hoyReal, -4);
+  await guiaDemo(placa, carreta, JULIACA, destino);
+  const km0 = (await obtenerUnidad(ctx, vid)).odometroKm;
+  await registrarGasto(ctx, { categoria: "combustible", monto: 138000, vehiculoId: vid, kmVehiculo: km0 + 40, nota: "Grifo Primax Juliaca", origen: "telegram" });
+  await registrarGasto(ctx, { categoria: "peaje", monto: 9600, vehiculoId: vid, origen: "telegram" });
+  await registrarGasto(ctx, { categoria: "viaticos", monto: 8500, vehiculoId: vid, origen: "telegram" });
+  relojFecha = sumarDias(hoyReal, -3);
+  await registrarGasto(ctx, { categoria: "estiba", monto: 12000, vehiculoId: vid, origen: "telegram" });
+  await guiaDemo(placa, carreta, destino, JULIACA);
+  await registrarGasto(ctx, { categoria: "combustible", monto: 126000, vehiculoId: vid, kmVehiculo: km0 + 640, nota: "Grifo Repsol", origen: "telegram" });
+  await registrarGasto(ctx, { categoria: "llantas_ruta", monto: 3500, vehiculoId: vid, nota: "Parche en ruta", origen: "telegram" });
+  relojFecha = sumarDias(hoyReal, -2);
+  const v = (await viajeEnCursoDeUnidad(ctx, vid))!;
+  await finalizarViajeFlota(ctx, { viajeId: v.id, odometroFin: km0 + 1290, flete });
+}
+// Una unidad en ruta ahora mismo: salió hoy con su guía.
+relojFecha = hoyReal;
+await guiaDemo("D4K-102", "V2A-330", JULIACA, AREQUIPA);
 
 // Finanzas.
 relojFecha = sumarDias(hoyReal, -200);
@@ -172,7 +214,7 @@ await registrarReinversion(ctx, { concepto: "Carreta nueva V3F-559", monto: 8500
 await registrarIngreso(ctx, { concepto: "Alquiler de cochera a tercero", monto: 60000, origen: "web" });
 
 const { guardarPresupuestoMensual } = await import("../src");
-await guardarPresupuestoMensual(ctx, { combustible: 3200000, peaje: 450000, viaticos: 300000, estiba: 150000, cochera: 60000, reparacion: 900000 });
+await guardarPresupuestoMensual(ctx, { combustible: 3200000, peaje: 450000, viaticos: 300000, estiba: 150000, cochera: 60000, reparacion_ruta: 900000 });
 
 // Eventos del bot (feed del Dashboard).
 relojFecha = hoyReal;
@@ -185,6 +227,10 @@ const eventos: Array<[string, string, number]> = [
   ["alerta", "T-01 · Frenos semirremolque al 92%. Quedan ≈ 2 viajes", t01.id],
 ];
 for (const [comando, texto, vehiculoId] of eventos) await registrarEvento(ctx, { comando, texto, vehiculoId, autor: "Juan Q." });
+
+// Los viajes de ejemplo anteriores a este punto no se marcan «sin guía» en Por revisar.
+await ctx.db.insert(ajuste).values({ clave: "viajes_sin_guia_desde", valor: new Date().toISOString() })
+  .onConflictDoUpdate({ target: ajuste.clave, set: { valor: new Date().toISOString() } });
 
 await cerrar();
 console.log(`Demo lista en ${dir}.\nArranca la web con:  DATA_DIR=${dir} STORAGE_DIR=${dir}/storage pnpm web\nEntra con demo@flota.pe / demo1234 (también contador@flota.pe y taller@flota.pe).`);

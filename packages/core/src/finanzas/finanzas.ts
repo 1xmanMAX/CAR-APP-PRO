@@ -1,13 +1,14 @@
 import {
   and, cobro, compraRepuesto, cuotaPrestamo, desc, eq, gasto, ingreso, isNull, prestamo, reinversion,
-  reparacion, sql, vehiculo, viaje, type CategoriaGasto, type OrigenRegistro,
+  reparacion, sql, vehiculo, viaje, type CategoriaGasto, type MedioPago, type OrigenRegistro,
 } from "@sunatapp/db";
 import { sumarDias } from "../dominio/fechas";
 import { ErrorNegocio } from "../errores";
 import { registrarAuditoria } from "../infra/auditoria";
 import type { Contexto } from "../infra/contexto";
-import { hoy } from "../flota/unidades";
+import { hoy, registrarLecturaOdometro } from "../flota/unidades";
 import { listarViajesFlota } from "../flota/viajes-flota";
+import { capturarContexto, type ContextoGasto } from "./captura";
 import { categoriaValida, nombreCategoria } from "./categorias";
 
 export { NOMBRE_CATEGORIA, categoriaDesdeTexto } from "./categorias";
@@ -42,38 +43,52 @@ export interface EntradaGasto {
   documentoId?: number | null;
   origen: OrigenRegistro;
   usuarioId?: number;
+  /** Si no se indica: efectivo del chofer con viaje en curso; transferencia sin viaje. */
+  medioPago?: MedioPago;
+  /** Km leído del voucher o dado por el chofer (real). Sin él se guarda el último conocido. */
+  kmVehiculo?: number | null;
+  guiaId?: number | null;
+  costoFijoId?: number | null;
+  cuotaId?: number | null;
+  periodo?: string | null;
 }
 
 /**
  * Registra un gasto. Con unidad y sin viaje, se asocia al viaje en curso de esa unidad; con viaje
  * y sin unidad, toma la unidad del viaje.
  */
-export async function registrarGasto(ctx: Contexto, e: EntradaGasto): Promise<{ id: number; viajeCodigo: string | null }> {
+export async function registrarGasto(
+  ctx: Contexto, e: EntradaGasto,
+): Promise<{ id: number; viajeCodigo: string | null; contexto: ContextoGasto; kmReal: boolean; avisoKm: string | null }> {
   if (!Number.isInteger(e.monto) || e.monto <= 0) throw new ErrorNegocio("El monto debe ser mayor que 0");
   if (e.monto > 5_000_000) throw new ErrorNegocio("El monto parece demasiado alto; revísalo");
-  await categoriaValida(ctx.db, e.categoria);
-  let vehiculoId = e.vehiculoId ?? null;
-  let viajeId = e.viajeId ?? null;
-  let viajeCodigo: string | null = null;
-  if (viajeId !== null) {
-    const [v] = await ctx.db.select({ vehiculoId: viaje.vehiculoId, codigo: viaje.codigo }).from(viaje).where(eq(viaje.id, viajeId));
-    if (!v) throw new ErrorNegocio("El viaje no existe");
-    vehiculoId ??= v.vehiculoId;
-    viajeCodigo = v.codigo;
-  } else if (vehiculoId !== null) {
-    const [v] = await ctx.db.select({ id: viaje.id, codigo: viaje.codigo }).from(viaje).where(and(eq(viaje.vehiculoId, vehiculoId), eq(viaje.estado, "en_curso")));
-    if (v) {
-      viajeId = v.id;
-      viajeCodigo = v.codigo;
+  const cat = await categoriaValida(ctx.db, e.categoria);
+  // Un fijo (SOAT, sueldo, cuota) es del mes, no del viaje en curso.
+  const c = await capturarContexto(ctx, { usuarioId: e.usuarioId, vehiculoId: e.vehiculoId, viajeId: e.viajeId, sinViaje: cat.tipo === "fijo" && !e.viajeId });
+  if (e.viajeId != null && c.viajeId === null) throw new ErrorNegocio("El viaje no existe");
+  let km = c.km, kmReal = false, avisoKm: string | null = null;
+  if (e.kmVehiculo != null && c.vehiculoId !== null) {
+    try {
+      if (e.kmVehiculo < (c.km ?? 0)) throw new ErrorNegocio(`el odómetro ya marca ${(c.km ?? 0).toLocaleString("en-US")} km`);
+      if (e.kmVehiculo > (c.km ?? 0)) {
+        await registrarLecturaOdometro(ctx, { vehiculoId: c.vehiculoId, km: e.kmVehiculo, origen: e.origen, usuarioId: e.usuarioId, viajeId: c.viajeId ?? undefined });
+      }
+      km = e.kmVehiculo;
+      kmReal = true;
+    } catch (error) {
+      if (!(error instanceof ErrorNegocio)) throw error;
+      avisoKm = `No usé ese km (${error.message}); quedó el último conocido.`;
     }
   }
   const [g] = await ctx.db.insert(gasto).values({
-    categoria: e.categoria, monto: e.monto, fecha: e.fecha ?? hoy(ctx), vehiculoId, viajeId, nota: e.nota ?? null,
+    categoria: e.categoria, monto: e.monto, fecha: e.fecha ?? hoy(ctx), vehiculoId: c.vehiculoId, viajeId: c.viajeId, nota: e.nota ?? null,
     proveedorNombre: e.proveedorNombre ?? null, proveedorRuc: e.proveedorRuc ?? null, comprobante: e.comprobante ?? null, rutaFoto: e.rutaFoto ?? null,
     documentoId: e.documentoId ?? null, origen: e.origen, usuarioId: e.usuarioId ?? null,
+    guiaId: e.guiaId ?? c.guiaId, medioPago: e.medioPago ?? c.medioPago, kmVehiculo: km, kmReal,
+    costoFijoId: e.costoFijoId ?? null, cuotaId: e.cuotaId ?? null, periodo: e.periodo ?? null,
   }).returning({ id: gasto.id });
-  await registrarAuditoria(ctx.db, { usuarioId: e.usuarioId, accion: "gasto_registrado", entidad: "gasto", entidadId: g!.id, detalle: { ...e, vehiculoId, viajeId } });
-  return { id: g!.id, viajeCodigo };
+  await registrarAuditoria(ctx.db, { usuarioId: e.usuarioId, accion: "gasto_registrado", entidad: "gasto", entidadId: g!.id, detalle: { ...e, contexto: c } });
+  return { id: g!.id, viajeCodigo: c.viajeCodigo, contexto: c, kmReal, avisoKm };
 }
 
 export async function borrarGasto(ctx: Contexto, id: number, usuarioId?: number): Promise<void> {

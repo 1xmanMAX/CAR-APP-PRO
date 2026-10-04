@@ -118,8 +118,8 @@ async function vista(c: C, d: Deps) {
       </div>
 
       <Panel titulo="HISTORIAL" der={
-        <form method="get" action="/reparaciones" class="linea">
-          <select name="h" aria-label="Filtrar por unidad" onchange="this.form.submit()"><option value="">TODAS LAS UNIDADES</option>{unidades.map((u) => <option value={u.id} selected={u.id === filtroHist}>{u.codigo}</option>)}</select>
+        <form method="get" action="/reparaciones" class="linea" data-auto="">
+          <select name="h" aria-label="Filtrar por unidad"><option value="">TODAS LAS UNIDADES</option>{unidades.map((u) => <option value={u.id} selected={u.id === filtroHist}>{u.codigo}</option>)}</select>
           <noscript><button class="btn chico">VER</button></noscript>
         </form>
       }>

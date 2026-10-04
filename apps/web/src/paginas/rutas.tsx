@@ -70,7 +70,7 @@ async function vista(c: C, d: Deps) {
         );
       })}
       {edita ? (
-        <Panel titulo="+ NUEVA RUTA">
+        <Panel titulo="+ NUEVA RUTA" id="nueva-ruta" plegable>
           <form method="post" action="/rutas" class="filas">
             <div class="linea">
               <label class="campo" style="flex:1"><span>Origen *</span><input name="origen" required placeholder="Juliaca" /></label>

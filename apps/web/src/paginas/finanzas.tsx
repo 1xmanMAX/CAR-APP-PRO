@@ -65,8 +65,8 @@ async function vista(c: C, d: Deps) {
           </Panel>
           <Panel titulo="MOVIMIENTOS · GASTOS, INGRESOS, REINVERSIONES" der={
             <>
-              <form method="get" action="/finanzas" class="linea"><input type="month" name="mes" value={mes} aria-label="Mes" style="width:auto" /><button class="btn chico">VER</button></form>
-              {edita ? <><a class="btn chico" href="#nuevo">+ REINVERSIÓN</a><a class="btn primario chico" href="#nuevo">+ GASTO</a></> : null}
+              <form method="get" action="/finanzas" class="linea" data-auto=""><input type="month" name="mes" value={mes} aria-label="Mes" style="width:auto" /><button class="btn chico" type="submit">VER</button></form>
+              {edita ? <><a class="btn chico" href="#nueva-reinversion">+ REINVERSIÓN</a><a class="btn primario chico" href="#nuevo-gasto">+ GASTO</a></> : null}
             </>
           }>
             <div class="tabla-wrap">
@@ -99,29 +99,29 @@ async function vista(c: C, d: Deps) {
 
           {edita ? (
             <div class="grid g-3" id="nuevo">
-              <form method="post" action="/finanzas/gasto" class="panel" enctype="multipart/form-data">
-                <b class="lbl-12">+ GASTO</b>
+              <form method="post" action="/finanzas/gasto" class="panel" enctype="multipart/form-data" id="nuevo-gasto" data-plegable="">
+                <div class="panel-cab"><h2>+ GASTO</h2></div>
                 <label class="campo"><span>Categoría</span><select name="categoria">{CATEGORIAS_GASTO.map((k) => <option value={k}>{NOMBRE_CATEGORIA[k]}</option>)}</select></label>
-                <label class="campo"><span>Monto S/</span><input name="monto" inputmode="decimal" required /></label>
+                <label class="campo"><span>Monto S/</span><input name="monto" inputmode="decimal" enterkeyhint="next" autocomplete="off" required placeholder="0.00" /></label>
                 <SelUnidad />
                 <label class="campo"><span>Fecha</span><input type="date" name="fecha" value={h} /></label>
                 <label class="campo"><span>Detalle</span><input name="nota" /></label>
                 <label class="campo"><span>Foto del voucher</span><input type="file" name="foto" accept="image/*,application/pdf" /></label>
                 <button class="btn primario" type="submit">GUARDAR GASTO</button>
               </form>
-              <form method="post" action="/finanzas/ingreso" class="panel">
-                <b class="lbl-12">+ OTRO INGRESO</b>
+              <form method="post" action="/finanzas/ingreso" class="panel" id="nuevo-ingreso" data-plegable="">
+                <div class="panel-cab"><h2>+ OTRO INGRESO</h2></div>
                 <span class="muted" style="font-size:11px">Los fletes entran solos desde Viajes.</span>
                 <label class="campo"><span>Concepto</span><input name="concepto" required /></label>
-                <label class="campo"><span>Monto S/</span><input name="monto" inputmode="decimal" required /></label>
+                <label class="campo"><span>Monto S/</span><input name="monto" inputmode="decimal" enterkeyhint="next" autocomplete="off" required placeholder="0.00" /></label>
                 <SelUnidad />
                 <label class="campo"><span>Fecha</span><input type="date" name="fecha" value={h} /></label>
                 <button class="btn" type="submit">GUARDAR INGRESO</button>
               </form>
-              <form method="post" action="/finanzas/reinversion" class="panel">
-                <b class="lbl-12">+ REINVERSIÓN</b>
+              <form method="post" action="/finanzas/reinversion" class="panel" id="nueva-reinversion" data-plegable="">
+                <div class="panel-cab"><h2>+ REINVERSIÓN</h2></div>
                 <label class="campo"><span>Concepto</span><input name="concepto" required placeholder="Compra de carreta, GPS, …" /></label>
-                <label class="campo"><span>Monto S/</span><input name="monto" inputmode="decimal" required /></label>
+                <label class="campo"><span>Monto S/</span><input name="monto" inputmode="decimal" enterkeyhint="next" autocomplete="off" required placeholder="0.00" /></label>
                 <SelUnidad />
                 <label class="campo"><span>Fecha</span><input type="date" name="fecha" value={h} /></label>
                 <button class="btn" type="submit">GUARDAR REINVERSIÓN</button>
@@ -131,7 +131,7 @@ async function vista(c: C, d: Deps) {
         </div>
 
         <div class="filas" style="gap:10px">
-          <Panel titulo="PRÉSTAMOS · CUOTAS">
+          <Panel titulo="PRÉSTAMOS · CUOTAS" id="prestamos">
             {prestamos.length === 0 ? <Vacio>Sin préstamos activos.</Vacio> : prestamos.map((p) => (
               <div class="filas" style="border-bottom:1px solid var(--divider);padding-bottom:10px">
                 <div style="display:flex;justify-content:space-between"><b>{p.entidad}</b><span class="muted">TASA {p.tasaAnual}%</span></div>
@@ -150,7 +150,7 @@ async function vista(c: C, d: Deps) {
                 <form method="post" action="/finanzas/prestamo" class="filas" style="margin-top:8px">
                   <label class="campo"><span>Entidad</span><input name="entidad" required placeholder="Banco / financiera" /></label>
                   <div class="form-grid">
-                    <label class="campo"><span>Monto S/</span><input name="monto" inputmode="decimal" required /></label>
+                    <label class="campo"><span>Monto S/</span><input name="monto" inputmode="decimal" enterkeyhint="next" autocomplete="off" required placeholder="0.00" /></label>
                     <label class="campo"><span>TEA %</span><input name="tasa" inputmode="decimal" required /></label>
                     <label class="campo"><span>Cuotas</span><input name="cuotas" inputmode="numeric" required /></label>
                     <label class="campo"><span>Desembolso</span><input type="date" name="fecha" value={h} /></label>

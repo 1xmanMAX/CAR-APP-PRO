@@ -2,7 +2,7 @@
 import type { FC } from "hono/jsx";
 import {
   deudaPrestamos, estadoBot, gastosPorCategoria, hoy, listarEventos, listarRepuestos, listarViajesFlota, rangoMes, resumenFinanciero,
-  resumirInventario, saludFlota, sumarDias, type Contexto, contarPorRevisar, puedeVer,
+  resumirInventario, saludFlota, sumarDias, type Contexto, contarPorRevisar, puedeVer, puedeEditar, listarPrestamos,
 } from "@sunatapp/core";
 import { pagina, type App, type C, type Deps } from "../base";
 import { Barra, CHIP_UNIDAD, ESTADO_UNIDAD, Kpi, Panel, soles, Vacio } from "../ui";
@@ -39,7 +39,8 @@ async function vista(c: C, d: Deps) {
   const porRevisar = puedeVer(c.get("usuario").rol, "viajes") ? await contarPorRevisar(ctx) : 0;
   const h = hoy(ctx);
   const { desde, hasta } = rangoMes(h);
-  const [fin, repuestos, deuda, salud, eventos, bot, gastosCat, viajes30] = await Promise.all([
+  const rol = c.get("usuario").rol;
+  const [fin, repuestos, deuda, salud, eventos, bot, gastosCat, viajes30, prestamos] = await Promise.all([
     resumenFinanciero(ctx, desde, hasta),
     listarRepuestos(ctx),
     deudaPrestamos(ctx),
@@ -48,17 +49,42 @@ async function vista(c: C, d: Deps) {
     estadoBot(ctx),
     gastosPorCategoria(ctx, desde, hasta),
     listarViajesFlota(ctx, { desde: sumarDias(h, -29), hasta: h, limite: 2000 }),
+    puedeVer(rol, "finanzas") ? listarPrestamos(ctx) : Promise.resolve([]),
   ]);
   const inv = resumirInventario(repuestos);
   const todas = salud.flatMap((s) => s.partes.map((p) => ({ ...p, unidad: s.unidad.codigo })));
   const proximos = todas.filter((p) => p.pct >= 50).slice(0, 9);
   const maxGasto = Math.max(1, ...gastosCat.map((g) => g.monto));
   const maxKm = Math.max(1, ...viajes30.map((v) => v.km ?? 0));
+  // «Atención hoy»: solo lo que pide hacer algo, lo más urgente primero (máx. 5, una pantalla).
+  const porCambiar = todas.filter((p) => p.estado === "cambiar");
+  const porVenir = todas.filter((p) => p.estado === "proximo");
+  const enRuta = salud.filter((s) => s.unidad.estado === "en_ruta");
+  const cuota = prestamos.flatMap((p) => (p.proxima ? [{ ...p.proxima, entidad: p.entidad }] : [])).sort((a, b) => a.vencimiento.localeCompare(b.vencimiento))[0];
+  const diasCuota = cuota ? Math.round((Date.parse(`${cuota.vencimiento}T00:00:00Z`) - Date.parse(`${h}T00:00:00Z`)) / 86_400_000) : null;
+  const atencion: Array<{ n: number | string; texto: string; href: string; nivel: "cambiar" | "proximo" | "ok" }> = [
+    ...(porCambiar.length ? [{ n: porCambiar.length, texto: `${porCambiar.length === 1 ? "parte por cambiar ya" : "partes por cambiar ya"} · ${[...new Set(porCambiar.map((p) => p.unidad))].join(", ")}`, href: `/trailer/${porCambiar[0]!.vehiculoId}?parte=${porCambiar[0]!.id}`, nivel: "cambiar" as const }] : []),
+    ...(porRevisar ? [{ n: porRevisar, texto: "por revisar · mensajes del bot sin confirmar", href: "/revisar", nivel: "proximo" as const }] : []),
+    ...(cuota && diasCuota !== null && diasCuota <= 7 ? [{ n: soles(cuota.monto), texto: `cuota ${cuota.entidad} · ${diasCuota < 0 ? `vencida hace ${-diasCuota} d` : diasCuota === 0 ? "vence hoy" : `vence en ${diasCuota} d`}`, href: "/finanzas#prestamos", nivel: (diasCuota <= 2 ? "cambiar" : "proximo") as "cambiar" | "proximo" }] : []),
+    ...(porVenir.length ? [{ n: porVenir.length, texto: porVenir.length === 1 ? "parte próxima a cambiar (70 %+)" : "partes próximas a cambiar (70 %+)", href: "#proximos", nivel: "proximo" as const }] : []),
+    ...(enRuta.length ? [{ n: enRuta.length, texto: `en ruta ahora · ${enRuta.map((s) => s.unidad.codigo).join(", ")}`, href: "/viajes", nivel: "ok" as const }] : []),
+  ].slice(0, 5);
   const diaIdx = (f: string) => 29 - Math.round((Date.parse(`${h}T00:00:00Z`) - Date.parse(`${f}T00:00:00Z`)) / 86_400_000);
 
-  return pagina(c, d, { titulo: "Dashboard", seccion: "dashboard" }, (
+  return pagina(c, d, { titulo: "Inicio", seccion: "dashboard" }, (
     <>
-      {porRevisar > 0 ? <a class="aviso info" href="/revisar" style="display:block;text-decoration:none">🔎 <b>{porRevisar} por revisar</b>: mensajes de Telegram sin confirmar o gastos sin viaje. Revisar →</a> : null}
+      <Panel titulo="ATENCIÓN HOY" der={<span class="lbl">{atencion.length ? "TOCA PARA RESOLVER" : ""}</span>}>
+        {atencion.length === 0 ? <Vacio>Todo en orden: nada urgente hoy. 👌</Vacio> : (
+          <div class="atencion">
+            {atencion.map((x) => <a class={x.nivel} href={x.href}><b class={typeof x.n === "string" ? "largo" : ""}>{x.n}</b><span>{x.texto}</span><span class="ir" aria-hidden="true">›</span></a>)}
+          </div>
+        )}
+        <div class="atajos">
+          {puedeEditar(rol, "finanzas") ? <a class="btn primario" href="/finanzas#nuevo-gasto">+ Gasto</a> : null}
+          {puedeEditar(rol, "viajes") ? <a class="btn" href="/viajes#nuevo-viaje">+ Viaje</a> : null}
+          {puedeEditar(rol, "reparaciones") ? <a class="btn" href="/reparaciones#registrar">Registrar cambio</a> : null}
+        </div>
+      </Panel>
       <section class="kpis" aria-label="Resumen del mes">
         <Kpi oscuro etiqueta="GANANCIA NETA · MES" valor={soles(fin.ganancia)} sub={fin.margenPct !== null ? `margen ${fin.margenPct}%` : undefined} />
         <Kpi etiqueta="INGRESOS · FLETES" valor={soles(fin.ingresos)} sub={`${fin.viajes} viajes · ${fin.km.toLocaleString("en-US")} km`} />
@@ -87,10 +113,10 @@ async function vista(c: C, d: Deps) {
               ))}
             </div>
           )}
-          <span class="lbl">CADA CUADRO = UNA PARTE · AZUL OK · ÁMBAR PRÓXIMO · MAGENTA CAMBIAR</span>
+          <span class="lbl">CADA CUADRO = UNA PARTE · LISO = OK · CON PUNTOS = PRÓXIMO · CON RAYAS = CAMBIAR</span>
         </Panel>
 
-        <Panel titulo="PRÓXIMOS CAMBIOS · ANTES DE QUE FALLEN">
+        <Panel titulo="PRÓXIMOS CAMBIOS · ANTES DE QUE FALLEN" id="proximos">
           {proximos.length === 0 ? <Vacio>Ninguna parte pasa del 50%. 👌</Vacio> : (
             <div class="filas">
               {proximos.map((p) => (

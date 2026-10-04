@@ -49,7 +49,7 @@ async function vista(c: C, d: Deps) {
     <>
       <section class="panel" style="flex-direction:row;align-items:center;flex-wrap:wrap;gap:10px">
         <b class="mono-t" style="font-size:16px">ESTADÍSTICAS</b>
-        <form method="get" action="/estadisticas" class="linea" style="margin-left:auto">
+        <form method="get" action="/estadisticas" class="linea" style="margin-left:auto" data-auto="">
           <input type="date" name="desde" value={desde} aria-label="Desde" style="width:auto" />
           <input type="date" name="hasta" value={hasta} aria-label="Hasta" style="width:auto" />
           <button class="btn chico" type="submit">VER</button>
@@ -79,7 +79,7 @@ async function vista(c: C, d: Deps) {
       </div>
       <Panel titulo="POR RUTA · PROMEDIO POR VIAJE" der={<span class="lbl">DESVÍO = GASTO PROMEDIO CONTRA LA PLANTILLA DE LA RUTA</span>}>
         {e.porRuta.length === 0 ? <Vacio>Sin viajes cerrados en el periodo.</Vacio> : (
-          <div class="tabla-wrap"><table class="t">
+          <div class="tabla-wrap" data-sin-tarjetas=""><table class="t">
             <thead><tr><th>Ruta</th><th class="num">Viajes</th><th class="num">Flete prom.</th><th class="num">Gasto prom.</th><th class="num">Ganancia prom.</th><th class="num">Plantilla</th><th class="num">Desvío</th></tr></thead>
             <tbody>{e.porRuta.map((r) => (
               <tr><td><b>{r.ruta}</b></td><td class="num">{r.viajes}</td><td class="num">{soles(r.flete)}</td><td class="num">{soles(r.gasto)}</td>
@@ -92,13 +92,13 @@ async function vista(c: C, d: Deps) {
       <div class="grid g-2">
         <Panel titulo="COMBUSTIBLE POR VIAJE">
           {e.combustiblePorViaje.length === 0 ? <Vacio>Sin datos.</Vacio> : (
-            <div class="tabla-wrap"><table class="t"><thead><tr><th>Viaje</th><th>Ruta</th><th class="num">Km</th><th class="num">Combustible</th><th class="num">S/ por km</th></tr></thead>
+            <div class="tabla-wrap" data-sin-tarjetas=""><table class="t"><thead><tr><th>Viaje</th><th>Ruta</th><th class="num">Km</th><th class="num">Combustible</th><th class="num">S/ por km</th></tr></thead>
               <tbody>{e.combustiblePorViaje.map((x) => <tr><td>{x.codigo}</td><td>{x.ruta}</td><td class="num">{x.km ?? "—"}</td><td class="num">{soles2(x.monto)}</td><td class="num">{x.solesPorKm === null ? "—" : x.solesPorKm.toFixed(2)}</td></tr>)}</tbody></table></div>
           )}
         </Panel>
         <Panel titulo="GASTO POR PROVEEDOR">
           {e.porProveedor.length === 0 ? <Vacio>Los gastos leídos de boletas traen el proveedor.</Vacio> : (
-            <div class="tabla-wrap"><table class="t"><tbody>{e.porProveedor.map((x) => <tr><td>{x.proveedor}</td><td class="num">{x.veces}</td><td class="num">{soles2(x.monto)}</td></tr>)}</tbody></table></div>
+            <div class="tabla-wrap" data-sin-tarjetas=""><table class="t"><tbody>{e.porProveedor.map((x) => <tr><td>{x.proveedor}</td><td class="num">{x.veces}</td><td class="num">{soles2(x.monto)}</td></tr>)}</tbody></table></div>
           )}
         </Panel>
       </div>

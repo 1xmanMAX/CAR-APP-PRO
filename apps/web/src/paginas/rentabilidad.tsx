@@ -69,7 +69,7 @@ async function vista(c: C, d: Deps) {
               <label class="campo"><span>Desgaste S/ por km {params.desgasteAuto !== null ? <em style="text-transform:none">(auto {params.desgasteAuto})</em> : null}</span><input name="desgaste" id="c-desgaste" inputmode="decimal" value={desgaste} /></label>
               <label class="campo"><span>Margen deseado %</span><input name="margen" id="c-margen" inputmode="decimal" value={params.margenPct} /></label>
             </div>
-            <div class="tabla-wrap"><table class="t"><tbody id="c-desglose">
+            <div class="tabla-wrap" data-sin-tarjetas=""><table class="t"><tbody id="c-desglose">
               <tr><td>Combustible</td><td class="num" data-k="combustible">—</td></tr>
               <tr><td>Peajes</td><td class="num" data-k="peajes">—</td></tr>
               <tr><td>Viáticos</td><td class="num" data-k="viaticos">—</td></tr>
@@ -87,7 +87,7 @@ async function vista(c: C, d: Deps) {
             </div>
           </form>
           {cotizaciones.length ? (
-            <div class="tabla-wrap"><table class="t">
+            <div class="tabla-wrap" data-sin-tarjetas=""><table class="t">
               <thead><tr><th>Presupuestos</th><th class="num">Km</th><th class="num">Flete</th><th></th></tr></thead>
               <tbody>{cotizaciones.map((q) => (
                 <tr><td>P-{String(q.id).padStart(4, "0")} · {q.ruta} <span class="muted">{fechaCorta(q.creadoEn.toISOString().slice(0, 10))}</span></td><td class="num">{q.km}</td><td class="num">{soles2(q.flete)}</td><td><a href={`/cotizacion/${q.id}.pdf`}>PDF</a>{q.enviadaTelegram ? " · ✈" : ""}</td></tr>
@@ -98,7 +98,7 @@ async function vista(c: C, d: Deps) {
 
         <div class="filas" style="gap:10px;min-width:0">
           <Panel titulo="RENTABILIDAD · POR TRAILER, ESTE MES">
-            <div class="tabla-wrap"><table class="t">
+            <div class="tabla-wrap" data-sin-tarjetas=""><table class="t">
               <thead><tr><th>Unidad</th><th class="num">Viajes</th><th class="num">Ingresos</th><th class="num">Costos</th><th class="num">S/ por km</th><th style="width:30%">Margen</th></tr></thead>
               <tbody>{rent.length === 0 ? <tr><td colspan={6}><Vacio>Sin unidades.</Vacio></td></tr> : rent.map((r) => (
                 <tr>

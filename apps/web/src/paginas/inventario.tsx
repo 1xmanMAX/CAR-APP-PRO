@@ -13,12 +13,16 @@ function vidaTexto(v: { km: number | null; viajes: number | null; dias: number |
   return partes.length ? partes.join(" · ") : v.dias ? `${v.dias} días` : "—";
 }
 
-/** Lista de piezas del modelo 3D para elegir varias (en el celular sale como lista con casillas). */
-function SelectPiezas(p: { elegidas?: string[] }) {
+/**
+ * Lista de piezas del modelo 3D para elegir varias (en el celular sale como lista con casillas).
+ * `diferida`: trae solo las ya elegidas y la lista completa (200 piezas) se copia de una plantilla
+ * única al abrirla: la página pesa ~10 veces menos con muchos repuestos.
+ */
+function SelectPiezas(p: { elegidas?: string[]; diferida?: boolean }) {
   const el = new Set(p.elegidas ?? []);
   return (
-    <select name="piezas" multiple size={8} aria-label="Piezas del modelo 3D donde va">
-      <OpcionesPiezas elegidas={el} />
+    <select name="piezas" multiple size={8} aria-label="Piezas del modelo 3D donde va" data-opciones={p.diferida ? "tpl-piezas" : undefined}>
+      {p.diferida ? [...el].map((id) => <option value={id} selected>{nombrePieza(id) ?? id}</option>) : <OpcionesPiezas elegidas={el} />}
     </select>
   );
 }
@@ -49,6 +53,7 @@ async function vista(c: C, d: Deps) {
 
   return pagina(c, d, { titulo: "Inventario", seccion: "inventario" }, (
     <>
+      {edita ? <template id="tpl-piezas"><OpcionesPiezas /></template> : null}
       <section class="kpis">
         <Kpi oscuro etiqueta="INVERSIÓN TOTAL EN REPUESTOS" valor={soles(resumen.inversionTotal)} />
         <Kpi etiqueta="EN ALMACÉN" valor={soles(resumen.enAlmacen)} />
@@ -57,7 +62,7 @@ async function vista(c: C, d: Deps) {
       </section>
       <div class="grid g-lado">
         <Panel titulo="REPUESTOS">
-          <form method="get" action="/inventario" class="linea">
+          <form method="get" action="/inventario" class="linea" data-auto="">
             <label class="campo" style="flex:2;min-width:160px"><span class="sr-only">Buscar</span><input type="search" name="q" value={q} placeholder=">_ buscar código, repuesto o proveedor" /></label>
             <label class="campo" style="flex:1;min-width:140px"><span class="sr-only">Categoría</span>
               <select name="cat"><option value="">TODAS LAS CATEGORÍAS</option>{categorias.map((x) => <option value={x} selected={x === cat}>{x}</option>)}</select>
@@ -89,7 +94,7 @@ async function vista(c: C, d: Deps) {
                       {edita ? (
                         <details class="plegable"><summary><span class="lbl-12" style="text-decoration:underline;cursor:pointer">{r.piezasElegidas ? "cambiar" : "elegir piezas"}</span></summary>
                           <form method="post" action={`/inventario/repuesto/${r.id}/piezas`} class="filas" style="margin-top:6px;min-width:240px">
-                            <SelectPiezas elegidas={r.piezasElegidas ? r.piezas : []} />
+                            <SelectPiezas elegidas={r.piezasElegidas ? r.piezas : []} diferida />
                             <span class="muted" style="font-size:11px">Sin elegir ninguna, va donde va su tipo de parte.</span>
                             <button class="btn chico primario" type="submit">GUARDAR</button>
                           </form>

@@ -253,6 +253,14 @@ if (buscador) {
     if (e.key === "Enter" && buscador.dataset.primera) { e.preventDefault(); elegirPieza(buscador.dataset.primera); }
   });
 }
+// Búsquedas frecuentes (llantas, frenos…): un toque en vez de escribir.
+for (const b of document.querySelectorAll("[data-buscar]")) {
+  b.addEventListener("click", () => {
+    if (!buscador) return;
+    buscador.value = buscador.value === b.dataset.buscar ? "" : b.dataset.buscar;
+    buscador.dispatchEvent(new Event("input"));
+  });
+}
 for (const a of document.querySelectorAll(".lista-piezas a[data-pieza]")) {
   a.addEventListener("click", (e) => {
     e.preventDefault();

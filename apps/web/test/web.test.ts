@@ -69,6 +69,28 @@ describe("web", () => {
       }
     });
 
+    it("en el celular: barra inferior con 4 secciones + Más, formularios plegables y listas diferidas", async () => {
+      const cookie = await entrar();
+      const inicio = await (await app.request("/", { headers: { cookie } })).text();
+      const barra = /<nav class="tabbar"[\s\S]*?<\/nav>/.exec(inicio)![0];
+      expect([...barra.matchAll(/<span>([^<]+)<\/span>/g)].map((m) => m[1])).toEqual(["Inicio", "Viajes", "Gastos", "Trailer 3D", "Más"]);
+      expect(barra).toContain('href="/ajustes"'); // lo demás queda en «Más»
+      expect(inicio).toContain('<span class="titulo-movil">Inicio</span>');
+      expect(inicio).toContain("ATENCIÓN HOY");
+      const viajes = await (await app.request("/viajes", { headers: { cookie } })).text();
+      expect(viajes).toMatch(/id="nuevo-viaje" data-plegable=""/);
+      expect(viajes).toMatch(/<form method="get" action="\/viajes" class="linea" data-auto="">/);
+      const finanzas = await (await app.request("/finanzas", { headers: { cookie } })).text();
+      expect(finanzas).toContain('href="#nuevo-gasto"');
+      expect(finanzas).toMatch(/id="nuevo-gasto" data-plegable=""/);
+      // Inventario: la lista de 200 piezas va una sola vez (plantilla), no una por repuesto.
+      await post(cookie, "/inventario/repuesto", { nombre: "Pastillas", categoria: "Frenos" });
+      await post(cookie, "/inventario/repuesto", { nombre: "Filtro", categoria: "Filtros" });
+      const inv = await (await app.request("/inventario", { headers: { cookie } })).text();
+      expect((inv.match(/value="bolsa-aire-sr1-izq"/g) ?? []).length).toBe(2); // la plantilla y el formulario de repuesto nuevo
+      expect(inv).toContain('data-opciones="tpl-piezas"');
+    });
+
     it("cada pieza del modelo 3D guarda su historial y se ve resaltada", async () => {
       const cookie = await entrar();
       // Un incidente sin costo en una pieza concreta.
@@ -135,7 +157,8 @@ describe("web", () => {
       let html = await (await app.request("/revisar", { headers: { cookie } })).text();
       expect(html).toContain("NO SE PUDO LEER");
       expect(html).toMatch(new RegExp(`<audio controls[^>]*src="/archivo/documento/${m.id}"`));
-      expect(await (await app.request("/", { headers: { cookie } })).text()).toContain("1 por revisar");
+      // En «Atención hoy» del inicio, con su enlace para resolverlo.
+      expect(await (await app.request("/", { headers: { cookie } })).text()).toMatch(/<a class="proximo" href="\/revisar"><b class="">1<\/b><span>por revisar/);
       const r = await post(cookie, `/revisar/${m.id}`, { tipo: "gasto", categoria: "peaje", monto: "28.50", vehiculoId: "1" });
       expect(aviso(r)).toContain("ok=Gasto guardado");
       html = await (await app.request("/revisar", { headers: { cookie } })).text();

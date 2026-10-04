@@ -48,7 +48,7 @@ async function vista(c: C, d: Deps) {
         <div class="filas" style="gap:10px;min-width:0">
           <Panel titulo="VIAJES · CADA VIAJE SUMA KM Y 1 VIAJE A LAS PARTES DE SU UNIDAD" der={
             <>
-              <form method="get" action="/viajes" class="linea">
+              <form method="get" action="/viajes" class="linea" data-auto="">
                 <input type="month" name="mes" value={mes} aria-label="Mes" style="width:auto" />
                 <select name="unidad" aria-label="Unidad" style="width:auto"><option value="">TODAS</option>{unidades.map((u) => <option value={u.id} selected={u.id === unidadId}>{u.codigo}</option>)}</select>
                 <button class="btn chico" type="submit">VER</button>
@@ -83,7 +83,7 @@ async function vista(c: C, d: Deps) {
 
           {edita ? (
             <div class="grid g-2">
-              <Panel titulo="+ REGISTRAR VIAJE" id="nuevo-viaje">
+              <Panel titulo="+ REGISTRAR VIAJE" id="nuevo-viaje" plegable>
                 <form method="post" action="/viajes" class="filas">
                   <div class="form-grid">
                     <label class="campo"><span>Unidad</span><select name="vehiculoId">{unidades.map((u) => <option value={u.id}>{u.codigo} · {u.placa}</option>)}</select></label>
@@ -104,7 +104,7 @@ async function vista(c: C, d: Deps) {
                   <button class="btn primario" type="submit">REGISTRAR VIAJE</button>
                 </form>
               </Panel>
-              <Panel titulo="CERRAR VIAJE EN CURSO">
+              <Panel titulo="CERRAR VIAJE EN CURSO" id="cerrar-viaje" plegable>
                 {enCurso.length === 0 ? <Vacio>No hay viajes en curso.</Vacio> : (
                   <form method="post" action="/viajes/fin" class="filas">
                     <label class="campo"><span>Viaje</span><select name="viajeId">{enCurso.map((v) => <option value={v.id}>{v.unidad} · {v.codigo} · {v.ruta}</option>)}</select></label>

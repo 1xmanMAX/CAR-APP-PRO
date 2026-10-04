@@ -189,6 +189,9 @@ async function vista(c: C, d: Deps) {
                 <OpcionesPiezas piezas={PIEZAS} elegidas={piezaSel ? [piezaSel.id] : []} marca={conHistorial} />
               </select>
             </label>
+            <div class="frecuentes" aria-label="Búsquedas frecuentes">
+              {["Llanta", "Frenos", "Bolsa de aire", "Amortiguador", "Luces", "Batería", "Filtro"].map((t) => <button type="button" class="btn chico fantasma" data-buscar={t}>{t}</button>)}
+            </div>
             <span id="buscar-resultado" class="muted" style="font-size:11px" aria-live="polite"></span>
             <div id="pieza-detalle" class="filas" hidden={!piezaSel}>
               <div>

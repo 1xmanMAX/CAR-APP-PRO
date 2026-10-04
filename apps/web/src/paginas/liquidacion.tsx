@@ -10,7 +10,7 @@ import { enteroONull } from "./flota";
 import { CamposPlantilla, plantillaDeFormulario } from "./rutas";
 
 const ESTADO_SEMAFORO: Record<Semaforo, "ok" | "proximo" | "cambiar"> = { ok: "ok", alerta: "proximo", excedido: "cambiar" };
-const TEXTO_SEMAFORO: Record<Semaforo, string> = { ok: "DENTRO", alerta: "AL LÍMITE", excedido: "EXCEDIDO" };
+const TEXTO_SEMAFORO: Record<Semaforo, string> = { ok: "● DENTRO", alerta: "▲ AL LÍMITE", excedido: "■ EXCEDIDO" };
 
 function textoSaldo(l: LiquidacionViaje): string {
   if (l.saldo > 0) return `El chofer tiene ${soles2(l.saldo)} por rendir o devolver`;

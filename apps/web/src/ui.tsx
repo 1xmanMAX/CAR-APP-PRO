@@ -35,23 +35,46 @@ export function fechaMedia(f: string | null | undefined): string {
 export const nombreMes = (mes: string) => `${MESES[Number(mes.slice(5, 7)) - 1]} ${mes.slice(2, 4)}`;
 export const pct = (n: number | null | undefined) => (n === null || n === undefined ? "—" : `${n}%`);
 
-export const ETIQUETA_ESTADO: Record<EstadoDesgaste, string> = { ok: "OK", proximo: "PRÓXIMO", cambiar: "CAMBIAR YA" };
+/** Estado con símbolo además del color (● ▲ ■): se distingue sin ver colores (WCAG 1.4.1). */
+export const ETIQUETA_ESTADO: Record<EstadoDesgaste, string> = { ok: "● OK", proximo: "▲ PRÓXIMO", cambiar: "■ CAMBIAR YA" };
 export const ESTADO_UNIDAD: Record<string, string> = { en_ruta: "EN RUTA", en_base: "EN BASE", en_taller: "EN TALLER", inactivo: "INACTIVO" };
 export const CHIP_UNIDAD: Record<string, string> = { en_ruta: "ok", en_base: "neutro", en_taller: "proximo", inactivo: "neutro" };
 
 // ── Navegación ───────────────────────────────────────────────────────────────
 
-export const NAV: Array<{ n: string; etiqueta: string; href: string; seccion: Seccion }> = [
-  { n: "01", etiqueta: "DASHBOARD", href: "/", seccion: "dashboard" },
-  { n: "02", etiqueta: "TRAILER 3D", href: "/trailer", seccion: "trailer" },
-  { n: "03", etiqueta: "FLOTA", href: "/flota", seccion: "flota" },
-  { n: "04", etiqueta: "INVENTARIO", href: "/inventario", seccion: "inventario" },
-  { n: "05", etiqueta: "REPARACIONES", href: "/reparaciones", seccion: "reparaciones" },
-  { n: "06", etiqueta: "VIAJES", href: "/viajes", seccion: "viajes" },
-  { n: "07", etiqueta: "FINANZAS", href: "/finanzas", seccion: "finanzas" },
-  { n: "08", etiqueta: "RENTABILIDAD", href: "/rentabilidad", seccion: "rentabilidad" },
-  { n: "09", etiqueta: "TELEGRAM", href: "/telegram", seccion: "telegram" },
-  { n: "10", etiqueta: "SINCRONIZAR", href: "/sincronizar", seccion: "sincronizar" },
+/** Íconos de línea (24×24) para la barra inferior y el menú «Más»: siempre con su texto al lado. */
+const ICONOS: Record<string, string> = {
+  inicio: "M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z",
+  viajes: "M4 19c3-6 6-2 8-7s5-6 8-7M4 19h0M20 5h0M4 17a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM20 3a2 2 0 1 0 0 4 2 2 0 0 0 0-4z",
+  finanzas: "M3 7h18v12H3zM3 11h18M7 15h3",
+  trailer: "M2 7h11v9H2zM13 10h4l4 3v3h-8zM6 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM17 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4z",
+  flota: "M3 6h18M3 12h18M3 18h18",
+  inventario: "M4 7l8-4 8 4v10l-8 4-8-4zM4 7l8 4 8-4M12 11v10",
+  reparaciones: "M14 6a4 4 0 0 0-5 5l-6 6 3 3 6-6a4 4 0 0 0 5-5l-2 2-3-3z",
+  rentabilidad: "M4 20V10M10 20V4M16 20v-7M22 20H2",
+  telegram: "M21 4L3 11l6 2 2 6 3-4 5 4z",
+  sincronizar: "M4 12a8 8 0 0 1 14-5l2 2M20 12a8 8 0 0 1-14 5l-2-2M20 4v5h-5M4 20v-5h5",
+  ajustes: "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19 12l2-1-1-3-2 .5-1.5-1.5L17 5l-3-1-1 2h-2L10 4 7 5l.5 2L6 8.5 4 8l-1 3 2 1v0l-2 1 1 3 2-.5L7.5 16 7 18l3 1 1-2h2l1 2 3-1-.5-2 1.5-1.5 2 .5 1-3z",
+  mas: "M5 12h0M12 12h0M19 12h0",
+};
+export const Icono: FC<{ n: string }> = (p) => (
+  <svg class="ico" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width={p.n === "mas" ? 3.2 : 1.8} stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <path d={ICONOS[p.n] ?? ICONOS.mas} />
+  </svg>
+);
+
+/** Secciones. Las `principal` van en la barra inferior del celular (al alcance del pulgar); el resto, en «Más». */
+export const NAV: Array<{ etiqueta: string; corto: string; href: string; seccion: Seccion; principal?: boolean }> = [
+  { etiqueta: "INICIO", corto: "Inicio", href: "/", seccion: "dashboard", principal: true },
+  { etiqueta: "VIAJES", corto: "Viajes", href: "/viajes", seccion: "viajes", principal: true },
+  { etiqueta: "FINANZAS", corto: "Gastos", href: "/finanzas", seccion: "finanzas", principal: true },
+  { etiqueta: "TRAILER 3D", corto: "Trailer 3D", href: "/trailer", seccion: "trailer", principal: true },
+  { etiqueta: "FLOTA", corto: "Flota", href: "/flota", seccion: "flota" },
+  { etiqueta: "REPARACIONES", corto: "Reparaciones", href: "/reparaciones", seccion: "reparaciones" },
+  { etiqueta: "INVENTARIO", corto: "Inventario", href: "/inventario", seccion: "inventario" },
+  { etiqueta: "RENTABILIDAD", corto: "Rentabilidad", href: "/rentabilidad", seccion: "rentabilidad" },
+  { etiqueta: "TELEGRAM", corto: "Telegram", href: "/telegram", seccion: "telegram" },
+  { etiqueta: "SINCRONIZAR", corto: "Sincronizar", href: "/sincronizar", seccion: "sincronizar" },
 ];
 
 export interface DatosCabecera {
@@ -108,6 +131,8 @@ export const Layout: FC<PropsWithChildren<PropsLayout>> = (p) => (
       <div class="pagina">
         <header class="header">
           <Logo />
+          <span class="titulo-movil">{p.titulo.split(/ · |, /)[0]}</span>
+          <a class="bot-punto" href="/telegram" title={`Bot de Telegram ${p.cab.botEnLinea ? "en línea" : "desconectado"}`}><i class={p.cab.botEnLinea ? "on" : ""}></i>BOT</a>
           <a class="marca" href="/">
             <span class="t">{p.cab.empresa} · <span class="c">Control</span> <span class="f">Flota</span></span>
             <span class="s">TRANSPORTE DE CARGA PESADA · CADA PIEZA, CADA VIAJE, BAJO CONTROL</span>
@@ -127,25 +152,58 @@ export const Layout: FC<PropsWithChildren<PropsLayout>> = (p) => (
         </header>
         <nav class="nav" aria-label="Secciones">
           {NAV.filter((n) => puedeVer(p.usuario.rol, n.seccion)).map((n) => (
-            <a href={n.href} class={n.seccion === p.seccion ? "activo" : ""} aria-current={n.seccion === p.seccion ? "page" : undefined}>{n.n} {n.etiqueta}</a>
+            <a href={n.href} class={n.seccion === p.seccion ? "activo" : ""} aria-current={n.seccion === p.seccion ? "page" : undefined}>{n.etiqueta}</a>
           ))}
           {puedeVer(p.usuario.rol, "ajustes") ? <a href="/ajustes" class={p.seccion === "ajustes" ? "activo fin" : "fin"}>⚙ AJUSTES</a> : null}
           {p.cab.simulado ? <span class="chip proximo" title="SUNAT en modo simulado">SUNAT SIMULADO</span> : null}
         </nav>
-        {p.ok ? <div class="aviso ok" role="status">{p.ok}</div> : null}
+        {p.ok ? <div class="aviso ok toast" role="status" data-toast="">✓ {p.ok}</div> : null}
         {p.error ? <div class="aviso error" role="alert">{p.error}</div> : null}
         {p.children}
       </div>
+      <BarraInferior seccion={p.seccion} usuario={p.usuario} cab={p.cab} />
       <script src={`/static/app.js?v=${V}`} defer></script>
       {(p.scripts ?? []).map((s) => <script type="module" src={`${s}?v=${V}`}></script>)}
     </body>
   </html>
 );
 
+/**
+ * Barra inferior del celular: las 4 secciones de todos los días + «Más» (el resto, ajustes y
+ * salir). Solo se ve en pantallas angostas; en la PC queda la barra de arriba.
+ */
+const BarraInferior: FC<{ seccion: Seccion; usuario: UsuarioWeb; cab: DatosCabecera }> = (p) => {
+  const visibles = NAV.filter((n) => puedeVer(p.usuario.rol, n.seccion));
+  const principales = [...visibles.filter((n) => n.principal), ...visibles.filter((n) => !n.principal)].slice(0, 4);
+  const resto = visibles.filter((n) => !principales.includes(n));
+  const enMas = !principales.some((n) => n.seccion === p.seccion);
+  return (
+    <nav class="tabbar" aria-label="Secciones principales">
+      {principales.map((n) => (
+        <a href={n.href} class={n.seccion === p.seccion ? "activo" : ""} aria-current={n.seccion === p.seccion ? "page" : undefined}><Icono n={n.seccion === "dashboard" ? "inicio" : n.seccion} /><span>{n.corto}</span></a>
+      ))}
+      <details class={`mas${enMas ? " activo" : ""}`}>
+        <summary aria-label="Más secciones"><Icono n="mas" /><span>Más</span></summary>
+        <div class="hoja" role="menu">
+          <div class="hoja-cab"><b>{p.cab.empresa}</b><span class="muted">{p.usuario.nombre}</span></div>
+          {resto.map((n) => <a role="menuitem" href={n.href} class={n.seccion === p.seccion ? "activo" : ""}><Icono n={n.seccion} />{n.corto}</a>)}
+          {puedeVer(p.usuario.rol, "ajustes") ? <a role="menuitem" href="/ajustes" class={p.seccion === "ajustes" ? "activo" : ""}><Icono n="ajustes" />Ajustes</a> : null}
+          <a role="menuitem" href="/telegram"><span class={`punto${p.cab.botEnLinea ? " on" : ""}`}></span>Bot de Telegram · {p.cab.botEnLinea ? "en línea" : "desconectado"}</a>
+          <form method="post" action="/salir"><button class="btn" type="submit" style="width:100%">Salir</button></form>
+        </div>
+      </details>
+    </nav>
+  );
+};
+
 // ── Piezas ───────────────────────────────────────────────────────────────────
 
-export const Panel: FC<PropsWithChildren<{ titulo?: Child; der?: Child; clase?: string; id?: string }>> = (p) => (
-  <section class={`panel ${p.clase ?? ""}`} id={p.id}>
+/**
+ * `plegable`: en el celular el formulario queda cerrado (solo su título, como un botón) hasta que
+ * se toca o se llega con su enlace (#id). Así la pantalla muestra primero lo que se consulta.
+ */
+export const Panel: FC<PropsWithChildren<{ titulo?: Child; der?: Child; clase?: string; id?: string; plegable?: boolean }>> = (p) => (
+  <section class={`panel ${p.clase ?? ""}`} id={p.id} data-plegable={p.plegable ? "" : undefined}>
     {p.titulo !== undefined ? <div class="panel-cab"><h2>{p.titulo}</h2>{p.der ? <div class="der">{p.der}</div> : null}</div> : null}
     {p.children}
   </section>

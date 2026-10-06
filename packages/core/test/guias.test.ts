@@ -1,5 +1,6 @@
 import { and, auditoria, contraparte, correlativo, eq, guiaTransportista, vehiculo } from "@sunatapp/db";
-import { SunatNoDisponibleError, SunatSimulado, type DocumentoFirmado, type SunatGateway } from "@sunatapp/sunat";
+import { SunatCredencialesError, SunatNoDisponibleError, SunatSimulado, type DocumentoFirmado, type RespuestaSunat, type SunatGateway } from "@sunatapp/sunat";
+import { leerPausaSunat, pausarSunat, reanudarSunat } from "../src/sunat/pausa";
 import { afterEach, describe, expect, it } from "vitest";
 import { ErrorValidacion } from "../src/errores";
 import { aplicarRespuestaGuia, emitirGuia, MAX_INTENTOS, procesarPendientesGuias, type ResultadoEmision } from "../src/guias/emitir";
@@ -523,5 +524,45 @@ describe("emitirGuia", () => {
     const [g3] = await ctx.db.select().from(guiaTransportista).where(eq(guiaTransportista.id, id));
     const xmlB = await ctx.almacen.leerTexto(g3!.rutaXml!);
     expect(xmlB).not.toBe(xmlA);
+  });
+});
+
+class GatewayContador implements SunatGateway {
+  llamadas = 0;
+  constructor(private readonly falla: Error | null) {}
+  async enviarGuia(): Promise<{ ticket: string }> { this.llamadas++; if (this.falla) throw this.falla; return { ticket: "T" }; }
+  async consultarTicket(): Promise<RespuestaSunat> { this.llamadas++; return { estado: "en_proceso", codigo: "98", mensaje: "", notas: [] }; }
+  async enviarFactura(): Promise<RespuestaSunat> { this.llamadas++; if (this.falla) throw this.falla; return { estado: "aceptada", codigo: "0", mensaje: "", notas: [] }; }
+  async consultarCdrFactura() { return null; }
+}
+
+describe("pausa por credenciales", () => {
+  it("credenciales rechazadas pausan, no suman intento y detienen los siguientes envíos", async () => {
+    const gw = new GatewayContador(new SunatCredencialesError("clave SOL rechazada"));
+    const ctx = await contexto({ gateway: gw });
+    const g1 = await registrarGuiaBorrador(ctx, entradaGuia());
+    const r1 = await emitirGuia(ctx, g1);
+    expect(r1).toMatchObject({ estado: "pendiente_envio", mensaje: expect.stringContaining("SUNAT en pausa") });
+    const [fila] = await ctx.db.select().from(guiaTransportista).where(eq(guiaTransportista.id, g1));
+    expect(fila!.intentos).toBe(0);
+    expect(await leerPausaSunat(ctx)).not.toBeNull();
+
+    const llamadasAntes = gw.llamadas;
+    const g2 = await registrarGuiaBorrador(ctx, entradaGuia());
+    expect((await emitirGuia(ctx, g2)).estado).toBe("pendiente_envio");
+    await procesarPendientesGuias(ctx);
+    expect(gw.llamadas).toBe(llamadasAntes);
+  });
+
+  it("al reanudar se vuelve a enviar", async () => {
+    const gw = new GatewayContador(null);
+    const ctx = await contexto({ gateway: gw });
+    await pausarSunat(ctx, "prueba");
+    const g = await registrarGuiaBorrador(ctx, entradaGuia());
+    await emitirGuia(ctx, g);
+    expect(gw.llamadas).toBe(0);
+    await reanudarSunat(ctx);
+    await emitirGuia(ctx, g, { esperarRespuesta: false });
+    expect(gw.llamadas).toBe(1);
   });
 });

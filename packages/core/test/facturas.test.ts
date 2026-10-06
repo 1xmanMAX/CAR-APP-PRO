@@ -1,5 +1,6 @@
 import { cobro, contraparte, empresa, eq, factura, sql, valorReferencialRuta, vehiculo, type EstadoSunatFactura } from "@sunatapp/db";
-import { SunatNoDisponibleError, SunatSimulado, type DocumentoFirmado, type RespuestaSunat, type SunatGateway } from "@sunatapp/sunat";
+import { leerPausaSunat } from "../src/sunat/pausa";
+import { SunatCredencialesError, SunatNoDisponibleError, SunatSimulado, type DocumentoFirmado, type RespuestaSunat, type SunatGateway } from "@sunatapp/sunat";
 import { extractText, getDocumentProxy } from "unpdf";
 import { afterEach, describe, expect, it } from "vitest";
 import { buscarFacturaPorSerieNumero, listarCobrosPendientes, registrarCobro } from "../src/cobros/cobros";
@@ -486,6 +487,32 @@ describe("emitirFactura", () => {
     const [f3] = await ctx.db.select().from(factura).where(eq(factura.id, facturaId));
     const xmlB = await ctx.almacen.leerTexto(f3!.rutaXml!);
     expect(xmlB).not.toBe(xmlA);
+  });
+
+  it("factura con credenciales rechazadas queda pendiente y pausa SUNAT", async () => {
+    const { ctx, guiaId } = await contextoConGuia();
+    const { facturaId } = await prepararFactura(ctx, { guiaId, montoCentimos: 100000, incluyeIgv: false, formaPago: "contado" });
+    const base = ctx.gateway;
+    ctx.gateway = {
+      enviarGuia: (d) => base.enviarGuia(d), consultarTicket: (t) => base.consultarTicket(t), consultarCdrFactura: async () => null,
+      enviarFactura: async () => { throw new SunatCredencialesError("clave SOL rechazada"); },
+    } satisfies SunatGateway;
+    const r = await emitirFactura(ctx, facturaId);
+    expect(r).toMatchObject({ estado: "pendiente_envio", mensaje: expect.stringContaining("SUNAT en pausa") });
+    const [f] = await ctx.db.select().from(factura).where(eq(factura.id, facturaId));
+    expect(f!.intentos).toBe(0);
+    expect(await leerPausaSunat(ctx)).not.toBeNull();
+  });
+
+  it("una respuesta en_proceso no rechaza la factura", async () => {
+    const gw = new SunatSimulado({ demoraMs: 0 });
+    const { ctx, guiaId } = await contextoConGuia(gw);
+    const { facturaId } = await prepararFactura(ctx, { guiaId, montoCentimos: 100000, incluyeIgv: false, formaPago: "contado" });
+    ctx.gateway = {
+      enviarGuia: (d) => gw.enviarGuia(d), consultarTicket: (t) => gw.consultarTicket(t), consultarCdrFactura: async () => null,
+      enviarFactura: async () => ({ estado: "en_proceso", codigo: "98", mensaje: "En proceso", notas: [] }),
+    } satisfies SunatGateway;
+    expect((await emitirFactura(ctx, facturaId)).estado).toBe("pendiente_envio");
   });
 });
 

@@ -1,7 +1,7 @@
 import { and, contraparte, empresa, eq, factura, facturaGuia, guiaTransportista, inArray, isNull, lt, lte, or, siguienteCorrelativo } from "@sunatapp/db";
 import { generarPdfFactura } from "@sunatapp/pdf";
 import {
-  construirXmlFactura, extraerDigest, firmarXml, montoEnLetras, nombreArchivo, SunatNoDisponibleError, validarXsd,
+  construirXmlFactura, extraerDigest, firmarXml, montoEnLetras, nombreArchivo, SunatCredencialesError, SunatNoDisponibleError, validarXsd,
   type RespuestaSunat, type TipoDocIdentidadSunat, type TransporteFactura,
 } from "@sunatapp/sunat";
 import { fechaHoraLima, sumarDias } from "../dominio/fechas";
@@ -11,6 +11,7 @@ import type { ResultadoEmision } from "../guias/emitir";
 import { MAX_INTENTOS, REINTENTO_MS } from "../guias/emitir";
 import { registrarAuditoria } from "../infra/auditoria";
 import type { Contexto } from "../infra/contexto";
+import { leerPausaSunat, marcarPrimeraRealHecha, MENSAJE_EN_PAUSA, pausarSunat } from "../sunat/pausa";
 import { transporteDeGuia } from "./transporte";
 
 // Mensajes y umbrales de reintento espejados de packages/core/src/guias/emitir.ts (Tarea 11):
@@ -97,6 +98,14 @@ async function manejarFalloEnvio(
 }
 
 /**
+ * Deja la factura pendiente sin contar intento: espera a que se corrijan las claves. proximoIntentoEn
+ * queda en null (sin lease) para que, al reanudar, emitirFactura o el fondo la envíen de inmediato.
+ */
+async function dejarEnPausa(ctx: Contexto, facturaId: number, motivo: string, extra: CambiosFactura = {}): Promise<void> {
+  await actualizar(ctx, facturaId, { ...extra, proximoIntentoEn: null, codigoRespuesta: null, mensajeRespuesta: MENSAJE_EN_PAUSA(motivo) });
+}
+
+/**
  * Persiste el resultado de SUNAT (aceptada/observada/rechazada) en un único update, de
  * inmediato al recibir la respuesta — junto con rutaXml/intentos del envío que acaba de
  * ocurrir, antes de tocar CDR o PDF. A partir de aquí la factura queda en un estado terminal
@@ -106,7 +115,12 @@ async function manejarFalloEnvio(
  * guardar el CDR no debe impedir persistir el resultado (queda rutaCdr null) ni revertirlo.
  */
 async function aplicarRespuestaSunat(ctx: Contexto, id: number, r: RespuestaSunat, nombre: string, rutaXml: string): Promise<void> {
-  if (r.estado === "rechazada" || r.estado === "en_proceso") {
+  if (r.estado === "en_proceso") {
+    // SUNAT no terminó de procesarla: se reintenta (si ya quedó registrada, el reenvío recupera su CDR).
+    await actualizar(ctx, id, { rutaXml, proximoIntentoEn: new Date(ctx.reloj().getTime() + REINTENTO_MS), mensajeRespuesta: "SUNAT la está procesando; se consultará de nuevo" });
+    return;
+  }
+  if (r.estado === "rechazada") {
     await actualizar(ctx, id, { rutaXml, intentos: 0, estadoSunat: "rechazada", codigoRespuesta: r.codigo, mensajeRespuesta: r.mensaje, proximoIntentoEn: null });
     await registrarAuditoria(ctx.db, { accion: "factura_rechazada", entidad: "factura", entidadId: id, detalle: { codigo: r.codigo } });
     return;
@@ -116,6 +130,7 @@ async function aplicarRespuestaSunat(ctx: Contexto, id: number, r: RespuestaSuna
     mensajeRespuesta: [r.mensaje, ...r.notas].join(" | "), proximoIntentoEn: null,
   });
   await registrarAuditoria(ctx.db, { accion: "factura_aceptada", entidad: "factura", entidadId: id });
+  if (!ctx.facturaSimulada) await marcarPrimeraRealHecha(ctx, "factura");
 
   if (r.cdrZip) {
     try {
@@ -290,10 +305,21 @@ export async function emitirFactura(ctx: Contexto, facturaId: number): Promise<R
     return resultadoFactura(ctx, facturaId);
   }
 
+  const pausa = await leerPausaSunat(ctx);
+  if (pausa) {
+    await dejarEnPausa(ctx, facturaId, pausa.motivo, { rutaXml });
+    return resultadoFactura(ctx, facturaId);
+  }
+
   let r: RespuestaSunat;
   try {
     r = await ctx.gateway.enviarFactura({ nombreArchivo: nombre, xml });
   } catch (error) {
+    if (error instanceof SunatCredencialesError) {
+      await pausarSunat(ctx, error.message);
+      await dejarEnPausa(ctx, facturaId, error.message, { rutaXml });
+      return resultadoFactura(ctx, facturaId);
+    }
     // Cualquier error al enviar (caída de SUNAT o no) se reintenta igual que en guías: solo
     // una respuesta real de SUNAT (CDR) o una falla de validación XSD rechazan la factura.
     const mensaje = error instanceof SunatNoDisponibleError
@@ -313,6 +339,7 @@ export async function emitirFactura(ctx: Contexto, facturaId: number): Promise<R
 }
 
 export async function procesarPendientesFacturas(ctx: Contexto): Promise<ResultadoEmision[]> {
+  const pausada = (await leerPausaSunat(ctx)) !== null;
   const ahora = ctx.reloj();
   const pendientesEnvio = await ctx.db
     .select({ id: factura.id })
@@ -326,7 +353,7 @@ export async function procesarPendientesFacturas(ctx: Contexto): Promise<Resulta
       ),
     );
   const cambios: ResultadoEmision[] = [];
-  for (const { id } of pendientesEnvio) {
+  for (const { id } of pausada ? [] : pendientesEnvio) {
     try {
       const r = await emitirFactura(ctx, id);
       if (r.estado !== "pendiente_envio") cambios.push(r);

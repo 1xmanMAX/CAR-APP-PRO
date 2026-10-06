@@ -33,6 +33,7 @@ export const TABLAS: TablaSinc[] = [
   { nombre: "categoria_gasto" },
   { nombre: "ruta" },
   { nombre: "ruta_presupuesto" },
+  { nombre: "valor_referencial_ruta" },
   { nombre: "viaje", renombrar: ["codigo"] },
   { nombre: "viaje_presupuesto" },
   { nombre: "entrega" },
@@ -54,7 +55,7 @@ export const TABLAS: TablaSinc[] = [
   { nombre: "reinversion" },
   { nombre: "evento_telegram" },
   { nombre: "cotizacion" },
-  { nombre: "ajuste", filtro: `clave in ('parametros_cotizador', 'presupuesto_mensual', 'telegram_chat_alertas')` },
+  { nombre: "ajuste", filtro: `clave in ('parametros_cotizador', 'presupuesto_mensual', 'telegram_chat_alertas', 'factura_automatica')` },
 ];
 
 export const TABLA = new Map(TABLAS.map((t) => [t.nombre, t]));

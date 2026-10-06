@@ -92,6 +92,13 @@
       "when": 1790900000000,
       "tag": "0012_costos_fijos",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1791258484589,
+      "tag": "0013_sunat_real",
+      "breakpoints": true
     }
   ]
 }

@@ -7,7 +7,7 @@ import {
   listarReparaciones, resumenFinanciero, rangoMes, guardarPresupuestoMensual, presupuestoMensual,
 } from "../src";
 import type { Contexto } from "../src/infra/contexto";
-import { categoriaGasto, costoFijo, eq, gasto } from "@sunatapp/db";
+import { categoriaGasto, costoFijo, eq, gasto, valorReferencialRuta } from "@sunatapp/db";
 import { crearContextoPrueba } from "./helpers";
 
 const cerrables: Array<() => Promise<void>> = [];
@@ -124,6 +124,16 @@ describe("sincronizar dos dispositivos por la red local", () => {
       expect(gs.filter((g) => g.categoria === "gps")).toHaveLength(1);
       expect(gs.filter((g) => g.categoria === "guardiania")).toHaveLength(1);
     }
+  });
+
+  it("el valor referencial de una ruta viaja al otro dispositivo", async () => {
+    const a = await dispositivo();
+    const b = await dispositivo();
+    await grupo(a, b);
+    await a.db.insert(valorReferencialRuta).values({ partidaUbigeo: "040101", llegadaUbigeo: "210101", vrPorTm: 8550 });
+    await sincronizar(a, b);
+    const filas = await b.db.select().from(valorReferencialRuta);
+    expect(filas).toMatchObject([{ partidaUbigeo: "040101", llegadaUbigeo: "210101", vrPorTm: 8550 }]);
   });
 
   it("el mismo registro cambiado en los dos se junta campo por campo; lo borrado se borra en los dos", async () => {

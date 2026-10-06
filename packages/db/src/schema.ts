@@ -86,6 +86,10 @@ export const vehiculo = pgTable("vehiculo", {
   carretaId: integer("carreta_id"),
   /** Tipo de semirremolque que jala (para el modelo 3D): furgon, plataforma, cama_baja o cisterna. */
   semirremolque: text("semirremolque").notNull().default("furgon"),
+  /** Configuración vehicular MTC de la combinación (p. ej. T3S3); en tracto+carreta va en el tracto. */
+  configuracionVehicular: text("configuracion_vehicular"),
+  /** Carga útil nominal de la combinación, en toneladas (para el valor referencial de la factura). */
+  cargaUtilTm: numeric("carga_util_tm", { precision: 8, scale: 2 }),
 });
 
 export const conductor = pgTable("conductor", {
@@ -203,6 +207,11 @@ export const factura = pgTable("factura", {
   total: centimos("total").notNull(),
   detraccionPorcentaje: integer("detraccion_porcentaje"),
   detraccionMonto: centimos("detraccion_monto").notNull().default(0),
+  /** Valores referenciales MTC (céntimos) y detalle del viaje de la factura 1004; null sin detracción. */
+  vrServicio: centimos("vr_servicio"),
+  vrCargaEfectiva: centimos("vr_carga_efectiva"),
+  vrCargaUtil: centimos("vr_carga_util"),
+  detalleViaje: text("detalle_viaje"),
   formaPago: formaPagoEnum("forma_pago").notNull(),
   diasCredito: integer("dias_credito"),
   fechaVencimiento: date("fecha_vencimiento", { mode: "string" }),
@@ -260,6 +269,15 @@ export const categoriaGasto = pgTable("categoria_gasto", {
   activa: boolean("activa").notNull().default(true),
   orden: integer("orden").notNull().default(100),
 });
+
+/** Valor referencial MTC por tonelada de un origen → destino (ubigeos de la guía). Se pide una sola vez. */
+export const valorReferencialRuta = pgTable("valor_referencial_ruta", {
+  partidaUbigeo: text("partida_ubigeo").notNull(),
+  llegadaUbigeo: text("llegada_ubigeo").notNull(),
+  vrPorTm: centimos("vr_por_tm").notNull(),
+  fuente: text("fuente"),
+  actualizadoEn: timestamp("actualizado_en", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [primaryKey({ columns: [t.partidaUbigeo, t.llegadaUbigeo] })]);
 
 export const ruta = pgTable("ruta", {
   id: serial("id").primaryKey(),

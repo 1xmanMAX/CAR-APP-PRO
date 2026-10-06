@@ -463,7 +463,7 @@ describe("cobros", () => {
     const { ctx, facturaId } = await facturaEmitida();
     expect(await registrarCobro(ctx, { facturaId, montoCentimos: 50000, fecha: "2026-09-14", medio: "transferencia" })).toEqual({ estadoCobro: "parcial", saldo: 63300 });
     expect(await registrarCobro(ctx, { facturaId, montoCentimos: 63300, fecha: "2026-09-15", medio: "efectivo" })).toEqual({ estadoCobro: "pagada", saldo: 0 });
-    await expect(registrarCobro(ctx, { facturaId, montoCentimos: 1, fecha: "2026-09-15", medio: "otro" })).rejects.toThrow("supera el saldo");
+    await expect(registrarCobro(ctx, { facturaId, montoCentimos: 1, fecha: "2026-09-15", medio: "otro" })).rejects.toThrow("ya está pagada");
   });
 
   it("dos cobros concurrentes que exceden el saldo: solo uno tiene éxito y nunca se sobrepasa el cobrable", async () => {

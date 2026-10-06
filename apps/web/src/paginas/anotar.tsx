@@ -1,19 +1,17 @@
 /** @jsxRuntime automatic @jsxImportSource hono/jsx */
 import type { Child, FC, PropsWithChildren } from "hono/jsx";
 import {
-  capturarContexto, categoriasMasUsadas, describirContexto, ErrorNegocio, fechaHoraLima, hoy, listarCategorias, listarCobrosPendientes,
-  listarUnidades, listarViajesFlota, MEDIOS_ENTREGA, NOMBRE_MEDIO_PAGO, nombreCategoria, puedeEditar, ultimaUnidadDeUsuario, viajesEnRuta,
-  type UsuarioWeb, type ViajeEnRuta,
+  capturarContexto, categoriasMasUsadas, ErrorNegocio, fechaHoraLima, hoy, listarCategorias, listarCobrosPendientes,
+  liquidacionViaje, listarUnidades, listarViajesFlota, MEDIOS_ENTREGA, NOMBRE_MEDIO_PAGO, nombreCategoria, puedeEditar, ultimaUnidadDeUsuario, viajesEnRuta,
+  type FilaCobro, type UsuarioWeb, type ViajeEnRuta,
 } from "@sunatapp/core";
 import { accion, formularioMultiparte, pagina, volverA, type App, type C, type Deps } from "../base";
 import { guardarCobro, guardarEntrega, guardarGasto, guardarIngreso, type Campos } from "../acciones";
-import { TIPOS_ANOTAR, tiposAnotar, type TipoAnotar } from "../lugares";
+import { TIPOS_ANOTAR, tiposAnotar, tiposAnotarListos, type TipoAnotar } from "../lugares";
 import { Cabecera, diasEntre, fechaCorta, Icono, soles2, Vacio, type NombreIcono } from "../ui";
 
-/** Tipos que ya tienen formulario. La tarea 5 completa los demás y borra esta lista. */
-const LISTOS: TipoAnotar[] = ["gaste", "chofer", "cobro"];
-
-const CLAVES_Q = ["tipo", "modo", "volver", "viajeId", "vehiculoId", "facturaId", "prestamoId", "pieza", "parteId", "repuestoId"] as const;
+/** `monto` y `categoria` solo vuelven en la URL cuando no se pudo guardar (así no se pierde lo escrito). */
+const CLAVES_Q = ["tipo", "modo", "volver", "viajeId", "vehiculoId", "facturaId", "prestamoId", "pieza", "parteId", "repuestoId", "monto", "categoria"] as const;
 type ClaveQ = (typeof CLAVES_Q)[number];
 /** Lo que llega en la URL de /anotar (todo texto; "" = no vino). */
 export type Q = Record<ClaveQ, string> & { parcial: boolean };
@@ -119,6 +117,18 @@ function opcionesDeViaje(enRuta: ViajeEnRuta[], actual: { viajeId: number | null
   return r;
 }
 
+/** Junta las partes de un texto con « · », sin las vacías. */
+const unir = (partes: Array<string | null | undefined | false>) => partes.filter(Boolean).join(" · ");
+const km = (n: number | null) => (n !== null ? `km ${n.toLocaleString("en-US")}` : null);
+
+/** Camión, ruta y chofer de un viaje en palabras simples (el en ruta si está, si no su liquidación). */
+async function datosViaje(d: Deps, enRuta: ViajeEnRuta[], viajeId: number): Promise<{ unidad: string | null; ruta: string | null; chofer: string | null }> {
+  const v = enRuta.find((x) => x.viajeId === viajeId);
+  if (v) return { unidad: v.unidad, ruta: v.ruta, chofer: v.chofer };
+  const l = await liquidacionViaje(d.ctx, viajeId).catch(() => null);
+  return { unidad: l?.viaje.unidad ?? null, ruta: l?.viaje.ruta ?? null, chofer: null };
+}
+
 // ── Cada tipo ────────────────────────────────────────────────────────────────
 
 async function parteGaste(c: C, d: Deps, q: Q): Promise<PartesForm> {
@@ -131,24 +141,30 @@ async function parteGaste(c: C, d: Deps, q: Q): Promise<PartesForm> {
   const elegirViaje = viajeId === null && enRuta.length > 1;
   const vehiculoId = num(q.vehiculoId) ?? (await ultimaUnidadDeUsuario(ctx, c.get("usuario").id)) ?? unidades[0]?.id ?? null;
   const g = await capturarContexto(ctx, { viajeId, vehiculoId, sinViaje: elegirViaje });
+  const ruta = g.viajeId !== null ? (await datosViaje(d, enRuta, g.viajeId)).ruta : null;
+  const texto = elegirViaje
+    ? unir(["Camión y viaje: los del viaje que elijas", `hoy ${ahora(d)}`])
+    : g.viajeId !== null
+      ? unir([g.unidad && `Camión ${g.unidad}`, ruta ? `viaje ${ruta}` : "con viaje", `hoy ${ahora(d)}`, km(g.km)])
+      : unir([g.unidad ? `Camión ${g.unidad}` : "De la empresa", "sin viaje", `hoy ${ahora(d)}`]);
   return {
     campos: (
       <>
-        <CampoMonto />
+        <CampoMonto valor={q.monto} />
         <fieldset class="grupo">
           <legend class="lbl">¿En qué?</legend>
           <div class="opciones-icono">
-            {botones.map((k, i) => <OpcionIcono nombre="categoria" valor={k} icono={iconoCategoria(k)} texto={nombreCategoria(k, categorias)} marcado={i === 0} />)}
-            <OpcionIcono nombre="categoria" valor="otro" icono="otro" texto="Otro" />
+            {botones.map((k, i) => <OpcionIcono nombre="categoria" valor={k} icono={iconoCategoria(k)} texto={nombreCategoria(k, categorias)} marcado={q.categoria ? k === q.categoria : i === 0} />)}
+            <OpcionIcono nombre="categoria" valor="otro" icono="otro" texto="Otro" marcado={!!q.categoria && !botones.includes(q.categoria)} />
           </div>
-          <label class="campo otro-cual"><span>¿Cuál?</span><select name="categoriaOtra">{categorias.map((k) => <option value={k.clave}>{k.nombre}</option>)}</select></label>
+          <label class="campo otro-cual"><span>¿Cuál?</span><select name="categoriaOtra">{categorias.map((k) => <option value={k.clave} selected={k.clave === q.categoria}>{k.nombre}</option>)}</select></label>
         </fieldset>
         {elegirViaje ? <ViajesRadios viajes={enRuta} /> : null}
         <FotoOpcional />
       </>
     ),
     solo: {
-      texto: `${describirContexto(g)} · hoy ${ahora(d)}`,
+      texto,
       cambiar: (
         <>
           <SelectUnidad unidades={unidades} elegido={g.vehiculoId} vacio="— de la empresa —" />
@@ -171,11 +187,11 @@ async function parteChofer(_c: C, d: Deps, q: Q): Promise<PartesForm> {
   const viajeId = num(q.viajeId) ?? (enRuta.length === 1 ? enRuta[0]!.viajeId : null);
   const recientes = viajeId === null && enRuta.length === 0 ? await listarViajesFlota(ctx, { limite: 10 }) : [];
   const g = viajeId !== null ? await capturarContexto(ctx, { viajeId }) : null;
-  const elegido = enRuta.find((v) => v.viajeId === viajeId);
+  const elegido = viajeId !== null ? await datosViaje(d, enRuta, viajeId) : null;
   return {
     campos: (
       <>
-        <CampoMonto />
+        <CampoMonto valor={q.monto} />
         <fieldset class="grupo"><legend class="lbl">¿Cómo se la diste?</legend>
           <div class="opciones-texto">{Object.entries(MEDIOS_ENTREGA).map(([k, n], i) => <OpcionTexto nombre="medio" valor={k} texto={n} marcado={i === 0} />)}</div>
         </fieldset>
@@ -188,7 +204,7 @@ async function parteChofer(_c: C, d: Deps, q: Q): Promise<PartesForm> {
       </>
     ),
     solo: g ? {
-      texto: `${elegido ? `${elegido.unidad} · ${elegido.ruta} · ${elegido.chofer}` : g.viajeCodigo ?? ""} · hoy ${ahora(d)}`,
+      texto: unir([elegido?.unidad && `Camión ${elegido.unidad}`, elegido?.ruta ? `viaje ${elegido.ruta}` : g.viajeCodigo, elegido?.chofer, `hoy ${ahora(d)}`]),
       cambiar: (
         <>
           <SelectViaje requerido opciones={opcionesDeViaje(enRuta, g)} elegido={viajeId} />
@@ -200,6 +216,20 @@ async function parteChofer(_c: C, d: Deps, q: Q): Promise<PartesForm> {
   };
 }
 
+const ListaFacturas: FC<{ q: Q; filas: FilaCobro[]; selId: number | null; hoy: string }> = ({ q, filas, selId, hoy: h }) => (
+  <fieldset class="grupo"><legend class="lbl">¿Quién te pagó?</legend>
+    <div class="lista-filas">
+      {filas.map((f) => (
+        <a class={`fila-aviso${f.facturaId === selId ? " sel" : ""}`} href={urlAnotar({ ...q, facturaId: f.facturaId, monto: "" })} data-panel-link="" aria-current={f.facturaId === selId ? "true" : undefined}>
+          <span class="punto" style={`background:var(${f.estado === "vencida" ? "--accent" : "--amber-bar"})`}></span>
+          <span class="txt"><b>{f.cliente}</b> · {f.serieNumero}<br /><span class="muted">{f.estado === "vencida" ? `vencida hace ${diasEntre(f.fechaVencimiento, h)} días` : `vence ${fechaCorta(f.fechaVencimiento)}`}</span></span>
+          <b>{soles2(f.saldo)}</b>
+        </a>
+      ))}
+    </div>
+  </fieldset>
+);
+
 async function parteCobro(c: C, d: Deps, q: Q): Promise<PartesForm> {
   const modos = puedeEditar(c.get("usuario").rol, "finanzas") ? [{ modo: "", etiqueta: "Una factura" }, { modo: "otro", etiqueta: "Otro ingreso" }] : undefined;
   if (q.modo === "otro") {
@@ -208,7 +238,7 @@ async function parteCobro(c: C, d: Deps, q: Q): Promise<PartesForm> {
       modos,
       campos: (
         <>
-          <CampoMonto />
+          <CampoMonto valor={q.monto} />
           <label class="campo"><span>¿De qué?</span><input name="concepto" required placeholder="Alquiler de la carreta, venta de chatarra…" /></label>
         </>
       ),
@@ -217,26 +247,20 @@ async function parteCobro(c: C, d: Deps, q: Q): Promise<PartesForm> {
   }
   const { filas } = await listarCobrosPendientes(d.ctx);
   const ordenadas = [...filas].sort((a, b) => a.fechaVencimiento.localeCompare(b.fechaVencimiento));
-  const sel = ordenadas.find((f) => f.facturaId === num(q.facturaId)) ?? ordenadas[0];
-  if (!sel) return { modos, campos: null, soloMensaje: <div class="lista-filas"><Vacio>Nadie te debe facturas.</Vacio></div> };
+  const pedida = num(q.facturaId);
+  const sel = pedida !== null ? ordenadas.find((f) => f.facturaId === pedida) : ordenadas[0];
   const h = hoy(d.ctx);
+  // La factura pedida ya no se debe: no se elige otra sola, se avisa y se deja escoger.
+  const yaPagada = pedida !== null && !sel ? <div class="aviso info" role="status">Esa factura ya está pagada.{ordenadas.length ? " Elige la que te pagaron:" : ""}</div> : null;
+  if (!ordenadas.length) return { modos, campos: null, soloMensaje: <>{yaPagada}<div class="lista-filas"><Vacio>Nadie te debe facturas.</Vacio></div></> };
+  if (!sel) return { modos, campos: null, soloMensaje: <>{yaPagada}<ListaFacturas q={q} filas={ordenadas} selId={null} hoy={h} /></> };
   return {
     modos,
     campos: (
       <>
-        <fieldset class="grupo"><legend class="lbl">¿Quién te pagó?</legend>
-          <div class="lista-filas">
-            {ordenadas.map((f) => (
-              <a class={`fila-aviso${f.facturaId === sel.facturaId ? " sel" : ""}`} href={urlAnotar({ ...q, facturaId: f.facturaId })} data-panel-link="" aria-current={f.facturaId === sel.facturaId ? "true" : undefined}>
-                <span class="punto" style={`background:var(${f.estado === "vencida" ? "--accent" : "--amber-bar"})`}></span>
-                <span class="txt"><b>{f.cliente}</b> · {f.serieNumero}<br /><span class="muted">{f.estado === "vencida" ? `vencida hace ${diasEntre(f.fechaVencimiento, h)} días` : `vence ${fechaCorta(f.fechaVencimiento)}`}</span></span>
-                <b>{soles2(f.saldo)}</b>
-              </a>
-            ))}
-          </div>
-        </fieldset>
+        <ListaFacturas q={q} filas={ordenadas} selId={sel.facturaId} hoy={h} />
         <input type="hidden" name="facturaId" value={sel.facturaId} />
-        <CampoMonto valor={(sel.saldo / 100).toFixed(2)} etiqueta="¿Cuánto te pagaron?" />
+        <CampoMonto valor={q.monto || (sel.saldo / 100).toFixed(2)} etiqueta="¿Cuánto te pagaron?" />
         <fieldset class="grupo"><legend class="lbl">¿Cómo?</legend>
           <div class="opciones-texto">{[["transferencia", "Transferencia"], ["efectivo", "Efectivo"], ["otro", "Otro"]].map(([k, n], i) => <OpcionTexto nombre="medio" valor={k!} texto={n!} marcado={i === 0} />)}</div>
         </fieldset>
@@ -263,7 +287,7 @@ const FormAnotar: FC<{ q: Q; permitidos: TipoAnotar[]; p: PartesForm }> = ({ q, 
     {p.modos ? (
       <nav class="segmentos" aria-label="Opciones">
         {p.modos.map((m) => (
-          <a href={urlAnotar({ ...q, modo: m.modo, facturaId: "", prestamoId: "" })} data-panel-link="" class={m.modo === q.modo ? "activo" : undefined} aria-current={m.modo === q.modo ? "true" : undefined}>{m.etiqueta}</a>
+          <a href={urlAnotar({ ...q, modo: m.modo, facturaId: "", prestamoId: "", monto: "", categoria: "" })} data-panel-link="" class={m.modo === q.modo ? "activo" : undefined} aria-current={m.modo === q.modo ? "true" : undefined}>{m.etiqueta}</a>
         ))}
       </nav>
     ) : null}
@@ -283,7 +307,7 @@ const FormAnotar: FC<{ q: Q; permitidos: TipoAnotar[]; p: PartesForm }> = ({ q, 
 );
 
 async function vista(c: C, d: Deps) {
-  const permitidos = tiposAnotar(c.get("usuario").rol).filter((t) => LISTOS.includes(t));
+  const permitidos = tiposAnotarListos(c.get("usuario").rol);
   if (!permitidos.length) return c.redirect("/?error=" + encodeURIComponent("Tu rol no anota movimientos"));
   const q = leerQ(c, permitidos);
   const p = await PARTES[q.tipo as TipoAnotar]!(c, d, q);
@@ -327,6 +351,8 @@ export function rutasAnotar(app: App, d: Deps): void {
     const tipo = f.tipo as TipoAnotar;
     if (!(tipo in TIPOS_ANOTAR) || !tiposAnotar(u.rol).includes(tipo)) return c.text("Tu rol no puede anotar eso", 403);
     const destino = volverA(f.volver, "/");
-    return accion(c as C, urlAnotar({ ...f, volver: destino }), async () => ({ ok: await guardarAnotacion(d, u, tipo, f, archivos), ruta: destino }));
+    // Si no se pudo guardar, vuelve al formulario con lo escrito (en «Otro», la categoría elegida en la lista).
+    const categoria = tipo === "gaste" && f.categoria === "otro" ? f.categoriaOtra : f.categoria;
+    return accion(c as C, urlAnotar({ ...f, categoria, volver: destino }), async () => ({ ok: await guardarAnotacion(d, u, tipo, f, archivos), ruta: destino }));
   });
 }

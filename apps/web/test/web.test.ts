@@ -206,6 +206,54 @@ describe("web", () => {
         expect(html).not.toContain("Reparé / repuesto");
         expect((await enviar(conta, { tipo: "gaste", volver: "/", monto: "10", categoria: "peaje", vehiculoId: "1" })).status).toBe(303);
       });
+
+      const sePoneSolo = (html: string) => /<b class="lbl">Se pone solo<\/b><span>([^<]*)<\/span>/.exec(html)?.[1] ?? "";
+
+      it("«Se pone solo» en palabras simples: camión, viaje con su ruta, hora y km; sin códigos", async () => {
+        const cookie = await entrar();
+        let texto = sePoneSolo(await (await app.request("/anotar", { headers: { cookie } })).text());
+        expect(texto).toMatch(/^Camión \S+ · sin viaje · hoy \d\d:\d\d/);
+        await registrarViajeFlota(ctx, { vehiculoId: 1, origenLugar: "Juliaca", destinoLugar: "Arequipa", estado: "en_curso", origen: "web" });
+        texto = sePoneSolo(await (await app.request("/anotar", { headers: { cookie } })).text());
+        expect(texto).toMatch(/^Camión \S+ · viaje Juliaca → Arequipa · hoy \d\d:\d\d · km [\d,]+$/);
+        expect(texto).not.toContain("VJ-");
+        expect(texto).not.toContain("?");
+        texto = sePoneSolo(await (await app.request("/anotar?tipo=chofer", { headers: { cookie } })).text());
+        expect(texto).toMatch(/^Camión \S+ · viaje Juliaca → Arequipa · .+ · hoy \d\d:\d\d$/);
+      });
+
+      it("el taller no ve el botón Anotar mientras no tenga su formulario", async () => {
+        await guardarUsuario(ctx, { nombre: "Taller", email: "taller@demo.pe", rol: "taller", clave: "clave-segura" });
+        const html = await (await app.request("/", { headers: { cookie: await entrar("taller@demo.pe") } })).text();
+        expect(html).not.toContain('aria-label="Anotar"');
+        expect(html).not.toContain("anotar-lateral");
+        const dueno = await (await app.request("/", { headers: { cookie: await entrar() } })).text();
+        expect(dueno).toContain('aria-label="Anotar"');
+      });
+
+      it("si no se pudo guardar, vuelve con el monto y la categoría puestos", async () => {
+        const cookie = await entrar();
+        const r = await enviar(cookie, { tipo: "gaste", volver: "/viajes", monto: "35", categoria: "peaje", viajeId: "99999", vehiculoId: "1" });
+        const destino = r.headers.get("location")!;
+        expect(destino).toMatch(/^\/anotar\?/);
+        expect(destino).toContain("monto=35");
+        expect(destino).toContain("categoria=peaje");
+        expect(aviso(r)).toContain("error=");
+        const html = await (await app.request(destino, { headers: { cookie } })).text();
+        expect(html).toMatch(/name="monto"[^>]*value="35"/);
+        expect(html).toMatch(/value="peaje" checked/);
+        const otro = await enviar(cookie, { tipo: "gaste", volver: "/", monto: "abc", categoria: "otro", categoriaOtra: "balanza", vehiculoId: "1" });
+        const html2 = await (await app.request(otro.headers.get("location")!, { headers: { cookie } })).text();
+        expect(html2).toMatch(/value="otro" checked/);
+        expect(html2).toMatch(/<option value="balanza" selected/);
+      });
+
+      it("una factura que ya no se debe no se cambia sola por otra", async () => {
+        const cookie = await entrar();
+        const html = await (await app.request("/anotar?tipo=cobro&facturaId=999", { headers: { cookie } })).text();
+        expect(html).toContain("Esa factura ya está pagada");
+        expect(html).not.toContain('name="facturaId"');
+      });
     });
 
     it("gasto mínimo: solo monto y categoría; el resto se completa solo", async () => {

@@ -180,7 +180,7 @@ describe("/pagado", () => {
     await emitirFactura(a.ctx, facturaId);
 
     await a.texto("/pagado F001-1 3000");
-    expect(a.ultimoTexto()).toBe("El monto supera el saldo pendiente (2400)");
+    expect(a.ultimoTexto()).toBe("Te deben solo S/ 2,400.00");
   });
 
   it("registra un cobro parcial y luego cobra el saldo completo", async () => {

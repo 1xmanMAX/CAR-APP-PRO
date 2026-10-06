@@ -55,7 +55,7 @@ export async function capturarContexto(
     const g = gs.find((x) => x.tramo === "retorno") ?? gs.find((x) => x.tramo === "ida") ?? null;
     if (g) {
       guiaId = g.id;
-      guia = `${g.serie}-${g.numero ?? "?"}`;
+      guia = g.numero != null ? `${g.serie}-${g.numero}` : `${g.serie} sin número`;
       tramo = g.tramo;
     }
   }

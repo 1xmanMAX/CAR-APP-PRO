@@ -29,6 +29,8 @@ describe("captura automática del gasto", () => {
     c = await capturarContexto(ctx, { vehiculoId: 1 });
     expect(c).toMatchObject({ guiaId: ret, tramo: "retorno" });
     expect(describirContexto(c)).toMatch(/VJ-\d{4} \(guía .+, retorno\) · efectivo del chofer · [\d,]+ km/);
+    expect(c.guia).toMatch(/^[A-Z0-9]+ sin número$/);
+    expect(describirContexto(c)).not.toContain("?");
   });
 
   it("sin unidad: la deduce del viaje en curso del chofer que escribe", async () => {

@@ -2,7 +2,7 @@
 import type { Child, FC, PropsWithChildren } from "hono/jsx";
 import { raw } from "hono/html";
 import type { EstadoDesgaste, FilaViajeFlota, UsuarioWeb, ViajeEnRuta } from "@sunatapp/core";
-import { menuDe, tiposAnotar, veAjustes, type EntradaMenu, type Lugar } from "./lugares";
+import { menuDe, tiposAnotarListos, veAjustes, type EntradaMenu, type Lugar } from "./lugares";
 
 // ── Formato ──────────────────────────────────────────────────────────────────
 
@@ -119,7 +119,7 @@ export interface PropsLayout {
 
 export const Layout: FC<PropsWithChildren<PropsLayout>> = (p) => {
   const menu = menuDe(p.usuario.rol);
-  const anota = tiposAnotar(p.usuario.rol).length > 0;
+  const anota = tiposAnotarListos(p.usuario.rol).length > 0;
   const urlAnotar = `/anotar?volver=${encodeURIComponent(p.lugar === "anotar" ? "/" : p.ruta)}`;
   const enlace = (m: EntradaMenu) => (
     <a href={m.href} class={m.lugar === p.lugar ? "activo" : undefined} aria-current={m.lugar === p.lugar ? "page" : undefined}>

@@ -1,5 +1,6 @@
 import { and, cobro, contraparte, eq, factura, inArray, sql, type EstadoCobro } from "@sunatapp/db";
 import { fechaHoraLima } from "../dominio/fechas";
+import { formatearSoles } from "../dominio/montos";
 import { parsearSerieNumero } from "../dominio/serie-numero";
 import { ErrorNegocio } from "../errores";
 import { registrarAuditoria } from "../infra/auditoria";
@@ -38,7 +39,8 @@ export async function registrarCobro(
     const [fila] = await tx.select({ suma: sql<string>`coalesce(sum(${cobro.monto}), 0)` }).from(cobro).where(eq(cobro.facturaId, f.id));
     const cobradoPrevio = Number(fila?.suma ?? 0);
     const saldoAntes = cobrable - cobradoPrevio;
-    if (e.montoCentimos > saldoAntes) throw new ErrorNegocio(`El monto supera el saldo pendiente (${saldoAntes / 100})`);
+    if (saldoAntes <= 0) throw new ErrorNegocio("Esa factura ya está pagada");
+    if (e.montoCentimos > saldoAntes) throw new ErrorNegocio(`Te deben solo ${formatearSoles(saldoAntes)}`);
     const saldo = saldoAntes - e.montoCentimos;
     const estadoCobro: EstadoCobro = saldo === 0 ? "pagada" : "parcial";
     await tx.insert(cobro).values({ facturaId: f.id, fecha: e.fecha, monto: e.montoCentimos, medio: e.medio, nota: e.nota ?? null, usuarioId: e.usuarioId ?? null });

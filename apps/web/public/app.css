@@ -366,13 +366,16 @@ body.sin-inferior .contenido { padding-bottom: 24px; }
 .campo-monto .monto-caja { display: flex; align-items: center; gap: 8px; border: 2px solid var(--text); border-radius: 8px; background: var(--white); padding: 0 14px; }
 .campo-monto .monto-caja > span { font-family: var(--f-title); font-size: 24px; color: var(--muted); }
 .campo-monto input { border: 0; font-family: var(--f-title); font-size: 32px; min-height: 64px; padding: 0; background: transparent; }
-.opciones-icono { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.opciones-icono { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); grid-auto-rows: 1fr; gap: 8px; }
+.opciones-icono .opcion { min-height: 76px; justify-content: flex-start; padding: 12px 2px 8px; }
+.opciones-icono .opcion span { line-height: 1.25; overflow-wrap: break-word; }
 .opcion { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; min-height: 64px; padding: 8px 4px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); font-size: 12px; text-align: center; cursor: pointer; }
 .opcion input { position: absolute; opacity: 0; width: 1px; height: 1px; min-height: 0; }
 .opcion:has(input:checked) { background: var(--dark); border-color: var(--dark); color: var(--accent-on-dark); font-weight: 600; }
 .opcion:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 1px; }
-.opciones-texto { display: flex; gap: 8px; flex-wrap: wrap; }
-.opciones-texto .opcion { min-height: 44px; flex-direction: row; padding: 0 14px; }
+.opciones-texto { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.opciones-texto:has(> :nth-child(3):last-child) { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.opciones-texto .opcion { min-height: 48px; flex-direction: row; padding: 0 10px; }
 .opciones-lista { display: flex; flex-direction: column; gap: 6px; }
 .opcion-fila { display: flex; gap: 10px; align-items: center; min-height: 48px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel); cursor: pointer; }
 .opcion-fila:has(input:checked) { border-color: var(--accent); background: var(--accent-softer); }

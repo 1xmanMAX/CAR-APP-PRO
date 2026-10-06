@@ -10,7 +10,7 @@
  * En el celular revisa además: desborde horizontal, botones de menos de 44 px, texto de menos de
  * 12 px y contraste menor a 4.5:1 → capturas/<etiqueta>/revision.json.
  */
-import { spawn, type ChildProcess } from "node:child_process";
+import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { chromium, type Page } from "playwright-core";
@@ -30,13 +30,16 @@ const TAMANOS = [{ nombre: "390", width: 390, height: 844 }, { nombre: "1440", w
 const REVISION = `(() => {
   const visible = (e) => { const b = e.getBoundingClientRect(); const s = getComputedStyle(e); return b.width > 0 && b.height > 0 && s.visibility !== "hidden" && s.display !== "none"; };
   const desc = (e) => e.tagName.toLowerCase() + (e.id ? "#" + e.id : "") + (typeof e.className === "string" && e.className.trim() ? "." + e.className.trim().split(/\\s+/).join(".") : "") + " «" + (e.textContent || "").trim().slice(0, 30) + "»";
-  const lum = (c) => { const m = c.match(/[\\d.]+/g); if (!m) return 1; const v = m.slice(0, 3).map((x) => { const n = Number(x) / 255; return n <= 0.03928 ? n / 12.92 : Math.pow((n + 0.055) / 1.055, 2.4); }); return 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2]; };
-  const fondo = (e) => { for (let x = e; x; x = x.parentElement) { const b = getComputedStyle(x).backgroundColor; const a = b.match(/[\\d.]+/g); if (a && (a.length < 4 || Number(a[3]) > 0.5)) return b; } return "rgb(239, 233, 220)"; };
+  /* Contraste (aproximado). Límites: solo entiende colores rgb()/rgba() (no color(), oklch…); ignora imágenes y degradados de fondo, opacity del elemento o de sus padres, y usa siempre 4.5:1 (no el 3:1 de texto grande). Los fondos y el color del texto con alfa se mezclan sobre lo que tienen detrás. */
+  const rgba = (c) => { const m = c.match(/[\\d.]+/g); return m ? { r: Number(m[0]), g: Number(m[1]), b: Number(m[2]), a: m.length > 3 ? Number(m[3]) : 1 } : { r: 239, g: 233, b: 220, a: 1 }; };
+  const mezclar = (f, d) => ({ r: f.r * f.a + d.r * (1 - f.a), g: f.g * f.a + d.g * (1 - f.a), b: f.b * f.a + d.b * (1 - f.a), a: 1 });
+  const lum = (c) => { const v = [c.r, c.g, c.b].map((x) => { const n = x / 255; return n <= 0.03928 ? n / 12.92 : Math.pow((n + 0.055) / 1.055, 2.4); }); return 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2]; };
+  const fondo = (e) => { const capas = []; for (let x = e; x; x = x.parentElement) { const c = rgba(getComputedStyle(x).backgroundColor); if (c.a > 0) { capas.push(c); if (c.a >= 1) break; } } return capas.reduceRight((d, f) => mezclar(f, d), { r: 239, g: 233, b: 220, a: 1 }); };
   const botones = [...document.querySelectorAll("button, .btn, input:not([type=hidden]):not([type=radio]):not([type=checkbox]):not([type=file]), select, textarea, nav a, summary")]
     .filter((e) => visible(e) && e.getBoundingClientRect().height < 44).map(desc);
   const conTexto = [...document.querySelectorAll("body *")].filter((e) => visible(e) && [...e.childNodes].some((n) => n.nodeType === 3 && (n.textContent || "").trim()));
   const letraChica = conTexto.filter((e) => parseFloat(getComputedStyle(e).fontSize) < 12).map(desc);
-  const contrasteBajo = conTexto.filter((e) => { const a = lum(getComputedStyle(e).color), b = lum(fondo(e)); return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05) < 4.5; }).map(desc);
+  const contrasteBajo = conTexto.filter((e) => { const bg = fondo(e), a = lum(mezclar(rgba(getComputedStyle(e).color), bg)), b = lum(bg); return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05) < 4.5; }).map(desc);
   return { anchoPagina: document.documentElement.scrollWidth, botonesChicos: botones.slice(0, 15), letraChica: letraChica.slice(0, 15), contrasteBajo: contrasteBajo.slice(0, 15) };
 })()`;
 
@@ -65,14 +68,24 @@ function levantarWeb(): ChildProcess {
   });
 }
 
-async function esperarServidor(): Promise<void> {
+/** Espera a que la web responda; falla de inmediato si el proceso muere al arrancar. */
+async function esperarServidor(web: ChildProcess): Promise<void> {
+  let murio: number | null | undefined;
+  web.once("exit", (codigo) => { murio = codigo ?? -1; });
   for (let i = 0; i < 360; i++) {
+    if (murio !== undefined) throw new Error("La web se cerró al arrancar (código " + murio + "); mira el mensaje de arriba.");
     try {
-      if ((await fetch(`${BASE}/salud`)).ok) return;
+      if ((await fetch(BASE + "/salud")).ok) return;
     } catch { /* todavía arranca */ }
     await new Promise((r) => setTimeout(r, 500));
   }
   throw new Error("La web no respondió en 180 s");
+}
+
+/** En Windows el proceso hijo (tsx) lanza otro node: hay que matar todo el árbol o el puerto queda ocupado. */
+function detenerWeb(web: ChildProcess): void {
+  if (web.pid && process.platform === "win32") spawnSync("taskkill", ["/T", "/F", "/PID", String(web.pid)], { stdio: "ignore" });
+  else web.kill();
 }
 
 async function entrar(page: Page): Promise<void> {
@@ -109,10 +122,15 @@ if (!existsSync(join(DATOS, "pglite"))) {
   process.exit(1);
 }
 mkdirSync(SALIDA, { recursive: true });
+// Si ya hay algo en el puerto, se fotografiaría otra app (o una versión vieja): mejor parar.
+if (await fetch(BASE + "/salud").then(() => true, () => false)) {
+  console.error("Ya hay algo respondiendo en " + BASE + ": cierra esa web o usa otro puerto con CAPTURAS_PUERTO.");
+  process.exit(1);
+}
 const web = levantarWeb();
 const revision: Record<string, Revision> = {};
 try {
-  await esperarServidor();
+  await esperarServidor(web);
   const navegador = await chromium.launch({ executablePath: buscarChromium() });
   try {
     for (const t of TAMANOS) {
@@ -134,5 +152,5 @@ try {
   const malos = Object.entries(revision).filter(([, r]) => r.anchoPagina > 390 || r.botonesChicos.length || r.letraChica.length || r.contrasteBajo.length);
   console.log(malos.length ? `⚠ Revisar en 390 px: ${malos.map(([n]) => n).join(", ")} (ver revision.json)` : "✓ 390 px: sin desborde, botones chicos, letra chica ni contraste bajo");
 } finally {
-  web.kill();
+  detenerWeb(web);
 }

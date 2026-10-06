@@ -12,3 +12,4 @@ export * from "./simulado";
 export * from "./real";
 export * from "./mixto";
 export * from "./faults";
+export * from "./valor-referencial";

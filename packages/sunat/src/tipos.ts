@@ -18,6 +18,16 @@ export interface SunatGateway {
   enviarGuia(doc: DocumentoFirmado): Promise<{ ticket: string }>;
   consultarTicket(ticket: string): Promise<RespuestaSunat>;
   enviarFactura(doc: DocumentoFirmado): Promise<RespuestaSunat>;
+  /** CDR de una factura ya registrada en SUNAT; null si SUNAT no la tiene o no se puede consultar. */
+  consultarCdrFactura(c: { ruc: string; serie: string; numero: number }): Promise<RespuestaSunat | null>;
+}
+
+/** SUNAT rechazó el usuario/clave SOL o las credenciales API: no se debe reintentar solo. */
+export class SunatCredencialesError extends Error {
+  constructor(mensaje: string) {
+    super(mensaje);
+    this.name = "SunatCredencialesError";
+  }
 }
 
 export class SunatNoDisponibleError extends Error {

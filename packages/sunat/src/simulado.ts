@@ -35,6 +35,10 @@ export class SunatSimulado implements SunatGateway {
     return this.responder(doc.nombreArchivo, false);
   }
 
+  async consultarCdrFactura(): Promise<RespuestaSunat | null> {
+    return null;
+  }
+
   private async responder(nombre: string, esGuia: boolean): Promise<RespuestaSunat> {
     if (this.o.rechazo) return { estado: "rechazada", codigo: this.o.rechazo.codigo, mensaje: this.o.rechazo.mensaje, notas: [] };
     const serieNumero = nombre.split("-").slice(2).join("-");

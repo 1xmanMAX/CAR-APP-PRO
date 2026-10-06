@@ -14,4 +14,8 @@ export class SunatMixto implements SunatGateway {
   enviarFactura(doc: DocumentoFirmado): Promise<RespuestaSunat> {
     return this.facturas.enviarFactura(doc);
   }
+
+  consultarCdrFactura(c: { ruc: string; serie: string; numero: number }): Promise<RespuestaSunat | null> {
+    return this.facturas.consultarCdrFactura(c);
+  }
 }

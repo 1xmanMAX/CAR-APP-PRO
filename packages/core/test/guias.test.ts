@@ -10,6 +10,7 @@ import { crearContextoPrueba, entradaGuia } from "./helpers";
 class GatewayControlado implements SunatGateway {
   envios = 0;
   caido = true;
+  async consultarCdrFactura() { return null; }
   constructor(private readonly base: SunatGateway) {}
   async enviarGuia(doc: DocumentoFirmado) {
     this.envios++;
@@ -149,6 +150,7 @@ describe("emitirGuia", () => {
     let envios = 0;
     let segundaLlamada: ResultadoEmision | undefined;
     ctx.gateway = {
+      consultarCdrFactura: async () => null,
       async enviarGuia(doc: DocumentoFirmado) {
         envios++;
         // Reentrada mientras el primer envío sigue "en curso": debe encontrar la guía
@@ -198,6 +200,7 @@ describe("emitirGuia", () => {
   it("un error no relacionado con disponibilidad al enviar mantiene pendiente_envio", async () => {
     const ctx = await contexto({
       gateway: {
+        consultarCdrFactura: async () => null,
         async enviarGuia() {
           throw new Error("Credenciales inválidas");
         },
@@ -225,6 +228,7 @@ describe("emitirGuia", () => {
 
     const base = new SunatSimulado({ demoraMs: 0 });
     ctx.gateway = {
+      consultarCdrFactura: async () => null,
       async enviarGuia(doc: DocumentoFirmado) {
         if (doc.nombreArchivo.endsWith("V001-1")) throw new Error("Servicio caído");
         return base.enviarGuia(doc);
@@ -349,6 +353,7 @@ describe("emitirGuia", () => {
     const ctx = await contexto({
       reloj: () => ahora,
       gateway: {
+        consultarCdrFactura: async () => null,
         async enviarGuia(doc: DocumentoFirmado) {
           xmlsEnviados.push(doc.xml);
           if (caido) throw new SunatNoDisponibleError("sin red");
@@ -484,6 +489,7 @@ describe("emitirGuia", () => {
     const rechazar = new SunatSimulado({ rechazo: { codigo: "2800", mensaje: "dato inválido" }, demoraMs: 0 });
     const aceptar = new SunatSimulado({ demoraMs: 0 });
     const gw: SunatGateway = {
+      consultarCdrFactura: async () => null,
       enviarGuia: (d: DocumentoFirmado) => (acepta ? aceptar : rechazar).enviarGuia(d),
       consultarTicket: (t: string) => (acepta ? aceptar : rechazar).consultarTicket(t),
       enviarFactura: (d: DocumentoFirmado) => (acepta ? aceptar : rechazar).enviarFactura(d),

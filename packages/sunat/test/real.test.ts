@@ -1,9 +1,9 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { SunatMixto } from "../src/mixto";
-import { ENDPOINTS_FACTURA, SunatReal, type CredencialesSunat } from "../src/real";
+import { ENDPOINT_CONSULTA_CDR, ENDPOINTS_FACTURA, SunatReal, type CredencialesSunat } from "../src/real";
 import { SunatSimulado } from "../src/simulado";
-import { SunatNoDisponibleError } from "../src/tipos";
+import { SunatCredencialesError, SunatNoDisponibleError } from "../src/tipos";
 import { leerXmlDeZip, zipArchivo } from "../src/zip";
 
 const cred: CredencialesSunat = {
@@ -113,7 +113,7 @@ describe("SunatReal — facturas (SOAP)", () => {
     const rechazo = fetchFalso([fault("2800")]);
     expect(await new SunatReal(cred, { fetch: rechazo.fn }).enviarFactura({ nombreArchivo: "a", xml: "<a/>" })).toMatchObject({ estado: "rechazada", codigo: "2800", mensaje: "Detalle 2800" });
     const auth = fetchFalso([fault("0102")]);
-    await expect(new SunatReal(cred, { fetch: auth.fn }).enviarFactura({ nombreArchivo: "a", xml: "<a/>" })).rejects.toThrow("0102");
+    await expect(new SunatReal(cred, { fetch: auth.fn }).enviarFactura({ nombreArchivo: "a", xml: "<a/>" })).rejects.toBeInstanceOf(SunatCredencialesError);
   });
 });
 
@@ -125,5 +125,86 @@ describe("SunatMixto", () => {
     const { ticket } = await mixto.enviarGuia({ nombreArchivo: "20606433094-31-V001-1", xml: "<x/>" });
     expect((await mixto.consultarTicket(ticket)).estado).toBe("aceptada");
     expect((await mixto.enviarFactura({ nombreArchivo: "20606433094-01-F001-1", xml: "<x/>" })).estado).toBe("rechazada");
+  });
+});
+
+const soapFault = (codigo: string) => () =>
+  new Response(`<soap-env:Envelope xmlns:soap-env="http://schemas.xmlsoap.org/soap/envelope/"><soap-env:Body><soap-env:Fault><faultcode>soap-env:Client.${codigo}</faultcode><faultstring>Detalle ${codigo}</faultstring></soap-env:Fault></soap-env:Body></soap-env:Envelope>`, { status: 500 });
+const statusCdr = (codigo: string, contenidoB64?: string) => () =>
+  new Response(`<S:Envelope xmlns:S="http://schemas.xmlsoap.org/soap/envelope/"><S:Body><ns2:getStatusCdrResponse xmlns:ns2="http://service.sunat.gob.pe"><statusCdr>${contenidoB64 ? `<content>${contenidoB64}</content>` : ""}<statusCode>${codigo}</statusCode><statusMessage>Mensaje ${codigo}</statusMessage></statusCdr></ns2:getStatusCdrResponse></S:Body></S:Envelope>`);
+
+describe("SunatReal — credenciales y faults", () => {
+  it("token OAuth 401 es SunatCredencialesError", async () => {
+    const { fn } = fetchFalso([() => new Response("{}", { status: 401 })]);
+    await expect(new SunatReal(cred, { fetch: fn }).enviarGuia({ nombreArchivo: "a", xml: "<a/>" })).rejects.toBeInstanceOf(SunatCredencialesError);
+  });
+
+  it("401 persistente tras renovar el token es SunatCredencialesError", async () => {
+    const { fn } = fetchFalso([token, () => new Response("", { status: 401 }), token, () => new Response("", { status: 401 })]);
+    await expect(new SunatReal(cred, { fetch: fn }).enviarGuia({ nombreArchivo: "a", xml: "<a/>" })).rejects.toBeInstanceOf(SunatCredencialesError);
+  });
+
+  it("fault 0102 es SunatCredencialesError; 0109 es SunatNoDisponibleError; 1034 es rechazo", async () => {
+    await expect(new SunatReal(cred, { fetch: fetchFalso([soapFault("0102")]).fn }).enviarFactura({ nombreArchivo: "a", xml: "<a/>" }))
+      .rejects.toBeInstanceOf(SunatCredencialesError);
+    await expect(new SunatReal(cred, { fetch: fetchFalso([soapFault("0109")]).fn }).enviarFactura({ nombreArchivo: "a", xml: "<a/>" }))
+      .rejects.toBeInstanceOf(SunatNoDisponibleError);
+    expect(await new SunatReal(cred, { fetch: fetchFalso([soapFault("1034")]).fn }).enviarFactura({ nombreArchivo: "a", xml: "<a/>" }))
+      .toMatchObject({ estado: "rechazada", codigo: "1034" });
+  });
+
+  it("fault 1033 en producción recupera el CDR con getStatusCdr", async () => {
+    const cdr = (await zipArchivo("R-x.xml", CDR_OK)).toString("base64");
+    const { fn, llamadas } = fetchFalso([soapFault("1033"), statusCdr("0004", cdr)]);
+    const r = await new SunatReal({ ...cred, ambienteFactura: "produccion" }, { fetch: fn })
+      .enviarFactura({ nombreArchivo: "20606433094-01-F001-7", xml: "<f/>" });
+    expect(r).toMatchObject({ estado: "aceptada", codigo: "0" });
+    expect(llamadas[1]!.url).toBe(ENDPOINT_CONSULTA_CDR);
+    const sobre = String(llamadas[1]!.init.body);
+    expect(sobre).toContain("<rucComprobante>20606433094</rucComprobante>");
+    expect(sobre).toContain("<serieComprobante>F001</serieComprobante>");
+    expect(sobre).toContain("<numeroComprobante>7</numeroComprobante>");
+  });
+
+  it("fault 1033 en beta (sin consulta de CDR) es rechazo con el código original", async () => {
+    const { fn, llamadas } = fetchFalso([soapFault("1033")]);
+    expect(await new SunatReal(cred, { fetch: fn }).enviarFactura({ nombreArchivo: "20606433094-01-F001-7", xml: "<f/>" }))
+      .toMatchObject({ estado: "rechazada", codigo: "1033" });
+    expect(llamadas.length).toBe(1);
+  });
+
+  it("consultarCdrFactura devuelve null si SUNAT no tiene el comprobante", async () => {
+    const { fn } = fetchFalso([statusCdr("0011")]);
+    expect(await new SunatReal({ ...cred, ambienteFactura: "produccion" }, { fetch: fn }).consultarCdrFactura({ ruc: "20606433094", serie: "F001", numero: 9 })).toBeNull();
+  });
+});
+
+describe("SunatReal — ticket GRE con códigos cortos", () => {
+  it("98 en proceso, 0 aceptada con CDR, 99 rechazada", async () => {
+    const cdrZip = (await zipArchivo("R-x.xml", CDR_OK)).toString("base64");
+    const { fn } = fetchFalso([
+      token,
+      () => json({ codRespuesta: "98" }),
+      () => json({ codRespuesta: "0", arcCdr: cdrZip }),
+      () => json({ codRespuesta: "99", error: { numError: "2556", desError: "Placa no válida" } }),
+    ]);
+    const sunat = new SunatReal(cred, { fetch: fn });
+    expect((await sunat.consultarTicket("T")).estado).toBe("en_proceso");
+    expect(await sunat.consultarTicket("T")).toMatchObject({ estado: "aceptada" });
+    expect(await sunat.consultarTicket("T")).toMatchObject({ estado: "rechazada", codigo: "2556" });
+  });
+});
+
+describe("SunatReal — probar conexión", () => {
+  it("probarCredencialesGre: ok con token, no ok con 401", async () => {
+    expect(await new SunatReal(cred, { fetch: fetchFalso([token]).fn }).probarCredencialesGre()).toMatchObject({ ok: true });
+    expect(await new SunatReal(cred, { fetch: fetchFalso([() => new Response("{}", { status: 401 })]).fn }).probarCredencialesGre())
+      .toMatchObject({ ok: false, mensaje: expect.stringContaining("client_id") });
+  });
+
+  it("probarClaveSol: ok si SUNAT contesta la consulta; no ok con fault de credenciales", async () => {
+    expect(await new SunatReal(cred, { fetch: fetchFalso([statusCdr("0011")]).fn }).probarClaveSol()).toMatchObject({ ok: true });
+    expect(await new SunatReal(cred, { fetch: fetchFalso([soapFault("0102")]).fn }).probarClaveSol())
+      .toMatchObject({ ok: false, mensaje: expect.stringContaining("clave SOL") });
   });
 });

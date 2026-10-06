@@ -9,10 +9,12 @@ import {
   compararTransporte,
   emitirGuia,
   entradaDesdeBorrador,
+  esPrimeraReal,
   ErrorNegocio,
   ErrorValidacion,
   ETIQUETAS_CAMPO,
   guardarExtraccion,
+  intentarFacturaAutomatica,
   listarGuiasSinFacturar,
   normalizarPlaca,
   ORDEN_CAMPOS,
@@ -30,7 +32,7 @@ import {
 import { PdfSinTextoError, type GuiaExtraida } from "@sunatapp/extractor";
 import { InlineKeyboard, InputFile, type Api, type Bot, type Filter } from "grammy";
 import type { ContextoBot, Dependencias } from "./bot";
-import { ofrecerFactura } from "./flujo-factura";
+import { notificarFactura, ofrecerFactura } from "./flujo-factura";
 import { flujoGuia, type EstadoFlujoGuia, type PendienteTransporte } from "./sesion";
 import { preguntas, resumenGuia, textos } from "./textos";
 
@@ -69,7 +71,11 @@ export async function notificarGuia(
     // ya aceptada cuando su PDF llega tarde). Ofrecer facturar una guía ya facturada solo lleva a
     // un "Sí" que responde "La guía ya tiene factura": se ofrece únicamente si sigue sin facturar.
     const sinFacturar = await listarGuiasSinFacturar(deps.ctx);
-    if (sinFacturar.some((g) => g.id === r.id)) await ofrecerFactura(api, chatId, r.id, r.serieNumero);
+    if (sinFacturar.some((g) => g.id === r.id)) {
+      const auto = await intentarFacturaAutomatica(deps.ctx, r.id);
+      if (auto) await notificarFactura(deps, api, chatId, auto);
+      else await ofrecerFactura(api, chatId, r.id, r.serieNumero);
+    }
     return;
   }
   if (r.estado === "rechazada") {
@@ -216,7 +222,7 @@ async function avanzar(c: Ctx, deps: Dependencias, f: EstadoFlujoGuia): Promise<
     await preguntarCampo(c, f, campo);
     return;
   }
-  await mostrarResumen(c, f);
+  await mostrarResumen(c, deps, f);
 }
 
 async function preguntarTransporte(c: Ctx, p: PendienteTransporte): Promise<void> {
@@ -246,12 +252,15 @@ async function preguntarCampo(c: Ctx, f: EstadoFlujoGuia, campo: CampoGuia): Pro
   await c.reply(preguntas[campo]);
 }
 
-async function mostrarResumen(c: Ctx, f: EstadoFlujoGuia): Promise<void> {
+async function mostrarResumen(c: Ctx, deps: Dependencias, f: EstadoFlujoGuia): Promise<void> {
   f.paso = "resumen";
   delete f.campoActual;
   delete f.direccionPendiente;
   const conductor = `${f.transporte.conductor.nombres} ${f.transporte.conductor.apellidos}`.trim();
-  await c.reply(resumenGuia(f.borrador, f.transporte, conductor), {
+  const aviso = (await esPrimeraReal(deps.ctx, "guia")) ? `${textos.primeraReal("guía")}
+
+` : "";
+  await c.reply(aviso + resumenGuia(f.borrador, f.transporte, conductor), {
     reply_markup: new InlineKeyboard()
       .text("✅ Emitir", "g:emitir")
       .text("✏️ Corregir", "g:corregir")
@@ -415,7 +424,7 @@ async function retomarGuia(c: Ctx, deps: Dependencias, guiaId: number): Promise<
     pendientesTransporte: [],
   };
   c.session.flujo = flujo;
-  await mostrarResumen(c, flujo);
+  await mostrarResumen(c, deps, flujo);
 }
 
 export async function manejarBoton(c: CtxBoton, deps: Dependencias): Promise<void> {

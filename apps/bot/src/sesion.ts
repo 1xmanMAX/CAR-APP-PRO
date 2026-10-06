@@ -33,7 +33,9 @@ export interface EstadoFlujoGuia {
 export interface EstadoFlujoFactura {
   tipo: "factura";
   guiaId: number;
-  paso: "monto" | "igv" | "cliente" | "ruc_cliente" | "pago" | "dias" | "resumen" | "emitiendo";
+  paso: "monto" | "igv" | "cliente" | "ruc_cliente" | "pago" | "dias" | "vr" | "carga_util" | "resumen" | "emitiendo";
+  /** Dato de transporte que falta (se pide una sola vez y se guarda). */
+  falta?: { tipo: "vr_ruta"; partidaUbigeo: string; llegadaUbigeo: string } | { tipo: "carga_util"; vehiculoId: number };
   montoCentimos?: number;
   incluyeIgv?: boolean;
   clienteId?: number;

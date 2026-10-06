@@ -1,6 +1,15 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { ErrorNegocio, listarGuias, registrarVehiculo, resultadoGuia } from "@sunatapp/core";
-import { crearContextoPrueba, SunatSimulado } from "../../../packages/core/test/helpers";
+import {
+  activarFacturaAutomatica,
+  emitirGuia,
+  ErrorNegocio,
+  listarGuias,
+  registrarGuiaBorrador,
+  registrarVehiculo,
+  resultadoGuia,
+} from "@sunatapp/core";
+import { viaje } from "../../../packages/db/src";
+import { crearContextoPrueba, entradaGuia, SunatSimulado } from "../../../packages/core/test/helpers";
 import { notificarGuia } from "../src/flujo-guia";
 import { crearArnes } from "./arnes";
 import { lineasFixture, pdfConLineas } from "./pdf-prueba";
@@ -441,5 +450,31 @@ describe("flujo de guía: archivos que no sirven", () => {
     cerrables.push(a.cerrar);
     await a.documento("vacio");
     expect(a.ultimoTexto()).toBe("No pude leer texto en ese PDF. Envíame el PDF original de SUNAT.");
+  });
+});
+
+describe("flujo de guía: factura automática", () => {
+  it("con la factura automática activa y flete en el viaje, manda la factura en vez del botón Facturar", async () => {
+    const a = await arnes();
+    const guiaId = await registrarGuiaBorrador(a.ctx, entradaGuia());
+    await emitirGuia(a.ctx, guiaId);
+    await a.ctx.db.update(viaje).set({ flete: 100000 });
+    await activarFacturaAutomatica(a.ctx, true);
+
+    await notificarGuia(a.deps, a.api, 111, await resultadoGuia(a.ctx, guiaId));
+
+    expect(a.textosEnviados()).not.toContain("¿Facturar este flete (V001-1)?");
+    const docs = a.documentosEnviados();
+    expect(docs.map((d) => d.payload.caption)).toContain("✅ Factura F001-1 aceptada.");
+  });
+});
+
+describe("flujo de guía: primera emisión real", () => {
+  it("avisa en el resumen que será la primera guía real", async () => {
+    const a = await arnes(undefined, {});
+    a.ctx.simulado = false;
+    await registrarVehiculo(a.ctx, "XYZ-987");
+    await a.documento("pdf1");
+    expect(a.ultimoTexto()).toContain("PRIMERA guía REAL");
   });
 });

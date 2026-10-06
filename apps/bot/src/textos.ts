@@ -27,6 +27,12 @@ export function etiquetaEstadoGuia(estado: string): string {
 }
 
 export const textos = {
+  preguntaVr: (partida: string, llegada: string) =>
+    `Para la factura con detracción necesito el valor referencial MTC por tonelada de ${partida} → ${llegada} (tabla del D.S. 010-2006-MTC). Escríbelo en soles, p. ej. 85.50. Lo guardo para las siguientes.`,
+  preguntaCargaUtil: (placa: string) =>
+    `¿Cuál es la carga útil (en toneladas) de la unidad ${placa} con su carreta? P. ej. 30. Lo guardo para las siguientes.`,
+  vrNoEntendido: "No entendí el número. Escríbelo así: 85.50",
+  primeraReal: (tipo: "guía" | "factura") => `⚠️ Esta será tu PRIMERA ${tipo} REAL ante SUNAT. Revisa bien los datos.`,
   registroOk: "✅ Listo. Quedas como dueño. Para sumar a tu equipo, créalos en la web (Ajustes) con su ID de Telegram.",
   idParaRegistro: (id: number) => `👋 Todavía no estás registrado. Tu ID de Telegram es ${id}: pásaselo al dueño para que te dé acceso.`,
   invitacionOk: (nombre: string) => `✅ Bienvenido, ${nombre}. Ya puedes mandarme tus gastos (foto de la boleta o «grifo 350»), /viaje al salir y /fin al llegar. Escribe /ayuda para ver todo.`,

@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { emitirGuia, registrarGuiaBorrador, registrarVehiculo } from "@sunatapp/core";
+import {
+  borrarValorReferencial,
+  emitirGuia,
+  listarValoresReferenciales,
+  registrarGuiaBorrador,
+  registrarVehiculo,
+} from "@sunatapp/core";
 import { crearContextoPrueba, entradaGuia, prepararDatosTransporte, SunatSimulado } from "../../../packages/core/test/helpers";
 import { crearArnes } from "./arnes";
 import { notificarFactura } from "../src/flujo-factura";
@@ -275,3 +281,56 @@ describe("oferta de factura tras la guía", () => {
 function puntosEnOrden(l: string[]): string[] {
   return l.map((x) => (x === "PUNTO DE LLEGADA" ? "PUNTO DE PARTIDA :" : x === "PUNTO DE PARTIDA :" ? "PUNTO DE LLEGADA" : x));
 }
+
+describe("flujo de factura: valor referencial y primera real", () => {
+  async function hastaPago(a: Awaited<ReturnType<typeof arnes>>) {
+    await a.texto("/facturar V001-1");
+    await a.texto("1000");
+    await a.boton("f:igv:no");
+    await a.boton("f:cli:rem");
+    await a.boton("f:pago:contado");
+  }
+
+  it("el resumen muestra la detracción con el valor referencial, la misma que se guardará", async () => {
+    const a = await arnes();
+    await guiaAceptada(a.ctx);
+    await hastaPago(a);
+
+    const resumen = a.ultimoTexto();
+    expect(resumen).toContain("Total: S/ 1,180.00");
+    expect(resumen).toContain("Detracción 4%: S/ 72.00");
+    expect(resumen).not.toContain("S/ 47.00");
+  });
+
+  it("si falta el valor referencial de la ruta lo pregunta una sola vez y lo guarda", async () => {
+    const a = await arnes();
+    await guiaAceptada(a.ctx);
+    for (const v of await listarValoresReferenciales(a.ctx)) await borrarValorReferencial(a.ctx, v.partidaUbigeo, v.llegadaUbigeo);
+
+    await hastaPago(a);
+    expect(a.ultimoTexto()).toContain("valor referencial MTC");
+
+    await a.texto("abc");
+    expect(a.ultimoTexto()).toBe("No entendí el número. Escríbelo así: 85.50");
+
+    await a.texto("85.50");
+    expect((await listarValoresReferenciales(a.ctx)).map((v) => v.vrPorTm)).toEqual([8550]);
+    expect(a.botones().map((b) => b.callback_data)).toEqual(["f:emitir", "f:cancelar"]);
+    expect(a.ultimoTexto()).toContain("Detracción 4%: S/ 72.00");
+  });
+
+  it("avisa que será la primera factura real", async () => {
+    const a = await arnes();
+    await guiaAceptada(a.ctx);
+    a.ctx.facturaSimulada = false;
+    await hastaPago(a);
+    expect(a.ultimoTexto()).toContain("PRIMERA factura REAL");
+  });
+
+  it("no avisa de primera real en modo simulado", async () => {
+    const a = await arnes();
+    await guiaAceptada(a.ctx);
+    await hastaPago(a);
+    expect(a.ultimoTexto()).not.toContain("PRIMERA");
+  });
+});

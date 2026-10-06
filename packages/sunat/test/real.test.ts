@@ -208,3 +208,16 @@ describe("SunatReal — probar conexión", () => {
       .toMatchObject({ ok: false, mensaje: expect.stringContaining("clave SOL") });
   });
 });
+
+describe("SunatReal — correcciones de revisión", () => {
+  it("probarClaveSol: fault sin código numérico no es ok; fault de rechazo sí es ok", async () => {
+    const sinCodigo = () => new Response(`<soap-env:Envelope xmlns:soap-env="http://schemas.xmlsoap.org/soap/envelope/"><soap-env:Body><soap-env:Fault><faultcode>soap-env:Server</faultcode><faultstring>Error interno</faultstring></soap-env:Fault></soap-env:Body></soap-env:Envelope>`, { status: 500 });
+    expect(await new SunatReal(cred, { fetch: fetchFalso([sinCodigo]).fn }).probarClaveSol()).toMatchObject({ ok: false, mensaje: expect.stringContaining("inesperado") });
+    expect(await new SunatReal(cred, { fetch: fetchFalso([soapFault("2800")]).fn }).probarClaveSol()).toMatchObject({ ok: true });
+  });
+
+  it("consultarTicket con respuesta vacía no se da por aceptada", async () => {
+    const { fn } = fetchFalso([token, () => json({})]);
+    await expect(new SunatReal(cred, { fetch: fn }).consultarTicket("T")).rejects.toThrow("Respuesta de ticket inesperada");
+  });
+});

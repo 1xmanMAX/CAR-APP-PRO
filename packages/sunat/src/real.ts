@@ -109,6 +109,7 @@ export class SunatReal implements SunatGateway {
       arcCdr?: string;
       error?: { numError?: string; desError?: string };
     };
+    if ((datos.codRespuesta == null || datos.codRespuesta === "") && !datos.arcCdr) throw new Error("Respuesta de ticket inesperada de SUNAT");
     const cod = String(Number(datos.codRespuesta));
     if (cod === "98") return { estado: "en_proceso", codigo: "98", mensaje: "En proceso", notas: [] };
     if (datos.arcCdr) return leerCdrZip(Buffer.from(datos.arcCdr, "base64"));
@@ -179,9 +180,10 @@ export class SunatReal implements SunatGateway {
   /** Comprueba usuario y clave SOL sin emitir nada: consulta un comprobante que no existe. */
   async probarClaveSol(): Promise<{ ok: boolean; mensaje: string }> {
     try {
-      const { texto } = await this.soap(ENDPOINT_CONSULTA_CDR, "urn:getStatusCdr",
+      const { texto, fault } = await this.soap(ENDPOINT_CONSULTA_CDR, "urn:getStatusCdr",
         `<ser:getStatusCdr><rucComprobante>${escape(this.cred.ruc)}</rucComprobante><tipoComprobante>01</tipoComprobante><serieComprobante>F999</serieComprobante><numeroComprobante>99999999</numeroComprobante></ser:getStatusCdr>`);
-      if (/<statusCode>/.test(texto) || /<faultcode>/.test(texto)) return { ok: true, mensaje: "Usuario y clave SOL correctos" };
+      const claseFault = fault ? clasificarFault(fault.codigo) : null;
+      if (/<statusCode>/.test(texto) || claseFault === "rechazo" || claseFault === "ya_registrado") return { ok: true, mensaje: "Usuario y clave SOL correctos" };
       return { ok: false, mensaje: "SUNAT respondió algo inesperado; vuelve a probar en unos minutos" };
     } catch (e) {
       if (e instanceof SunatCredencialesError) return { ok: false, mensaje: `SUNAT no aceptó tu usuario o clave SOL. ${e.message}` };

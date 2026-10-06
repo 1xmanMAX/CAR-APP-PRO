@@ -2,7 +2,7 @@
 import type { FC } from "hono/jsx";
 import {
   hoy, listarCobrosPendientes, listarEventos, listarPorRevisar, listarViajesFlota, primerNombre, puedeVer, resumenInicio, saludFlota,
-  viajeDeFactura, viajesEnRuta, viajesPorRevisar, type Contexto, type RolUsuario,
+  viajesEnRuta, viajesPorRevisar, type Contexto, type RolUsuario,
 } from "@sunatapp/core";
 import { pagina, type App, type C, type Deps } from "../base";
 import { RUTA, veAjustes } from "../lugares";
@@ -69,7 +69,7 @@ export async function atenciones(ctx: Contexto, rol: RolUsuario, cab: DatosCabec
     }
     const cobros = await listarCobrosPendientes(ctx);
     for (const f of cobros.filas.filter((x) => x.estado === "vencida").slice(0, 2)) {
-      r.push({ color: "cambiar", texto: `${f.cliente} debe ${soles(f.saldo)} hace ${diasEntre(f.fechaVencimiento, h)} días`, href: RUTA.cobrar(await viajeDeFactura(ctx, f.facturaId)) });
+      r.push({ color: "cambiar", texto: `${f.cliente} debe ${soles(f.saldo)} hace ${diasEntre(f.fechaVencimiento, h)} días`, href: RUTA.cobrar(f.facturaId) });
     }
     const sinGuia = (await viajesPorRevisar(ctx)).filter((x) => x.motivo === "sin_guia" && x.viajeId !== null);
     if (sinGuia.length === 1) r.push({ color: "proximo", texto: `${sinGuia[0]!.codigo} no tiene guía`, href: `/viajes/${sinGuia[0]!.viajeId}` });

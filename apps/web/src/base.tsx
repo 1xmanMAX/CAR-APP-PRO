@@ -129,6 +129,11 @@ export function volver(c: C, ruta: string, aviso: { ok?: string; error?: string 
   return c.redirect(url.pathname + url.search, 303);
 }
 
+/** Destino seguro para volver después de guardar: solo rutas propias («/…», nunca «//…»). */
+export function volverA(v: string | undefined, porDefecto: string): string {
+  return v && v.startsWith("/") && !v.startsWith("//") && !v.startsWith("/\\") ? v : porDefecto;
+}
+
 /** Ejecuta la acción de un formulario y vuelve con el resultado o el error. */
 export async function accion(c: C, ruta: string, fn: () => Promise<string | { ok: string; ruta?: string }>) {
   try {

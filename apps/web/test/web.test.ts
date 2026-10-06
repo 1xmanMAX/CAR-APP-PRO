@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
-  buscarUnidad, crearCategoria, crearEnlaceWeb, guardarUsuario, registrarGasto, registrarViajeFlota, listarEventos, listarUsuarios, listarViajesFlota, obtenerEmpresa, partesDeUnidad, instalarParte, listarTiposParte,
+  buscarUnidad, crearCategoria, crearEnlaceWeb, guardarUsuario, registrarGasto, registrarViajeFlota, listarEventos, listarUsuarios, listarViajesFlota, obtenerEmpresa, partesDeUnidad, instalarParte, listarTiposParte, liquidacionViaje,
   type Contexto,
 } from "@sunatapp/core";
 import { crearDb, gasto } from "../../../packages/db/src/index";
@@ -147,11 +147,72 @@ describe("web", () => {
       expect(html).not.toContain('aria-label="Ajustes"');
     });
 
+    describe("anotar", () => {
+      const enviar = (cookie: string, datos: Record<string, string>) => {
+        const fd = new FormData();
+        for (const [k, v] of Object.entries(datos)) fd.set(k, v);
+        return app.request("/anotar", { method: "POST", headers: { cookie, origin: ORIGEN }, body: fd });
+      };
+
+      it("Gasté: se pide monto y en qué; viaje, camión y fecha se ponen solos; vuelve a donde estaba", async () => {
+        const cookie = await entrar();
+        const v = await registrarViajeFlota(ctx, { vehiculoId: 1, origenLugar: "Yura", destinoLugar: "Puno", estado: "en_curso", origen: "web" });
+        const html = await (await app.request("/anotar?volver=/viajes", { headers: { cookie } })).text();
+        for (const t of ["¿Qué pasó?", "Gasté", "Plata al chofer", "Me pagaron", "¿Cuánto?", "¿En qué?", "Se pone solo", v.codigo]) expect(html, t).toContain(t);
+        expect(html).toMatch(new RegExp(`<option value="${v.id}" selected[^>]*>${v.codigo} · `));
+        expect(html).not.toContain('<nav class="inferior"');
+        const r = await enviar(cookie, { tipo: "gaste", volver: "/viajes", monto: "350", categoria: "combustible", viajeId: String(v.id), vehiculoId: "1" });
+        expect(r.status).toBe(303);
+        expect(r.headers.get("location")).toMatch(/^\/viajes\?ok=Gasto\+guardado\+en\+VJ-/);
+        const [g] = await ctx.db.select().from(gasto);
+        expect(g).toMatchObject({ categoria: "combustible", monto: 35000, viajeId: v.id, vehiculoId: 1 });
+      });
+
+      it("Gasté con «Otro» usa la categoría elegida en la lista", async () => {
+        const cookie = await entrar();
+        await enviar(cookie, { tipo: "gaste", volver: "/", monto: "12", categoria: "otro", categoriaOtra: "balanza", vehiculoId: "1" });
+        const [g] = await ctx.db.select().from(gasto);
+        expect(g).toMatchObject({ categoria: "balanza", monto: 1200 });
+      });
+
+      it("Plata al chofer entra al viaje", async () => {
+        const cookie = await entrar();
+        const v = await registrarViajeFlota(ctx, { vehiculoId: 1, origenLugar: "Yura", destinoLugar: "Puno", estado: "en_curso", origen: "web" });
+        const html = await (await app.request("/anotar?tipo=chofer", { headers: { cookie } })).text();
+        expect(html).toContain("¿Cómo se la diste?");
+        const r = await enviar(cookie, { tipo: "chofer", volver: `/viajes/${v.id}`, monto: "500", medio: "yape", viajeId: String(v.id) });
+        expect(aviso(r)).toContain("ok=Entrega de S/ 500.00 anotada");
+        expect((await liquidacionViaje(ctx, v.id)).entregado).toBe(50000);
+      });
+
+      it("Me pagaron: sin facturas lo dice; otro ingreso se guarda; un error vuelve al formulario", async () => {
+        const cookie = await entrar();
+        expect(await (await app.request("/anotar?tipo=cobro", { headers: { cookie } })).text()).toContain("Nadie te debe facturas");
+        let r = await enviar(cookie, { tipo: "cobro", modo: "otro", volver: "/", concepto: "Alquiler de carreta", monto: "300" });
+        expect(aviso(r)).toContain("ok=Ingreso guardado");
+        r = await enviar(cookie, { tipo: "cobro", volver: "/", facturaId: "999", monto: "10", medio: "efectivo" });
+        expect(r.headers.get("location")).toMatch(/^\/anotar\?tipo=cobro/);
+        expect(aviso(r)).toContain("error=");
+      });
+
+      it("cada rol ve y guarda solo lo suyo", async () => {
+        await guardarUsuario(ctx, { nombre: "Taller", email: "taller@demo.pe", rol: "taller", clave: "clave-segura" });
+        const taller = await entrar("taller@demo.pe");
+        expect((await enviar(taller, { tipo: "gaste", volver: "/", monto: "10", categoria: "peaje" })).status).toBe(403);
+        await guardarUsuario(ctx, { nombre: "Conta", email: "conta@demo.pe", rol: "contador", clave: "clave-segura" });
+        const conta = await entrar("conta@demo.pe");
+        const html = await (await app.request("/anotar", { headers: { cookie: conta } })).text();
+        expect(html).toContain("Gasté");
+        expect(html).not.toContain("Reparé / repuesto");
+        expect((await enviar(conta, { tipo: "gaste", volver: "/", monto: "10", categoria: "peaje", vehiculoId: "1" })).status).toBe(303);
+      });
+    });
+
     it("gasto mínimo: solo monto y categoría; el resto se completa solo", async () => {
       const cookie = await entrar();
       await registrarViajeFlota(ctx, { vehiculoId: 1, origenLugar: "Juliaca", destinoLugar: "Arequipa", estado: "en_curso", origen: "web" });
-      const html = await (await app.request("/finanzas", { headers: { cookie } })).text();
-      expect(html).toContain("Se guarda con");
+      const html = await (await app.request("/anotar", { headers: { cookie } })).text();
+      expect(html).toContain("Se pone solo");
       const fd = new FormData();
       fd.set("categoria", "peaje");
       fd.set("monto", "28.50");

@@ -1,11 +1,12 @@
 /** @jsxRuntime automatic @jsxImportSource hono/jsx */
 import {
   actualizarPresupuestoViaje, borrarEntrega, borrarGasto, desenlazarGuia, editarGasto, enlazarGuia, ErrorNegocio, finalizarViajeFlota,
-  listarGuiasSinViaje, reabrirViaje, hoy, liquidacionViaje, rentabilidadDeViaje, listarCategorias, MEDIOS_ENTREGA, nombreCategoria, parsearMonto, puedeEditar, registrarEntrega,
+  listarGuiasSinViaje, reabrirViaje, hoy, liquidacionViaje, rentabilidadDeViaje, listarCategorias, MEDIOS_ENTREGA, nombreCategoria, parsearMonto, puedeEditar,
   type LiquidacionViaje, type Semaforo,
 } from "@sunatapp/core";
 import { accion, formulario, pagina, type App, type C, type Deps } from "../base";
 import { Barra, fechaCorta, Kpi, Panel, soles2, Vacio } from "../ui";
+import { guardarEntrega } from "../acciones";
 import { enteroONull } from "./flota";
 import { CamposPlantilla, categoriasDeViaje, plantillaDeFormulario } from "./rutas";
 
@@ -227,12 +228,7 @@ export function rutasLiquidacion(app: App, d: Deps): void {
   app.post("/viajes/:id{[0-9]+}/entrega", async (c) => {
     const id = Number(c.req.param("id"));
     const f = await formulario(c);
-    return accion(c, `/viajes/${id}`, async () => {
-      const monto = parsearMonto(f.monto ?? "");
-      if (monto === null) throw new ErrorNegocio("Monto no válido");
-      await registrarEntrega(d.ctx, { viajeId: id, monto, medio: (f.medio as "efectivo") ?? "efectivo", fecha: f.fecha || undefined, nota: f.nota || null, usuarioId: c.get("usuario").id });
-      return `Entrega de ${soles2(monto)} anotada`;
-    });
+    return accion(c, `/viajes/${id}`, () => guardarEntrega(d, c.get("usuario").id, id, f));
   });
   app.post("/viajes/:id{[0-9]+}/entrega/:entrega{[0-9]+}/borrar", async (c) => {
     const id = Number(c.req.param("id"));

@@ -1,10 +1,11 @@
 /** @jsxRuntime automatic @jsxImportSource hono/jsx */
 import {
   editarViajeFlota, emitirFactura, enlazarGuia, ErrorNegocio, finalizarViajeFlota, hoy, listarCobrosPendientes, listarGuias,
-  listarUnidades, listarViajesFlota, parsearMonto, prepararFactura, puedeEditar, rangoMes, registrarCobro, registrarViajeFlota,
+  listarUnidades, listarViajesFlota, parsearMonto, prepararFactura, puedeEditar, rangoMes, registrarViajeFlota,
   sumarDias, formatearSoles, archivosDocumento, contarPorRevisar, puedeVer,
 } from "@sunatapp/core";
-import { accion, formulario, pagina, servirDeAlmacen, type App, type C, type Deps } from "../base";
+import { guardarCobro } from "../acciones";
+import { accion, formulario, pagina, servirDeAlmacen, volverA, type App, type C, type Deps } from "../base";
 import { enteroONull } from "./flota";
 import { fechaCorta, Kpi, miles, Origen, Panel, soles, soles2, Vacio } from "../ui";
 
@@ -268,12 +269,7 @@ export function rutasViajes(app: App, d: Deps): void {
   }));
   app.post("/cobros/:id", async (c) => {
     const f = await formulario(c);
-    return accion(c, "/viajes", async () => {
-      const monto = parsearMonto(f.monto ?? "");
-      if (monto === null) throw new ErrorNegocio("Monto no válido");
-      const r = await registrarCobro(d.ctx, { facturaId: Number(c.req.param("id")), montoCentimos: monto, fecha: hoy(d.ctx), medio: (f.medio as "efectivo") ?? "transferencia", usuarioId: c.get("usuario").id });
-      return r.estadoCobro === "pagada" ? "Factura pagada por completo" : `Cobro registrado · saldo ${soles2(r.saldo)}`;
-    });
+    return accion(c, volverA(f.volver, "/viajes"), () => guardarCobro(d, c.get("usuario").id, Number(c.req.param("id")), f));
   });
   for (const tipo of ["guia", "factura"] as const) {
     app.get(`/${tipo}s/:id/:archivo`, async (c) => {

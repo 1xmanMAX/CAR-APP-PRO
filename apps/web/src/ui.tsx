@@ -2,7 +2,7 @@
 import type { Child, FC, PropsWithChildren } from "hono/jsx";
 import { raw } from "hono/html";
 import type { EstadoDesgaste, FilaViajeFlota, UsuarioWeb, ViajeEnRuta } from "@sunatapp/core";
-import { menuDe, veAjustes, type EntradaMenu, type Lugar } from "./lugares";
+import { menuDe, tiposAnotar, veAjustes, type EntradaMenu, type Lugar } from "./lugares";
 
 // ── Formato ──────────────────────────────────────────────────────────────────
 
@@ -119,6 +119,8 @@ export interface PropsLayout {
 
 export const Layout: FC<PropsWithChildren<PropsLayout>> = (p) => {
   const menu = menuDe(p.usuario.rol);
+  const anota = tiposAnotar(p.usuario.rol).length > 0;
+  const urlAnotar = `/anotar?volver=${encodeURIComponent(p.lugar === "anotar" ? "/" : p.ruta)}`;
   const enlace = (m: EntradaMenu) => (
     <a href={m.href} class={m.lugar === p.lugar ? "activo" : undefined} aria-current={m.lugar === p.lugar ? "page" : undefined}>
       <Icono n={m.lugar} />{m.etiqueta}
@@ -148,6 +150,7 @@ export const Layout: FC<PropsWithChildren<PropsLayout>> = (p) => {
           <nav class="lateral" aria-label="Lugares">
             <a class="marca" href="/"><Logo /><span><b>Control Flota</b><span class="s">{p.cab.empresa}</span></span></a>
             {menu.map(enlace)}
+            {anota ? <a class="btn primario anotar-lateral" href={urlAnotar} data-abrir-panel=""><Icono n="mas" t={18} />Anotar</a> : null}
             <div class="abajo">
               {veAjustes(p.usuario.rol) ? (
                 <a href="/ajustes" class={p.lugar === "ajustes" ? "activo" : undefined} aria-current={p.lugar === "ajustes" ? "page" : undefined}><Icono n="ajustes" />Ajustes</a>
@@ -162,7 +165,13 @@ export const Layout: FC<PropsWithChildren<PropsLayout>> = (p) => {
             {p.children}
           </main>
         </div>
-        {p.sinNavInferior ? null : <nav class="inferior" aria-label="Lugares" style={`--n:${menu.length}`}>{menu.map(enlace)}</nav>}
+        {p.sinNavInferior ? null : (
+          <nav class="inferior" aria-label="Lugares" style={`--n:${menu.length + (anota ? 1 : 0)}`}>
+            {menu.slice(0, 2).map(enlace)}
+            {anota ? <a class="mas" href={urlAnotar} aria-label="Anotar"><span><Icono n="mas" t={26} /></span></a> : null}
+            {menu.slice(2).map(enlace)}
+          </nav>
+        )}
         <script src={`/static/app.js?v=${V}`} defer></script>
         {(p.scripts ?? []).map((s) => <script type="module" src={`${s}?v=${V}`}></script>)}
       </body>

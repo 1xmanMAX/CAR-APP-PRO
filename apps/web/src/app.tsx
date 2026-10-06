@@ -10,6 +10,7 @@ import {
   type App, type C, type Deps, type OpcionesWeb, type Variables,
 } from "./base";
 import { PaginaSimple } from "./ui";
+import { rutasAnotar } from "./paginas/anotar";
 import { rutasDashboard } from "./paginas/dashboard";
 import { rutasTrailer } from "./paginas/trailer";
 import { rutasFlota } from "./paginas/flota";
@@ -267,7 +268,7 @@ export function crearWeb(ctx: Contexto, opciones: OpcionesWeb = {}): App {
     await next();
   });
 
-  for (const m of [rutasDashboard, rutasTrailer, rutasFlota, rutasInventario, rutasReparaciones, rutasLiquidacion, rutasRevisar, rutasRutas, rutasViajes, rutasFinanzas, rutasEstadisticas, rutasRentabilidad, rutasTelegram, rutasDispositivo, rutasAjustes, rutasSincronizar]) {
+  for (const m of [rutasAnotar, rutasDashboard, rutasTrailer, rutasFlota, rutasInventario, rutasReparaciones, rutasLiquidacion, rutasRevisar, rutasRutas, rutasViajes, rutasFinanzas, rutasEstadisticas, rutasRentabilidad, rutasTelegram, rutasDispositivo, rutasAjustes, rutasSincronizar]) {
     m(app, deps);
   }
   return app;

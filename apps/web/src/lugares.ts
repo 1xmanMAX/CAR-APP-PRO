@@ -19,8 +19,8 @@ export const RUTA = {
   numeros: "/finanzas",
   catalogoPartes: "/ajustes",
   revisar: "/revisar",
-  /** Cobrar una factura: en el viaje de su guía (tarea 7: «Papeles y cobro»); si no tiene viaje, la lista. */
-  cobrar: (viajeId: number | null) => (viajeId ? `/viajes/${viajeId}` : "/viajes"),
+  /** Cobrar una factura: «Me pagaron» de Anotar con la factura elegida; al guardar vuelve a Inicio. */
+  cobrar: (facturaId: number) => `/anotar?tipo=cobro&facturaId=${facturaId}&volver=%2F`,
 };
 
 export interface EntradaMenu { lugar: "inicio" | "viajes" | "camiones" | "numeros"; etiqueta: string; href: string; seccion: Seccion }

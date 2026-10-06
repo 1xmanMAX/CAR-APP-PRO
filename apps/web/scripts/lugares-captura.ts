@@ -16,6 +16,9 @@ export interface LugarCaptura {
 
 export const LUGARES: LugarCaptura[] = [
   { nombre: "inicio", ruta: "/" },
+  { nombre: "anotar", ruta: "/anotar" },
+  { nombre: "anotar-chofer", ruta: "/anotar?tipo=chofer" },
+  { nombre: "anotar-cobro", ruta: "/anotar?tipo=cobro" },
   { nombre: "viajes", ruta: "/viajes" },
   { nombre: "camiones", ruta: "/trailer", espera: 1500 },
   { nombre: "numeros", ruta: "/finanzas" },

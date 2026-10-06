@@ -1,11 +1,12 @@
 /** @jsxRuntime automatic @jsxImportSource hono/jsx */
 import {
   borrarGasto, capturarContexto, crearPrestamo, describirContexto, deudaPrestamos, ErrorNegocio, flujoCaja, hoy, listarMovimientos, listarPrestamos,
-  listarCategorias, listarReinversiones, listarUnidades, NOMBRE_MEDIO_PAGO, obtenerGasto, pagarCuota, parsearMonto, puedeEditar, rangoMes,
-  registrarGasto, registrarIngreso, registrarReinversion, reinvertidoEnAnio, resumenFinanciero, ultimaUnidadDeUsuario, type MedioPago,
+  listarCategorias, listarReinversiones, listarUnidades, NOMBRE_MEDIO_PAGO, obtenerGasto, pagarCuota, puedeEditar, rangoMes,
+  registrarReinversion, reinvertidoEnAnio, resumenFinanciero, ultimaUnidadDeUsuario,
 } from "@sunatapp/core";
 import { accion, formulario, formularioMultiparte, pagina, servirDeAlmacen, type App, type C, type Deps } from "../base";
 import { enteroONull } from "./flota";
+import { guardarGasto, guardarIngreso, montoObligatorio } from "../acciones";
 import { fechaCorta, fechaMedia, Kpi, Origen, Panel, soles, soles2, Vacio } from "../ui";
 
 const CHIP_MOV: Record<string, string> = { INGRESO: "ok", GASTO: "cambiar", "REINVERSIÓN": "proximo", CUOTA: "oscuro", COMPRA: "neutro" };
@@ -188,31 +189,11 @@ async function vista(c: C, d: Deps) {
   ));
 }
 
-function montoObligatorio(v: string | undefined): number {
-  const m = parsearMonto(v ?? "");
-  if (m === null) throw new ErrorNegocio("Monto no válido");
-  return m;
-}
-
 export function rutasFinanzas(app: App, d: Deps): void {
   app.get("/finanzas", (c) => vista(c, d));
   app.post("/finanzas/gasto", async (c) => {
     const { campos: f, archivos } = await formularioMultiparte(c);
-    return accion(c, "/finanzas", async () => {
-      let rutaFoto: string | null = null;
-      const foto = archivos.foto;
-      if (foto) {
-        if (foto.size > 8 * 1024 * 1024) throw new ErrorNegocio("La foto pesa más de 8 MB");
-        const ext = (foto.name.split(".").pop() ?? "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
-        rutaFoto = await d.ctx.almacen.guardar(`vouchers/${Date.now()}-web.${ext}`, Buffer.from(await foto.arrayBuffer()));
-      }
-      const r = await registrarGasto(d.ctx, {
-        categoria: f.categoria ?? "", monto: montoObligatorio(f.monto), vehiculoId: f.vehiculoId ? Number(f.vehiculoId) : null,
-        fecha: f.fecha || undefined, nota: f.nota || null, rutaFoto, origen: "web", usuarioId: c.get("usuario").id,
-        medioPago: (f.medioPago || undefined) as MedioPago | undefined, kmVehiculo: f.km ? enteroONull(f.km) : null,
-      });
-      return r.avisoKm ? `Gasto guardado. ${r.avisoKm}` : "Gasto guardado";
-    });
+    return accion(c, "/finanzas", () => guardarGasto(d, c.get("usuario").id, f, archivos.foto));
   });
   app.post("/finanzas/gasto/:id/borrar", async (c) => accion(c, "/finanzas", async () => {
     await borrarGasto(d.ctx, Number(c.req.param("id")), c.get("usuario").id);
@@ -220,10 +201,7 @@ export function rutasFinanzas(app: App, d: Deps): void {
   }));
   app.post("/finanzas/ingreso", async (c) => {
     const f = await formulario(c);
-    return accion(c, "/finanzas", async () => {
-      await registrarIngreso(d.ctx, { concepto: f.concepto ?? "", monto: montoObligatorio(f.monto), vehiculoId: f.vehiculoId ? Number(f.vehiculoId) : null, fecha: f.fecha || undefined, origen: "web", usuarioId: c.get("usuario").id });
-      return "Ingreso guardado";
-    });
+    return accion(c, "/finanzas", () => guardarIngreso(d, c.get("usuario").id, f));
   });
   app.post("/finanzas/reinversion", async (c) => {
     const f = await formulario(c);

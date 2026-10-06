@@ -89,6 +89,28 @@ describe("web", () => {
       expect(conta).toMatch(/Números<\/a>/);
     });
 
+    it("inicio: ganaste, entró/salió/te deben, en ruta y lo que necesita atención", async () => {
+      const cookie = await entrar();
+      const v = await registrarViajeFlota(ctx, { vehiculoId: 1, origenLugar: "Yura", destinoLugar: "Puno", estado: "en_curso", origen: "web" });
+      const html = await (await app.request("/", { headers: { cookie } })).text();
+      for (const t of ["Ganaste este mes", "Entró", "Salió", "Te deben", "Necesita tu atención", "En ruta ahora", "Yura → Puno", "SUNAT en modo simulado"]) {
+        expect(html, t).toContain(t);
+      }
+      expect(html).toContain(`href="/viajes/${v.id}"`);
+      expect(html).toMatch(/<a class="btn-icono solo-movil" href="\/ajustes" aria-label="Ajustes">/);
+      expect(html).not.toContain("TELEGRAM · ENTRADAS DEL BOT");
+      expect(html).not.toContain("GASTOS · POR CATEGORÍA");
+    });
+
+    it("inicio del taller: sin plata", async () => {
+      await guardarUsuario(ctx, { nombre: "Taller", email: "taller@demo.pe", rol: "taller", clave: "clave-segura" });
+      const html = await (await app.request("/", { headers: { cookie: await entrar("taller@demo.pe") } })).text();
+      expect(html).toContain("Necesita tu atención");
+      expect(html).not.toContain("Ganaste este mes");
+      expect(html).not.toContain("En ruta ahora");
+      expect(html).not.toContain('aria-label="Ajustes"');
+    });
+
     it("gasto mínimo: solo monto y categoría; el resto se completa solo", async () => {
       const cookie = await entrar();
       await registrarViajeFlota(ctx, { vehiculoId: 1, origenLugar: "Juliaca", destinoLugar: "Arequipa", estado: "en_curso", origen: "web" });
@@ -214,7 +236,7 @@ describe("web", () => {
       let html = await (await app.request("/revisar", { headers: { cookie } })).text();
       expect(html).toContain("NO SE PUDO LEER");
       expect(html).toMatch(new RegExp(`<audio controls[^>]*src="/archivo/documento/${m.id}"`));
-      expect(await (await app.request("/", { headers: { cookie } })).text()).toContain("1 por revisar");
+      expect(await (await app.request("/", { headers: { cookie } })).text()).toContain("por confirmar");
       const r = await post(cookie, `/revisar/${m.id}`, { tipo: "gasto", categoria: "peaje", monto: "28.50", vehiculoId: "1" });
       expect(aviso(r)).toContain("ok=Gasto guardado");
       html = await (await app.request("/revisar", { headers: { cookie } })).text();

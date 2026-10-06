@@ -1,7 +1,7 @@
 /** @jsxRuntime automatic @jsxImportSource hono/jsx */
 import type { Child, FC, PropsWithChildren } from "hono/jsx";
 import { raw } from "hono/html";
-import type { EstadoDesgaste, UsuarioWeb } from "@sunatapp/core";
+import type { EstadoDesgaste, FilaViajeFlota, UsuarioWeb, ViajeEnRuta } from "@sunatapp/core";
 import { menuDe, veAjustes, type EntradaMenu, type Lugar } from "./lugares";
 
 // ── Formato ──────────────────────────────────────────────────────────────────
@@ -33,6 +33,13 @@ export function fechaMedia(f: string | null | undefined): string {
   return `${d} ${MESES[Number(m) - 1]} ${y!.slice(2)}`;
 }
 export const nombreMes = (mes: string) => `${MESES[Number(mes.slice(5, 7)) - 1]} ${mes.slice(2, 4)}`;
+const MESES_LARGOS = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
+/** "2026-10" → "octubre". */
+export const mesLargo = (mes: string) => MESES_LARGOS[Number(mes.slice(5, 7)) - 1] ?? mes;
+/** Días entre dos fechas AAAA-MM-DD (b − a). */
+export function diasEntre(a: string, b: string): number {
+  return Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86_400_000);
+}
 export const pct = (n: number | null | undefined) => (n === null || n === undefined ? "—" : `${n}%`);
 
 export const ETIQUETA_ESTADO: Record<EstadoDesgaste, string> = { ok: "OK", proximo: "PRÓXIMO", cambiar: "CAMBIAR YA" };
@@ -199,6 +206,57 @@ export const Vacio: FC<PropsWithChildren> = (p) => <div class="vacio">{p.childre
 /** Contenedor de datos JSON para los scripts del cliente. */
 export const Datos: FC<{ id: string; valor: unknown }> = (p) =>
   raw(`<script type="application/json" id="${p.id}">${JSON.stringify(p.valor).replace(/</g, "\\u003c")}</script>`);
+
+/** Una cifra chica con su etiqueta (Entró / Salió / Te deben…). */
+export const Cifra: FC<{ etiqueta: string; valor: Child; sub?: Child; tono?: "ok" | "cambiar" }> = (p) => (
+  <div class="cifra">
+    <span class="lbl">{p.etiqueta}</span>
+    <b class={p.tono ? `t-${p.tono}` : undefined}>{p.valor}</b>
+    {p.sub ? <span class="sub">{p.sub}</span> : null}
+  </div>
+);
+
+/** Tarjeta de un viaje en curso: camión, ruta, día, gastado contra entregado y lo que deja. */
+export const TarjetaEnRuta: FC<{ v: ViajeEnRuta }> = ({ v }) => {
+  const pctGasto = v.entregado > 0 ? Math.min(100, (v.gastado / v.entregado) * 100) : v.gastado > 0 ? 100 : 0;
+  return (
+    <a class="tarjeta-ruta" href={`/viajes/${v.viajeId}`}>
+      <div class="fila-sep"><b>{v.unidad} · {v.ruta}</b><span class="muted">día {v.dia}</span></div>
+      <Barra pct={pctGasto} color={v.gastado > v.entregado ? "var(--accent)" : "var(--ok)"} />
+      <span class="muted">
+        {v.entregado > 0
+          ? `Gastó ${soles(v.gastado)} de ${soles(v.entregado)} que le diste a ${v.chofer}`
+          : v.gastado > 0 ? `Gastó ${soles(v.gastado)} · todavía no le diste plata a ${v.chofer}` : `Todavía no le diste plata a ${v.chofer}`}
+        {v.deja !== null ? ` · deja ${soles(v.deja)}` : ""}
+      </span>
+    </a>
+  );
+};
+
+const ESTADO_VIAJE: Record<FilaViajeFlota["estado"], [string, string]> = { en_curso: ["EN RUTA", "ok"], cerrado: ["CERRADO", "neutro"], planificado: ["PLANIFICADO", "proximo"] };
+
+/** Lista de viajes: tarjetas en el celular, tabla corta en la PC (un solo marcado). */
+export const ListaViajes: FC<{ viajes: FilaViajeFlota[] }> = ({ viajes }) => (
+  <div class="lista-viajes" role="table" aria-label="Viajes">
+    <div class="fila-viaje cab" role="row">
+      <span role="columnheader">Viaje</span><span role="columnheader">Camión</span><span role="columnheader">Estado</span>
+      <span class="num" role="columnheader">Flete</span><span class="num" role="columnheader">Gastos</span><span class="num" role="columnheader">Dejó</span>
+    </div>
+    {viajes.map((v) => {
+      const dejo = v.flete > 0 ? v.flete - v.costo : null;
+      return (
+        <a class="fila-viaje" role="row" href={`/viajes/${v.id}`}>
+          <span class="ruta" role="cell"><b>{v.ruta}</b> <span class="muted">· {fechaCorta(v.fecha)}</span></span>
+          <span role="cell">{v.unidad}</span>
+          <span role="cell"><span class={`chip ${ESTADO_VIAJE[v.estado][1]}`}>{ESTADO_VIAJE[v.estado][0]}</span></span>
+          <span class="num" role="cell">{v.flete ? soles(v.flete) : "—"}</span>
+          <span class="num" role="cell">{soles(v.costo)}</span>
+          <b class={`num${dejo !== null && dejo < 0 ? " t-cambiar" : ""}`} role="cell">{dejo === null ? "falta flete" : soles(dejo)}</b>
+        </a>
+      );
+    })}
+  </div>
+);
 
 export const PaginaSimple: FC<PropsWithChildren<{ titulo: string }>> = (p) => (
   <html lang="es">

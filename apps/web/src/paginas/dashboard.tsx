@@ -1,11 +1,12 @@
 /** @jsxRuntime automatic @jsxImportSource hono/jsx */
 import type { FC } from "hono/jsx";
 import {
-  deudaPrestamos, estadoBot, gastosPorCategoria, hoy, listarEventos, listarRepuestos, listarViajesFlota, rangoMes, resumenFinanciero,
-  resumirInventario, saludFlota, sumarDias, type Contexto, contarPorRevisar, puedeVer,
+  hoy, listarCobrosPendientes, listarEventos, listarPorRevisar, listarViajesFlota, primerNombre, puedeVer, resumenInicio, saludFlota,
+  viajesEnRuta, viajesPorRevisar, type Contexto, type RolUsuario,
 } from "@sunatapp/core";
 import { pagina, type App, type C, type Deps } from "../base";
-import { Barra, CHIP_UNIDAD, ESTADO_UNIDAD, Kpi, Panel, soles, Vacio } from "../ui";
+import { RUTA, veAjustes } from "../lugares";
+import { Cabecera, Cifra, diasEntre, Icono, ListaViajes, mesLargo, soles, TarjetaEnRuta, Vacio, type DatosCabecera } from "../ui";
 
 type Evento = Awaited<ReturnType<typeof listarEventos>>[number];
 
@@ -34,115 +35,103 @@ export async function htmlFeed(ctx: Contexto, n = 14): Promise<string> {
   return (<FeedTelegram eventos={await listarEventos(ctx, n)} />).toString();
 }
 
+export interface Atencion { color: "proximo" | "cambiar"; texto: string; href: string }
+const COLOR_ATENCION: Record<Atencion["color"], string> = { proximo: "var(--amber-bar)", cambiar: "var(--accent)" };
+
+/** Lo que necesita atención según el rol: lo urgente (magenta) primero. */
+export async function atenciones(ctx: Contexto, rol: RolUsuario, cab: DatosCabecera): Promise<Atencion[]> {
+  const r: Atencion[] = [];
+  const h = hoy(ctx);
+  if (puedeVer(rol, "viajes")) {
+    const docs = await listarPorRevisar(ctx);
+    if (docs.length) {
+      r.push({ color: "proximo", texto: `${docs.length} ${docs.length === 1 ? "foto o mensaje del chofer" : "fotos o mensajes del chofer"} por confirmar`, href: RUTA.revisar });
+    }
+    const cobros = await listarCobrosPendientes(ctx);
+    for (const f of cobros.filas.filter((x) => x.estado === "vencida").slice(0, 2)) {
+      r.push({ color: "cambiar", texto: `${f.cliente} debe ${soles(f.saldo)} hace ${diasEntre(f.fechaVencimiento, h)} días`, href: RUTA.cobrar(f.facturaId) });
+    }
+    const sinGuia = (await viajesPorRevisar(ctx)).filter((x) => x.motivo === "sin_guia" && x.viajeId !== null);
+    if (sinGuia.length === 1) r.push({ color: "proximo", texto: `${sinGuia[0]!.codigo} no tiene guía`, href: `/viajes/${sinGuia[0]!.viajeId}` });
+    else if (sinGuia.length > 1) r.push({ color: "proximo", texto: `${sinGuia.length} viajes sin guía`, href: RUTA.revisar });
+  }
+  if (puedeVer(rol, "trailer")) {
+    for (const s of await saludFlota(ctx)) {
+      for (const p of s.partes.filter((x) => x.estado === "cambiar").slice(0, 2)) {
+        r.push({ color: "cambiar", texto: `${p.nombreCorto} de ${s.unidad.codigo}: cambiar ya`, href: RUTA.camion(s.unidad.id, `?parte=${p.id}`) });
+      }
+    }
+  }
+  if (cab.simulado && puedeVer(rol, "ajustes")) r.push({ color: "proximo", texto: "SUNAT en modo simulado: las guías y facturas no son reales", href: "/ajustes/dispositivo" });
+  if (!cab.botEnLinea) r.push({ color: "cambiar", texto: "El bot de Telegram está desconectado", href: "/telegram" });
+  return r.sort((a, b) => Number(a.color !== "cambiar") - Number(b.color !== "cambiar"));
+}
+
+export const ListaAtencion: FC<{ items: Atencion[] }> = ({ items }) => (
+  <div class="lista-filas">
+    {items.map((a) => (
+      <a class="fila-aviso" href={a.href}>
+        <span class="punto" style={`background:${COLOR_ATENCION[a.color]}`}></span>
+        <span class="txt">{a.texto}</span>
+        <span class="flecha" aria-hidden="true">›</span>
+      </a>
+    ))}
+  </div>
+);
+
 async function vista(c: C, d: Deps) {
   const ctx = d.ctx;
-  const porRevisar = puedeVer(c.get("usuario").rol, "viajes") ? await contarPorRevisar(ctx) : 0;
-  const h = hoy(ctx);
-  const { desde, hasta } = rangoMes(h);
-  const [fin, repuestos, deuda, salud, eventos, bot, gastosCat, viajes30] = await Promise.all([
-    resumenFinanciero(ctx, desde, hasta),
-    listarRepuestos(ctx),
-    deudaPrestamos(ctx),
-    saludFlota(ctx),
-    listarEventos(ctx, 14),
-    estadoBot(ctx),
-    gastosPorCategoria(ctx, desde, hasta),
-    listarViajesFlota(ctx, { desde: sumarDias(h, -29), hasta: h, limite: 2000 }),
+  const u = c.get("usuario");
+  const cab = await d.cabecera();
+  const veViajes = puedeVer(u.rol, "viajes");
+  const [res, enRuta, avisos, ultimos] = await Promise.all([
+    puedeVer(u.rol, "finanzas") ? resumenInicio(ctx) : Promise.resolve(null),
+    veViajes ? viajesEnRuta(ctx) : Promise.resolve([]),
+    atenciones(ctx, u.rol, cab),
+    veViajes ? listarViajesFlota(ctx, { limite: 30 }).then((vs) => vs.filter((v) => v.estado === "cerrado").slice(0, 5)) : Promise.resolve([]),
   ]);
-  const inv = resumirInventario(repuestos);
-  const todas = salud.flatMap((s) => s.partes.map((p) => ({ ...p, unidad: s.unidad.codigo })));
-  const proximos = todas.filter((p) => p.pct >= 50).slice(0, 9);
-  const maxGasto = Math.max(1, ...gastosCat.map((g) => g.monto));
-  const maxKm = Math.max(1, ...viajes30.map((v) => v.km ?? 0));
-  const diaIdx = (f: string) => 29 - Math.round((Date.parse(`${h}T00:00:00Z`) - Date.parse(`${f}T00:00:00Z`)) / 86_400_000);
-
-  return pagina(c, d, { titulo: "Dashboard", seccion: "dashboard" }, (
+  const mes = hoy(ctx).slice(0, 7);
+  return pagina(c, d, { titulo: "Inicio", seccion: "dashboard" }, (
     <>
-      {porRevisar > 0 ? <a class="aviso info" href="/revisar" style="display:block;text-decoration:none">🔎 <b>{porRevisar} por revisar</b>: mensajes de Telegram sin confirmar o gastos sin viaje. Revisar →</a> : null}
-      <section class="kpis" aria-label="Resumen del mes">
-        <Kpi oscuro etiqueta="GANANCIA NETA · MES" valor={soles(fin.ganancia)} sub={fin.margenPct !== null ? `margen ${fin.margenPct}%` : undefined} />
-        <Kpi etiqueta="INGRESOS · FLETES" valor={soles(fin.ingresos)} sub={`${fin.viajes} viajes · ${fin.km.toLocaleString("en-US")} km`} />
-        <Kpi etiqueta="GASTOS" valor={soles(fin.gastos)} sub={`variables ${soles(fin.gastosVariables)} · fijos ${soles(fin.gastosFijos)}`} />
-        <Kpi etiqueta="INVERTIDO EN REPUESTOS" valor={soles(inv.inversionTotal)} sub={`${soles(inv.enAlmacen)} en almacén`} />
-        <Kpi etiqueta="DEUDA PRÉSTAMOS" valor={soles(deuda)} />
-      </section>
-
-      <div class="grid g-main">
-        <Panel titulo="FLOTA · SALUD POR PARTE" der={<a href="/flota" class="lbl-12">VER →</a>}>
-          {salud.length === 0 ? <Vacio>Agrega tu primera unidad en <a href="/flota">Flota</a>.</Vacio> : (
-            <div class="filas">
-              {salud.map((s) => (
-                <a class="fila-flota" href={`/trailer/${s.unidad.id}`}>
-                  <div>
-                    <div class="mono-t" style="font-size:16px">{s.unidad.codigo}</div>
-                    <span class={`chip ${CHIP_UNIDAD[s.unidad.estado]}`}>{ESTADO_UNIDAD[s.unidad.estado]}</span>
-                  </div>
-                  <div class="tira" aria-label={`${s.conteo.ok} ok, ${s.conteo.proximo} próximas, ${s.conteo.cambiar} por cambiar`}>
-                    {s.partes.length ? s.partes.map((p) => <i class={`b-${p.estado}`} title={`${p.nombreCorto} ${p.pct}%`}></i>) : <span class="muted" style="font-size:12px">sin partes controladas</span>}
-                  </div>
-                  <div style="font-size:12px;text-align:right" class={s.peor ? `t-${s.peor.estado}` : "muted"}>
-                    {s.peor ? <><b>{s.peor.nombreCorto}</b><br />{s.peor.restanteTexto}</> : "—"}
-                  </div>
-                </a>
-              ))}
-            </div>
-          )}
-          <span class="lbl">CADA CUADRO = UNA PARTE · AZUL OK · ÁMBAR PRÓXIMO · MAGENTA CAMBIAR</span>
-        </Panel>
-
-        <Panel titulo="PRÓXIMOS CAMBIOS · ANTES DE QUE FALLEN">
-          {proximos.length === 0 ? <Vacio>Ninguna parte pasa del 50%. 👌</Vacio> : (
-            <div class="filas">
-              {proximos.map((p) => (
-                <a class="fila-parte" href={`/trailer/${p.vehiculoId}?parte=${p.id}`}>
-                  <span><b>{p.unidad}</b> · {p.nombreCorto} <span class="muted">· quedan {p.restanteTexto.toLowerCase()}</span></span>
-                  <b class={`t-${p.estado} mono-t`}>{p.pct}%</b>
-                  <Barra pct={p.pct} estado={p.estado} />
-                </a>
-              ))}
-            </div>
-          )}
-        </Panel>
-
-        <Panel clase="oscuro" titulo="TELEGRAM · ENTRADAS DEL BOT" der={<span class={`vivo${bot.enLinea ? "" : " off"}`}>● {bot.enLinea ? "LIVE" : "BOT APAGADO"}</span>}>
-          <div data-refrescar="/api/feed" data-cada="20">
-            <FeedTelegram eventos={eventos} />
+      <Cabecera
+        sobre={`${cab.empresa} · ${mesLargo(mes)}`} titulo={`Hola, ${primerNombre(u.nombre)}`}
+        der={veAjustes(u.rol) ? <a class="btn-icono solo-movil" href="/ajustes" aria-label="Ajustes"><Icono n="ajustes" t={20} /></a> : undefined}
+      />
+      {res ? (
+        <div class="inicio-cifras">
+          <section class="tarjeta-oscura">
+            <span class="lbl">Ganaste este mes</span>
+            <b class={`cifra-grande${res.ganancia < 0 ? " neg" : ""}`}>{soles(res.ganancia)}</b>
+            <span class="sub">{res.ganancia >= res.gananciaAnterior
+              ? `Vas mejor que ${mesLargo(res.mesAnterior)} (${soles(res.gananciaAnterior)})`
+              : `${mesLargo(res.mesAnterior)} fue mejor (${soles(res.gananciaAnterior)})`}</span>
+          </section>
+          <div class="tres-cifras">
+            <Cifra etiqueta="Entró" valor={soles(res.entro)} sub={`${res.viajes} viajes`} tono="ok" />
+            <Cifra etiqueta="Salió" valor={soles(res.salio)} />
+            <Cifra etiqueta="Te deben" valor={soles(res.teDeben)} sub={`${res.facturasPorCobrar} facturas`} tono={res.vencido > 0 ? "cambiar" : undefined} />
           </div>
-          <a href="/telegram" style="color:var(--accent-on-dark);font-size:12px">VER CONVERSACIÓN DEL BOT →</a>
-        </Panel>
+        </div>
+      ) : null}
+      <div class="inicio-cols">
+        <section class="col">
+          <h2 class="titulo-seccion">Necesita tu atención</h2>
+          {avisos.length === 0 ? <div class="lista-filas"><Vacio>Todo en orden. 👌</Vacio></div> : <ListaAtencion items={avisos.slice(0, 5)} />}
+          {avisos.length > 5 ? <a class="ver-mas" href={RUTA.revisar}>Ver los {avisos.length} avisos</a> : null}
+        </section>
+        {veViajes ? (
+          <section class="col">
+            <h2 class="titulo-seccion">En ruta ahora</h2>
+            {enRuta.length === 0 ? <div class="lista-filas"><Vacio>Ningún camión está en ruta.</Vacio></div> : enRuta.map((v) => <TarjetaEnRuta v={v} />)}
+          </section>
+        ) : null}
       </div>
-
-      <div class="grid g-lado">
-        <Panel titulo="VIAJES · CUÁNDO SALE CADA TRAILER" der={<span class="lbl">ÚLTIMOS 30 DÍAS · ALTURA = KM</span>}>
-          {salud.length === 0 ? <Vacio>Sin unidades.</Vacio> : salud.map((s) => {
-            const propios = viajes30.filter((v) => v.vehiculoId === s.unidad.id);
-            return (
-              <div class="carril">
-                <b class="mono-t">{s.unidad.codigo}</b>
-                <div class="pista" aria-label={`${propios.length} viajes en 30 días`}>
-                  {propios.map((v) => (
-                    <i title={`${v.fecha} · ${v.ruta} · ${v.km ?? "?"} km`} style={`left:calc(${(diaIdx(v.fecha) / 30) * 100}%);height:${v.km ? Math.max(12, (v.km / maxKm) * 100) : 20}%;${v.km ? "" : "opacity:.45"}`}></i>
-                  ))}
-                </div>
-                <span class="muted" style="font-size:12px;text-align:right">{propios.length} viajes</span>
-              </div>
-            );
-          })}
-        </Panel>
-
-        <Panel titulo="GASTOS · POR CATEGORÍA" der={<a class="lbl-12" href="/finanzas">FINANZAS →</a>}>
-          {gastosCat.length === 0 ? <Vacio>Sin gastos este mes.</Vacio> : (
-            <div class="filas">
-              {gastosCat.map((g) => (
-                <div>
-                  <div style="display:flex;justify-content:space-between;font-size:12px"><span>{g.nombre}</span><b>{soles(g.monto)}</b></div>
-                  <Barra pct={(g.monto / maxGasto) * 100} color="var(--accent)" />
-                </div>
-              ))}
-            </div>
-          )}
-        </Panel>
-      </div>
+      {ultimos.length ? (
+        <section class="col solo-pc">
+          <h2 class="titulo-seccion">Últimos viajes</h2>
+          <ListaViajes viajes={ultimos} />
+        </section>
+      ) : null}
     </>
   ));
 }

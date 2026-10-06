@@ -1,9 +1,19 @@
 import { ID_FIRMA } from "../firma";
 import { montoEnLetras } from "../letras";
 import { centimosADecimal as m, escapeXml as x } from "../util";
+import type { ValoresReferenciales } from "../valor-referencial";
 import type { Parte } from "./gre-transportista";
 
 export const CODIGO_DETRACCION_TRANSPORTE = "027";
+
+export interface TransporteFactura {
+  origen: { ubigeo: string; direccion: string };
+  destino: { ubigeo: string; direccion: string };
+  detalleViaje: string;
+  vr: ValoresReferenciales;
+  /** Opcional: solo genera observaciones si falta. */
+  vehiculo?: { configuracion: string; cargaUtilTm: number; cargaEfectivaTm: number };
+}
 
 export interface DatosFactura {
   emisor: { ruc: string; razonSocial: string; nombreComercial?: string; ubigeo: string; direccion: string; cuentaDetraccion?: string };
@@ -16,6 +26,8 @@ export interface DatosFactura {
   montos: { subtotal: number; igv: number; total: number; detraccionPorcentaje: number | null; detraccionMonto: number };
   formaPago: { tipo: "contado" } | { tipo: "credito"; fechaVencimiento: string };
   guiasRelacionadas: string[];
+  /** Obligatorio cuando hay detracción (operación 1004). */
+  transporte?: TransporteFactura;
 }
 
 const CAT = "urn:pe:gob:sunat:cpe:see:gem:catalogos";
@@ -35,6 +47,41 @@ export function construirXmlFactura(d: DatosFactura): string {
   if (conDetraccion && !d.emisor.cuentaDetraccion) {
     throw new Error("Falta la cuenta de detracciones del Banco de la Nación de la empresa");
   }
+  if (conDetraccion && !d.transporte) {
+    throw new Error("La factura con detracción de transporte (1004) necesita origen, destino y valor referencial");
+  }
+  const t = conDetraccion ? d.transporte! : null;
+  const tnm = (n: number) => n.toFixed(2);
+  const envio = t?.vehiculo
+    ? `
+        <cac:Shipment>
+          <cbc:ID>01</cbc:ID>
+          <cac:Consignment>
+            <cbc:ID>1</cbc:ID>
+            <cac:TransportHandlingUnit>
+              <cac:TransportEquipment>
+                <cbc:SizeTypeCode listAgencyName="PE:MTC" listName="Configuracion Vehícular">${x(t.vehiculo.configuracion)}</cbc:SizeTypeCode>
+                <cbc:ReturnabilityIndicator>false</cbc:ReturnabilityIndicator>
+              </cac:TransportEquipment>
+              <cac:MeasurementDimension><cbc:AttributeID>01</cbc:AttributeID><cbc:Measure unitCode="TNE">${tnm(t.vehiculo.cargaUtilTm)}</cbc:Measure></cac:MeasurementDimension>
+              <cac:MeasurementDimension><cbc:AttributeID>02</cbc:AttributeID><cbc:Measure unitCode="TNE">${tnm(t.vehiculo.cargaEfectivaTm)}</cbc:Measure></cac:MeasurementDimension>
+            </cac:TransportHandlingUnit>
+          </cac:Consignment>
+        </cac:Shipment>`
+    : "";
+  const entrega = t
+    ? `
+    <cac:Delivery>
+      <cac:DeliveryLocation><cac:Address><cbc:ID schemeAgencyName="PE:INEI" schemeName="Ubigeos">${x(t.destino.ubigeo)}</cbc:ID><cac:AddressLine><cbc:Line>${x(t.destino.direccion)}</cbc:Line></cac:AddressLine></cac:Address></cac:DeliveryLocation>
+      <cac:Despatch>
+        <cbc:Instructions>${x(t.detalleViaje.slice(0, 500))}</cbc:Instructions>
+        <cac:DespatchAddress><cbc:ID schemeAgencyName="PE:INEI" schemeName="Ubigeos">${x(t.origen.ubigeo)}</cbc:ID><cac:AddressLine><cbc:Line>${x(t.origen.direccion)}</cbc:Line></cac:AddressLine></cac:DespatchAddress>
+      </cac:Despatch>
+      <cac:DeliveryTerms><cbc:ID>01</cbc:ID><cbc:Amount ${PEN}>${m(t.vr.vrServicio)}</cbc:Amount></cac:DeliveryTerms>
+      <cac:DeliveryTerms><cbc:ID>02</cbc:ID><cbc:Amount ${PEN}>${m(t.vr.vrCargaEfectiva)}</cbc:Amount></cac:DeliveryTerms>
+      <cac:DeliveryTerms><cbc:ID>03</cbc:ID><cbc:Amount ${PEN}>${m(t.vr.vrCargaUtil)}</cbc:Amount></cac:DeliveryTerms>${envio}
+    </cac:Delivery>`
+    : "";
   const neto = montos.total - montos.detraccionMonto;
 
   const guias = d.guiasRelacionadas
@@ -93,7 +140,7 @@ export function construirXmlFactura(d: DatosFactura): string {
   <cbc:ID>${x(d.serie)}-${d.numero}</cbc:ID>
   <cbc:IssueDate>${d.fechaEmision}</cbc:IssueDate>
   <cbc:IssueTime>${d.horaEmision}</cbc:IssueTime>
-  <cbc:InvoiceTypeCode listID="${conDetraccion ? "1001" : "0101"}" listAgencyName="PE:SUNAT" listName="Tipo de Documento" listURI="${CAT}:catalogo01">01</cbc:InvoiceTypeCode>
+  <cbc:InvoiceTypeCode listID="${conDetraccion ? "1004" : "0101"}" listAgencyName="PE:SUNAT" listName="Tipo de Documento" listURI="${CAT}:catalogo01">01</cbc:InvoiceTypeCode>
   <cbc:Note languageLocaleID="1000">${montoEnLetras(montos.total)}</cbc:Note>
 ${conDetraccion ? '  <cbc:Note languageLocaleID="2006">Operación sujeta a detracción</cbc:Note>' : ""}
   <cbc:DocumentCurrencyCode listID="ISO 4217 Alpha" listAgencyName="United Nations Economic Commission for Europe" listName="Currency">PEN</cbc:DocumentCurrencyCode>
@@ -162,7 +209,7 @@ ${terminosDetraccion}
         <cbc:PriceAmount ${PEN}>${m(montos.total)}</cbc:PriceAmount>
         <cbc:PriceTypeCode listAgencyName="PE:SUNAT" listName="Tipo de Precio" listURI="${CAT}:catalogo16">01</cbc:PriceTypeCode>
       </cac:AlternativeConditionPrice>
-    </cac:PricingReference>
+    </cac:PricingReference>${entrega}
     <cac:TaxTotal>
       <cbc:TaxAmount ${PEN}>${m(montos.igv)}</cbc:TaxAmount>
       <cac:TaxSubtotal>

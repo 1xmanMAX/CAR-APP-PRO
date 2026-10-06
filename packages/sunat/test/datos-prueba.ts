@@ -37,5 +37,12 @@ export function datosFacturaPrueba(): DatosFactura {
     montos: { subtotal: 100000, igv: 18000, total: 118000, detraccionPorcentaje: 4, detraccionMonto: 4700 },
     formaPago: { tipo: "contado" },
     guiasRelacionadas: ["V001-1"],
+    transporte: {
+      origen: { ubigeo: "150115", direccion: "AV. 28 DE JULIO 1275, LA VICTORIA" },
+      destino: { ubigeo: "250101", direccion: "CARRETERA FEDERICO BASADRE KM 86" },
+      detalleViaje: "TRASLADO DE 1.501 TNE SEGUN GRE V001-1: LA VICTORIA - PUCALLPA",
+      vr: { vrServicio: 120000, vrCargaEfectiva: 120000, vrCargaUtil: 110000 },
+      vehiculo: { configuracion: "T3S3", cargaUtilTm: 30, cargaEfectivaTm: 1.501 },
+    },
   };
 }

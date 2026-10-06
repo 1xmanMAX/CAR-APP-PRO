@@ -11,9 +11,9 @@ beforeAll(() => {
 });
 
 describe("construirXmlFactura", () => {
-  it("con detracción usa operación 1001, código 027, cuenta y leyendas", () => {
+  it("con detracción usa operación 1004, código 027, cuenta y leyendas", () => {
     const xml = construirXmlFactura(datosFacturaPrueba());
-    expect(xml).toContain('<cbc:InvoiceTypeCode listID="1001"');
+    expect(xml).toContain('<cbc:InvoiceTypeCode listID="1004"');
     expect(xml).toContain('<cbc:Note languageLocaleID="1000">SON: MIL CIENTO OCHENTA CON 00/100 SOLES</cbc:Note>');
     expect(xml).toContain('<cbc:Note languageLocaleID="2006">Operación sujeta a detracción</cbc:Note>');
     expect(xml).toContain("<cbc:ID>00-045-091619</cbc:ID>");
@@ -31,6 +31,39 @@ describe("construirXmlFactura", () => {
     const xml = construirXmlFactura(d);
     expect(xml).toContain('<cbc:InvoiceTypeCode listID="0101"');
     expect(xml).not.toContain("Detraccion");
+  });
+
+  it("1004 lleva origen, destino, detalle y los tres valores referenciales en la línea", () => {
+    const xml = construirXmlFactura(datosFacturaPrueba());
+    const linea = xml.slice(xml.indexOf("<cac:InvoiceLine>"));
+    expect(linea.indexOf("<cac:Delivery>")).toBeGreaterThan(linea.indexOf("</cac:PricingReference>"));
+    expect(linea.indexOf("<cac:Delivery>")).toBeLessThan(linea.indexOf("<cac:TaxTotal>"));
+    expect(linea).toContain('<cac:DeliveryLocation><cac:Address><cbc:ID schemeAgencyName="PE:INEI" schemeName="Ubigeos">250101</cbc:ID>');
+    expect(linea).toContain("<cbc:Instructions>TRASLADO DE 1.501 TNE SEGUN GRE V001-1: LA VICTORIA - PUCALLPA</cbc:Instructions>");
+    expect(linea).toContain('<cac:DespatchAddress><cbc:ID schemeAgencyName="PE:INEI" schemeName="Ubigeos">150115</cbc:ID>');
+    expect(linea).toContain('<cac:DeliveryTerms><cbc:ID>01</cbc:ID><cbc:Amount currencyID="PEN">1200.00</cbc:Amount></cac:DeliveryTerms>');
+    expect(linea).toContain('<cac:DeliveryTerms><cbc:ID>02</cbc:ID><cbc:Amount currencyID="PEN">1200.00</cbc:Amount></cac:DeliveryTerms>');
+    expect(linea).toContain('<cac:DeliveryTerms><cbc:ID>03</cbc:ID><cbc:Amount currencyID="PEN">1100.00</cbc:Amount></cac:DeliveryTerms>');
+    expect(linea).toContain('<cbc:SizeTypeCode listAgencyName="PE:MTC" listName="Configuracion Vehícular">T3S3</cbc:SizeTypeCode>');
+  });
+
+  it("1004 sin datos del vehículo omite cac:Shipment", () => {
+    const d = datosFacturaPrueba();
+    delete d.transporte!.vehiculo;
+    const xml = construirXmlFactura(d);
+    expect(xml).toContain("<cac:Delivery>");
+    expect(xml).not.toContain("<cac:Shipment>");
+  });
+
+  it("con detracción y sin datos de transporte falla con mensaje claro", () => {
+    const d = datosFacturaPrueba();
+    delete d.transporte;
+    expect(() => construirXmlFactura(d)).toThrow("valor referencial");
+  });
+
+  it("firmada con 1004 completo cumple el XSD", async () => {
+    const resultado = await validarXsd(firmarXml(construirXmlFactura(datosFacturaPrueba()), cert), "Invoice");
+    expect(resultado.errores).toEqual([]);
   });
 
   it("a crédito declara una cuota por el neto de detracción", () => {

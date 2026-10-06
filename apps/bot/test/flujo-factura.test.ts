@@ -6,6 +6,7 @@ import {
   registrarGuiaBorrador,
   registrarVehiculo,
 } from "@sunatapp/core";
+import { vehiculo } from "../../../packages/db/src";
 import { crearContextoPrueba, entradaGuia, prepararDatosTransporte, SunatSimulado } from "../../../packages/core/test/helpers";
 import { crearArnes } from "./arnes";
 import { notificarFactura } from "../src/flujo-factura";
@@ -317,6 +318,37 @@ describe("flujo de factura: valor referencial y primera real", () => {
     expect((await listarValoresReferenciales(a.ctx)).map((v) => v.vrPorTm)).toEqual([8550]);
     expect(a.botones().map((b) => b.callback_data)).toEqual(["f:emitir", "f:cancelar"]);
     expect(a.ultimoTexto()).toContain("Detracción 4%: S/ 72.00");
+  });
+
+  it("rechaza un valor referencial absurdo y no lo guarda; acepta 85,5", async () => {
+    const a = await arnes();
+    await guiaAceptada(a.ctx);
+    for (const v of await listarValoresReferenciales(a.ctx)) await borrarValorReferencial(a.ctx, v.partidaUbigeo, v.llegadaUbigeo);
+    await hastaPago(a);
+
+    await a.texto("85.500");
+    expect(a.ultimoTexto()).toBe("Ese valor parece muy alto. Escríbelo por tonelada, p. ej. 85.50");
+    expect(await listarValoresReferenciales(a.ctx)).toEqual([]);
+
+    await a.texto("85,5");
+    expect((await listarValoresReferenciales(a.ctx)).map((v) => v.vrPorTm)).toEqual([8550]);
+  });
+
+  it("pide la carga útil, rechaza basura y guarda 30,5", async () => {
+    const a = await arnes();
+    await guiaAceptada(a.ctx);
+    await a.ctx.db.update(vehiculo).set({ cargaUtilTm: null });
+    await hastaPago(a);
+    expect(a.ultimoTexto()).toContain("carga útil");
+
+    for (const malo of ["Infinity", "1e3", "0", "101"]) {
+      await a.texto(malo);
+      expect(a.ultimoTexto()).toBe("Escríbelo en toneladas, p. ej. 30");
+    }
+    await a.texto("30,5");
+    const filas = await a.ctx.db.select().from(vehiculo);
+    expect(filas.map((v) => Number(v.cargaUtilTm))).toContain(30.5);
+    expect(a.botones().map((b) => b.callback_data)).toEqual(["f:emitir", "f:cancelar"]);
   });
 
   it("avisa que será la primera factura real", async () => {

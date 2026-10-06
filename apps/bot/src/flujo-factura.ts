@@ -299,15 +299,20 @@ export async function manejarTextoFactura(c: CtxTexto, deps: Dependencias, next:
       await c.reply(textos.vrNoEntendido);
       return;
     }
+    if (vr <= 0 || vr > 100000) {
+      await c.reply(textos.vrMuyAlto);
+      return;
+    }
     await guardarValorReferencial(deps.ctx, { partidaUbigeo: f.falta.partidaUbigeo, llegadaUbigeo: f.falta.llegadaUbigeo, vrPorTmCentimos: vr, fuente: "Telegram" });
     delete f.falta;
     await avanzar(c, deps, f);
     return;
   }
   if (f.paso === "carga_util" && f.falta?.tipo === "carga_util") {
-    const tm = Number(texto.replace(",", ".").trim());
-    if (!(tm > 0)) {
-      await c.reply(textos.vrNoEntendido);
+    const limpio = texto.trim();
+    const tm = /^\d+([.,]\d{1,2})?$/.test(limpio) ? Number(limpio.replace(",", ".")) : 0;
+    if (!(tm >= 1 && tm <= 100)) {
+      await c.reply(textos.cargaUtilNoEntendida);
       return;
     }
     await actualizarUnidad(deps.ctx, f.falta.vehiculoId, { cargaUtilTm: tm }, c.session.usuarioId);

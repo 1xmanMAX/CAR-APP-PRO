@@ -74,7 +74,9 @@ export async function notificarGuia(
     if (sinFacturar.some((g) => g.id === r.id)) {
       const auto = await intentarFacturaAutomatica(deps.ctx, r.id);
       if (auto) await notificarFactura(deps, api, chatId, auto);
-      else await ofrecerFactura(api, chatId, r.id, r.serieNumero);
+      else if ((await listarGuiasSinFacturar(deps.ctx)).some((g) => g.id === r.id)) {
+        await ofrecerFactura(api, chatId, r.id, r.serieNumero);
+      }
     }
     return;
   }

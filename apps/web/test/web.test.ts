@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
-  buscarUnidad, crearCategoria, crearEnlaceWeb, guardarUsuario, registrarGasto, registrarViajeFlota, listarEventos, listarUsuarios, listarViajesFlota, obtenerEmpresa, partesDeUnidad, instalarParte, listarTiposParte,
+  buscarUnidad, listarValoresReferenciales, crearCategoria, crearEnlaceWeb, guardarUsuario, registrarGasto, registrarViajeFlota, listarEventos, listarUsuarios, listarViajesFlota, obtenerEmpresa, partesDeUnidad, instalarParte, listarTiposParte,
   type Contexto,
 } from "@sunatapp/core";
 import { crearDb, gasto } from "../../../packages/db/src/index";
@@ -380,5 +380,51 @@ describe("web", () => {
     const emp = await obtenerEmpresa(ctx);
     expect([emp?.razonSocial, emp?.registroMtc, emp?.cuentaDetraccionBn]).toEqual(["TRANSPORTES NUEVOS SAC", "MTC-9", null]);
     expect(await (await app.request("/ajustes", { headers: { cookie } })).text()).toContain("TRANSPORTES NUEVOS SAC");
+  });
+
+  describe("SUNAT en Este dispositivo y valores referenciales", () => {
+    const servicios = {
+      estado: () => ({ plataforma: "pc" as const, archivoAjustes: ".env", bot: { estado: "sin_token" as const }, sunat: { modo: "simulado" as const }, ia: { lector: "reglas" as const, voz: false }, codigoRegistro: null }),
+      ajustes: () => ({}) as Record<string, string>,
+      guardarAjustes: async () => {},
+      alConfigurar: async () => {},
+    };
+    const postForm = (cookie: string, ruta: string, datos: Record<string, string>) => {
+      const fd = new FormData();
+      for (const [k, v] of Object.entries(datos)) fd.set(k, v);
+      return app.request(ruta, { method: "POST", headers: { cookie, origin: ORIGEN }, body: fd });
+    };
+    beforeEach(async () => {
+      await guardarUsuario(ctx, { id: 1, nombre: "Dueño", email: "dueno@demo.pe", rol: "dueno", clave: "clave-segura" });
+      app = crearWeb(ctx, { servicios });
+    });
+    const claves = { SUNAT_SOL_USUARIO: "MODDATOS", SUNAT_SOL_CLAVE: "x", SUNAT_GRE_CLIENT_ID: "id", SUNAT_GRE_CLIENT_SECRET: "sec", SUNAT_CERT_PASSWORD: "c" };
+
+    it("probar conexión sin certificado pide subirlo", async () => {
+      const cookie = await entrar();
+      const r = await postForm(cookie, "/ajustes/dispositivo/probar", { ...claves, SUNAT_MODO: "simulado" });
+      expect(r.status).toBe(200);
+      expect(await r.text()).toContain("Sube tu certificado digital");
+    });
+
+    it("el modo Real se bloquea sin una prueba previa con esos datos", async () => {
+      const cookie = await entrar();
+      const fd = new FormData();
+      for (const [k, v] of Object.entries({ ...claves, SUNAT_MODO: "real" })) fd.set(k, v);
+      fd.set("certificado", new File([Buffer.from("no-es-pfx")], "c.pfx"));
+      const r = await app.request("/ajustes/dispositivo", { method: "POST", headers: { cookie, origin: ORIGEN }, body: fd });
+      expect(decodeURIComponent(aviso(r).replace(/\+/g, " "))).toContain("Prueba la conexión");
+    });
+
+    it("guarda y borra un valor referencial por ruta", async () => {
+      const cookie = await entrar();
+      const r = await post(cookie, "/rutas/vr", { partidaUbigeo: "040101", llegadaUbigeo: "210101", vrPorTm: "85.50" });
+      expect(r.status).toBe(303);
+      expect(aviso(r)).toContain("Valor");
+      expect(await listarValoresReferenciales(ctx)).toMatchObject([{ partidaUbigeo: "040101", llegadaUbigeo: "210101", vrPorTm: 8550 }]);
+      expect(await (await app.request("/rutas", { headers: { cookie } })).text()).toContain("040101");
+      await post(cookie, "/rutas/vr/borrar", { partidaUbigeo: "040101", llegadaUbigeo: "210101" });
+      expect(await listarValoresReferenciales(ctx)).toEqual([]);
+    });
   });
 });

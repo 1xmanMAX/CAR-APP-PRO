@@ -1,7 +1,7 @@
 /** @jsxRuntime automatic @jsxImportSource hono/jsx */
 import {
   editarViajeFlota, emitirFactura, enlazarGuia, ErrorNegocio, finalizarViajeFlota, hoy, listarCobrosPendientes, listarGuias,
-  listarUnidades, listarViajesFlota, parsearMonto, prepararFactura, puedeEditar, rangoMes, registrarCobro, registrarViajeFlota,
+  listarUnidades, listarViajesFlota, parsearMonto, FaltaDatoTransporteError, prepararFactura, puedeEditar, rangoMes, registrarCobro, registrarViajeFlota,
   sumarDias, formatearSoles, archivosDocumento, contarPorRevisar, puedeVer,
 } from "@sunatapp/core";
 import { accion, formulario, pagina, servirDeAlmacen, type App, type C, type Deps } from "../base";
@@ -243,10 +243,16 @@ export function rutasViajes(app: App, d: Deps): void {
       const monto = parsearMonto(f.monto ?? "");
       if (monto === null) throw new ErrorNegocio("Monto no válido");
       const credito = f.pago === "credito";
-      const { facturaId } = await prepararFactura(d.ctx, {
-        guiaId: Number(c.req.param("id")), montoCentimos: monto, incluyeIgv: f.igv === "con", formaPago: credito ? "credito" : "contado",
-        diasCredito: credito ? (enteroONull(f.dias) ?? 30) : undefined,
-      }, c.get("usuario").id);
+      let facturaId: number;
+      try {
+        ({ facturaId } = await prepararFactura(d.ctx, {
+          guiaId: Number(c.req.param("id")), montoCentimos: monto, incluyeIgv: f.igv === "con", formaPago: credito ? "credito" : "contado",
+          diasCredito: credito ? (enteroONull(f.dias) ?? 30) : undefined,
+        }, c.get("usuario").id));
+      } catch (error) {
+        if (error instanceof FaltaDatoTransporteError) throw new ErrorNegocio(`${error.message} — complétalo en Rutas (valor referencial) o en Flota (carga útil)`);
+        throw error;
+      }
       const r = await emitirFactura(d.ctx, facturaId);
       return `Factura ${r.serieNumero}: ${r.estado}${r.mensaje ? ` · ${r.mensaje}` : ""}`;
     });

@@ -28,6 +28,8 @@ export interface Unidad {
   carreta: { id: number; placa: string } | null;
   /** Tipo de semirremolque (modelo 3D). */
   semirremolque: TipoSemirremolque;
+  configuracionVehicular: string | null;
+  cargaUtilTm: number | null;
 }
 
 export interface ParteConDesgaste extends ResultadoDesgaste {
@@ -67,6 +69,7 @@ async function aUnidad(db: Ejecutor, f: typeof vehiculo.$inferSelect): Promise<U
     estado: f.estadoUnidad, odometroKm: f.odometroKm, viajesTotales: await viajesTotales(db, f.id),
     rendimientoKmGal: f.rendimientoKmGal === null ? null : Number(f.rendimientoKmGal), carreta,
     semirremolque: esTipoSemirremolque(f.semirremolque) ? f.semirremolque : "furgon",
+    configuracionVehicular: f.configuracionVehicular, cargaUtilTm: f.cargaUtilTm === null ? null : Number(f.cargaUtilTm),
   };
 }
 

@@ -30,7 +30,7 @@ export * from "./viajes/estadisticas";
 export * from "./lecturas/lecturas";
 export * from "./consultas/consultas";
 export * from "./usuarios/usuarios";
-export { normalizarPlaca } from "@sunatapp/sunat";
+export { normalizarPlaca, FORMULA_VR_VERIFICADA } from "@sunatapp/sunat";
 export type { EstadoGuia } from "@sunatapp/db";
 export * from "./flota/desgaste";
 export * from "./flota/catalogo";

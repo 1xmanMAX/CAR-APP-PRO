@@ -1,6 +1,6 @@
 /** @jsxRuntime automatic @jsxImportSource hono/jsx */
 import {
-  actualizarPlantilla, crearRuta, desactivarRuta, ErrorNegocio, listarCategorias, listarRutas, nombreCategoria, parsearMonto, partesDeRuta,
+  actualizarPlantilla, borrarValorReferencial, crearRuta, guardarValorReferencial, listarValoresReferenciales, desactivarRuta, ErrorNegocio, listarCategorias, listarRutas, nombreCategoria, parsearMonto, partesDeRuta,
   promedioDeRuta, puedeEditar, type Categoria, type LineaPlantilla,
 } from "@sunatapp/core";
 import { accion, formulario, pagina, type App, type C, type Deps } from "../base";
@@ -39,7 +39,7 @@ export function CamposPlantilla(p: { categorias: Categoria[]; valores: Map<strin
 
 /** **Rutas**: la plantilla de presupuesto de cada ruta; cada viaje nuevo de esa ruta la copia. */
 async function vista(c: C, d: Deps) {
-  const [rutas, categorias] = await Promise.all([listarRutas(d.ctx), categoriasDeViaje(d)]);
+  const [rutas, categorias, valoresRef] = await Promise.all([listarRutas(d.ctx), categoriasDeViaje(d), listarValoresReferenciales(d.ctx)]);
   const edita = puedeEditar(c.get("usuario").rol, "viajes");
   const conPromedio = await Promise.all(rutas.map(async (r) => {
     const p = partesDeRuta(r.nombre);
@@ -72,6 +72,32 @@ async function vista(c: C, d: Deps) {
           </Panel>
         );
       })}
+      <Panel titulo="VALOR REFERENCIAL MTC (FACTURA CON DETRACCIÓN)">
+        {valoresRef.length === 0 ? <Vacio>Todavía no hay valores referenciales. La factura de transporte necesita uno por cada ruta (origen y destino por ubigeo).</Vacio> : (
+          <div class="tabla-wrap"><table class="t">
+            <thead><tr><th>Origen (ubigeo)</th><th>Destino (ubigeo)</th><th class="num">S/ por TM</th><th>Fuente</th>{edita ? <th></th> : null}</tr></thead>
+            <tbody>{valoresRef.map((v) => (
+              <tr><td>{v.partidaUbigeo}</td><td>{v.llegadaUbigeo}</td><td class="num">{soles2(v.vrPorTm)}</td><td>{v.fuente ?? "—"}</td>
+                {edita ? (
+                  <td><form method="post" action="/rutas/vr/borrar"><input type="hidden" name="partidaUbigeo" value={v.partidaUbigeo} /><input type="hidden" name="llegadaUbigeo" value={v.llegadaUbigeo} />
+                    <button class="btn chico fantasma" type="submit" style="min-height:44px">BORRAR</button></form></td>
+                ) : null}
+              </tr>
+            ))}</tbody>
+          </table></div>
+        )}
+        {edita ? (
+          <form method="post" action="/rutas/vr" class="filas">
+            <div class="linea">
+              <label class="campo" style="flex:1"><span>Ubigeo de origen *</span><input name="partidaUbigeo" required inputmode="numeric" maxlength={6} placeholder="040101" /></label>
+              <label class="campo" style="flex:1"><span>Ubigeo de destino *</span><input name="llegadaUbigeo" required inputmode="numeric" maxlength={6} placeholder="210101" /></label>
+              <label class="campo" style="flex:1"><span>S/ por TM *</span><input name="vrPorTm" required inputmode="decimal" placeholder="85.50" /></label>
+              <label class="campo" style="flex:1"><span>Fuente (opcional)</span><input name="fuente" placeholder="Anexo MTC" /></label>
+            </div>
+            <button class="btn primario" type="submit">GUARDAR VALOR REFERENCIAL</button>
+          </form>
+        ) : null}
+      </Panel>
       {edita ? (
         <Panel titulo="+ NUEVA RUTA">
           <form method="post" action="/rutas" class="filas">
@@ -98,6 +124,22 @@ export function rutasRutas(app: App, d: Deps): void {
       const nombre = `${f.origen.trim()} ${f.sentido === "⇄" ? "⇄" : "→"} ${f.destino.trim()}`;
       await crearRuta(d.ctx, nombre, plantillaDeFormulario(f, await categoriasDeViaje(d)), c.get("usuario").id);
       return `Ruta ${nombre} creada`;
+    });
+  });
+  app.post("/rutas/vr", async (c) => {
+    const f = await formulario(c);
+    return accion(c, "/rutas", async () => {
+      const vr = parsearMonto(f.vrPorTm ?? "");
+      if (vr === null) throw new ErrorNegocio("Valor referencial no válido");
+      await guardarValorReferencial(d.ctx, { partidaUbigeo: (f.partidaUbigeo ?? "").trim(), llegadaUbigeo: (f.llegadaUbigeo ?? "").trim(), vrPorTmCentimos: vr, ...(f.fuente ? { fuente: f.fuente } : {}) });
+      return "Valor referencial guardado";
+    });
+  });
+  app.post("/rutas/vr/borrar", async (c) => {
+    const f = await formulario(c);
+    return accion(c, "/rutas", async () => {
+      await borrarValorReferencial(d.ctx, f.partidaUbigeo ?? "", f.llegadaUbigeo ?? "");
+      return "Valor referencial borrado";
     });
   });
   app.post("/rutas/:id{[0-9]+}", async (c) => {

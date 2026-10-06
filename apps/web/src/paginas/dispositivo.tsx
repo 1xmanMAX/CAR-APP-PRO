@@ -1,5 +1,9 @@
 /** @jsxRuntime automatic @jsxImportSource hono/jsx */
-import { costoIaDelMes, ErrorNegocio, hoy } from "@sunatapp/core";
+import { readFile } from "node:fs/promises";
+import {
+  activarFacturaAutomatica, costoIaDelMes, ErrorNegocio, facturaAutomaticaActiva, FORMULA_VR_VERIFICADA, hoy, huellaPrueba, leerPausaSunat,
+  probarConexionSunat, reanudarSunat, type DatosPrueba, type ResultadoPruebaSunat,
+} from "@sunatapp/core";
 import { accion, formularioMultiparte, pagina, type App, type C, type Deps, type EstadoServicios } from "../base";
 import { Panel, Vacio } from "../ui";
 
@@ -37,7 +41,22 @@ function EstadoBot(p: { e: EstadoServicios["bot"] }) {
   );
 }
 
-async function vista(c: C, d: Deps) {
+/** Última prueba de conexión hecha en este proceso: el modo Real solo se guarda si se probó lo mismo. */
+interface UltimaPrueba { huella: string; todoOk: boolean; en: number }
+
+/** Junta lo que se va a probar: cada campo vacío usa el valor guardado; el certificado, el subido o el guardado. */
+async function datosDePrueba(f: Record<string, string>, actual: Record<string, string>, subido: File | undefined): Promise<DatosPrueba> {
+  let pfx: Buffer | null = null;
+  if (subido) pfx = Buffer.from(await subido.arrayBuffer());
+  else if (actual.SUNAT_CERT_PATH) pfx = await readFile(actual.SUNAT_CERT_PATH).catch(() => null);
+  return {
+    pfx, clavePfx: f.SUNAT_CERT_PASSWORD || actual.SUNAT_CERT_PASSWORD || "", usuarioSol: f.SUNAT_SOL_USUARIO || actual.SUNAT_SOL_USUARIO || "",
+    claveSol: f.SUNAT_SOL_CLAVE || actual.SUNAT_SOL_CLAVE || "", greClientId: f.SUNAT_GRE_CLIENT_ID || actual.SUNAT_GRE_CLIENT_ID || "",
+    greClientSecret: f.SUNAT_GRE_CLIENT_SECRET || actual.SUNAT_GRE_CLIENT_SECRET || "",
+  };
+}
+
+async function vista(c: C, d: Deps, resultado?: ResultadoPruebaSunat) {
   const s = d.servicios;
   if (!s) {
     return pagina(c, d, { titulo: "Este dispositivo", seccion: "ajustes" }, (
@@ -48,6 +67,8 @@ async function vista(c: C, d: Deps) {
   const a = s.ajustes();
   const ia = await costoIaDelMes(d.ctx, hoy(d.ctx).slice(0, 7));
   const modo = a.SUNAT_MODO || "simulado";
+  const pausa = await leerPausaSunat(d.ctx);
+  const facturaAuto = await facturaAutomaticaActiva(d.ctx);
   return pagina(c, d, { titulo: "Este dispositivo", seccion: "ajustes" }, (
     <>
       <section class="panel oscuro" style="gap:6px">
@@ -79,6 +100,12 @@ async function vista(c: C, d: Deps) {
           </Panel>
 
           <Panel titulo="SUNAT">
+            {pausa ? (
+              <div class="aviso error">⏸ SUNAT en pausa desde {pausa.desde.slice(0, 16).replace("T", " ")}: {pausa.motivo}. Corrige tus claves y guarda, o <button class="btn chico" type="submit" formaction="/ajustes/dispositivo/reanudar">REINTENTAR AHORA</button></div>
+            ) : null}
+            {e.sunat.modo === "real" && !FORMULA_VR_VERIFICADA ? (
+              <div class="aviso info">La fórmula del valor referencial MTC aún no está verificada contra la norma: revisa el monto de la detracción de tus primeras facturas.</div>
+            ) : null}
             <div class="filas" style="gap:4px">
               <span><span class={`chip ${e.sunat.modo === "real" ? "ok" : "neutro"}`}>MODO {e.sunat.modo.toUpperCase()}</span></span>
               {e.sunat.error ? <div class="aviso error">{e.sunat.error}</div> : null}
@@ -106,9 +133,28 @@ async function vista(c: C, d: Deps) {
             </div>
             <label class="campo"><span>Certificado digital .pfx ({a.SUNAT_CERT_PATH ? "cargado" : "sin cargar"})</span><input name="certificado" type="file" accept=".pfx,.p12,application/x-pkcs12" /></label>
             <label class="campo"><span>Clave del certificado ({oculto(a.SUNAT_CERT_PASSWORD)})</span><input name="SUNAT_CERT_PASSWORD" type="password" autocomplete="off" /></label>
+            <label class="campo" style="flex-direction:row;gap:6px;align-items:center;min-height:44px"><input type="checkbox" name="facturaAutomatica" value="1" checked={facturaAuto} style="width:auto;min-height:0" /><span style="text-transform:none">Facturar solo al aceptarse la guía (si el viaje tiene flete pactado y una sola guía)</span></label>
+            <button class="btn chico" type="submit" formaction="/ajustes/dispositivo/probar" style="min-height:44px">PROBAR CONEXIÓN</button>
+            {resultado ? (
+              <div class="filas" style="gap:4px">
+                {([["Certificado", resultado.certificado], ["Usuario y clave SOL", resultado.claveSol], ["Credenciales de guías", resultado.credencialesGre]] as const).map(([n, p]) => (
+                  <span class={`aviso ${p.ok ? "info" : "error"}`}>{p.ok ? "✅" : "❌"} <b>{n}:</b> {p.mensaje}</span>
+                ))}
+              </div>
+            ) : null}
             <span class="muted" style="font-size:11px">Las claves vacías no se cambian. Emite los documentos reales desde un solo dispositivo para que la numeración no se cruce.</span>
           </Panel>
         </div>
+        <Panel titulo="CÓMO CONSEGUIR TUS ACCESOS SUNAT (UNA SOLA VEZ)">
+          <ol style="margin:0;padding-left:18px;font-size:13px;line-height:1.5">
+            <li><b>Certificado digital gratis:</b> SOL → Empresas → Comprobantes de Pago → Certificado Digital Tributario → «Solicitar Certificado Digital Tributario». Te llega al Buzón SOL; al descargarlo creas su clave y obtienes <code>certificado.p12</code>.</li>
+            <li><b>Emisor desde tu sistema:</b> en SOL, inscríbete en «SEE - Del Contribuyente» subiendo ese certificado y tu correo. Rige desde el día siguiente.</li>
+            <li><b>Credenciales de guías:</b> SOL → Empresas → Credenciales de API SUNAT → Gestión de Credenciales → registra una aplicación tipo <b>Desktop</b> marcando «GRE Emisión de Comprobantes». Copia el ID (client_id) y la CLAVE (client_secret).</li>
+            <li><b>Usuario SOL:</b> si SUNAT responde «el usuario debe ser secundario» (0112), crea un usuario secundario con perfil de emisión electrónica y úsalo aquí.</li>
+            <li>Pon todo aquí, toca <b>PROBAR CONEXIÓN</b> y, si sale todo ✅, cambia el modo a <b>Real</b> y guarda.</li>
+          </ol>
+          <span class="muted" style="font-size:11px">No hay ambiente de pruebas de SUNAT para guías: la primera guía en modo Real ya es real. Hasta el 28-02-2027 SUNAT no sanciona errores en guías de transportista.</span>
+        </Panel>
         <Panel titulo="LECTURA DE BOLETAS POR TELEGRAM">
           <div class="filas" style="gap:4px">
             <span>
@@ -148,7 +194,24 @@ async function vista(c: C, d: Deps) {
 }
 
 export function rutasDispositivo(app: App, d: Deps): void {
+  let ultimaPrueba: UltimaPrueba | null = null;
   app.get("/ajustes/dispositivo", (c) => vista(c, d));
+  app.post("/ajustes/dispositivo/probar", async (c) => {
+    const { campos: f, archivos } = await formularioMultiparte(c);
+    const s = d.servicios;
+    if (!s || c.get("usuario").rol !== "dueno") {
+      return accion(c, "/ajustes/dispositivo", async () => { throw new ErrorNegocio("Solo el dueño puede probar la conexión con SUNAT"); });
+    }
+    const datos = await datosDePrueba(f, s.ajustes(), archivos.certificado);
+    const r = await probarConexionSunat(d.ctx, datos);
+    ultimaPrueba = { huella: r.huella, todoOk: r.todoOk, en: Date.now() };
+    return vista(c, d, r);
+  });
+  app.post("/ajustes/dispositivo/reanudar", async (c) => accion(c, "/ajustes/dispositivo", async () => {
+    if (!d.servicios || c.get("usuario").rol !== "dueno") throw new ErrorNegocio("Solo el dueño puede reanudar SUNAT");
+    await reanudarSunat(d.ctx);
+    return "SUNAT reanudada";
+  }));
   app.post("/ajustes/dispositivo", async (c) => {
     const { campos: f, archivos } = await formularioMultiparte(c);
     return accion(c, "/ajustes/dispositivo", async () => {
@@ -173,7 +236,16 @@ export function rutasDispositivo(app: App, d: Deps): void {
         const final: Record<string, string | null | undefined> = { ...actual, ...cambios, ...(cert ? { SUNAT_CERT_PATH: "nuevo" } : {}) };
         const faltan = OBLIGATORIOS_REAL.filter((k) => !final[k]);
         if (faltan.length) throw new ErrorNegocio(`Para el modo real falta ${faltan.map((k) => NOMBRE[k]).join(", ")}`);
+        // Si ya estaba en real y no cambió nada de SUNAT, se puede guardar sin volver a probar.
+        const cambioSunat = !!cert || Object.keys(cambios).some((k) => k.startsWith("SUNAT_") && (cambios[k] ?? "") !== (actual[k] ?? ""));
+        if (actual.SUNAT_MODO !== "real" || cambioSunat) {
+          const datosFinales = await datosDePrueba(f, actual, archivos.certificado);
+          if (!ultimaPrueba || !ultimaPrueba.todoOk || ultimaPrueba.huella !== huellaPrueba(datosFinales)) {
+            throw new ErrorNegocio("Prueba la conexión con estos mismos datos (botón PROBAR CONEXIÓN) y que salga todo ✅ antes de activar el modo Real");
+          }
+        }
       }
+      await activarFacturaAutomatica(d.ctx, f.facturaAutomatica === "1");
       await s.guardarAjustes(cambios, cert);
       const e = s.estado();
       if (e.sunat.error) throw new ErrorNegocio(`Guardado, pero ${e.sunat.error}`);

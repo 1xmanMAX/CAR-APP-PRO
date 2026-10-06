@@ -32,11 +32,11 @@ async function vista(c: C, d: Deps) {
                 <div style="display:flex;align-items:start;gap:8px">
                   <div>
                     <div class="id">{u.codigo}</div>
-                    <div class="muted" style="font-size:11px">PLACA {u.placa}{u.carreta ? ` + ${u.carreta.placa}` : ""} · {TIPOS_SEMIRREMOLQUE[u.semirremolque]} · {[u.marca, u.modelo, u.anio].filter(Boolean).join(" ") || "—"}</div>
+                    <div class="muted" style="font-size:12px">PLACA {u.placa}{u.carreta ? ` + ${u.carreta.placa}` : ""} · {TIPOS_SEMIRREMOLQUE[u.semirremolque]} · {[u.marca, u.modelo, u.anio].filter(Boolean).join(" ") || "—"}</div>
                   </div>
                   <span class={`chip ${CHIP_UNIDAD[u.estado]}`} style="margin-left:auto">{ESTADO_UNIDAD[u.estado]}</span>
                 </div>
-                <div class="tira">{s.partes.length ? s.partes.map((p) => <i class={`b-${p.estado}`} title={`${p.nombreCorto} ${p.pct}%`}></i>) : <span class="muted" style="font-size:11px">sin partes controladas</span>}</div>
+                <div class="tira">{s.partes.length ? s.partes.map((p) => <i class={`b-${p.estado}`} title={`${p.nombreCorto} ${p.pct}%`}></i>) : <span class="muted" style="font-size:12px">sin partes controladas</span>}</div>
                 <div class="stats">
                   <div><span class="lbl">KM TOTAL</span><br /><b>{miles(u.odometroKm)}</b></div>
                   <div><span class="lbl">VIAJES</span><br /><b>{miles(u.viajesTotales)}</b></div>

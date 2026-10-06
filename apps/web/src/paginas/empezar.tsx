@@ -29,7 +29,7 @@ export function rutasEmpezar(app: App, d: Deps): void {
           ) : (
             <div class="filas">
               <span class="lbl">2 · ELIGE EL DISPOSITIVO DEL QUE TRAER LOS DATOS</span>
-              <span class="muted" style="font-size:11px">Grupo {codigoLegible(i.grupo)} · este dispositivo: <b>{i.yo.nombre}</b> ({codigoDispositivo(i.yo.id)}){ips[0] ? ` · ${ips[0].ip}` : ""}</span>
+              <span class="muted" style="font-size:12px">Grupo {codigoLegible(i.grupo)} · este dispositivo: <b>{i.yo.nombre}</b> ({codigoDispositivo(i.yo.id)}){ips[0] ? ` · ${ips[0].ip}` : ""}</span>
               <div id="emp-progreso" class="caja-oscura" hidden>
                 <span class="lbl">TRAYENDO DATOS</span>
                 <b id="emp-mensaje">…</b>
@@ -41,7 +41,7 @@ export function rutasEmpezar(app: App, d: Deps): void {
                 <input name="destino" required placeholder="192.168.1.20" aria-label="Dirección del otro dispositivo" style="flex:1" />
                 <button class="btn chico" type="submit">TRAER</button>
               </form>
-              <span class="muted" style="font-size:11px">Si no aparece, escribe la dirección que muestra el otro dispositivo en Sincronizar → «Este dispositivo».</span>
+              <span class="muted" style="font-size:12px">Si no aparece, escribe la dirección que muestra el otro dispositivo en Sincronizar → «Este dispositivo».</span>
               <form method="post" action="/empezar/otro"><button class="btn chico" type="submit">USAR OTRO CÓDIGO DE GRUPO</button></form>
             </div>
           )}

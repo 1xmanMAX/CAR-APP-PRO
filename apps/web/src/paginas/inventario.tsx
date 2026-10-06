@@ -78,7 +78,7 @@ async function vista(c: C, d: Deps) {
                 {filas.length === 0 ? <tr><td colspan={10}><Vacio>No hay repuestos{q || cat || unidadId || tipo ? " con ese filtro" : ". Registra el primero abajo"}.</Vacio></td></tr> : filas.map((r) => (
                   <tr>
                     <td class="nowrap"><b>{r.codigo}</b></td>
-                    <td>{r.nombre}{r.proveedor ? <div class="muted" style="font-size:11px">{r.proveedor}</div> : null}</td>
+                    <td>{r.nombre}{r.proveedor ? <div class="muted" style="font-size:12px">{r.proveedor}</div> : null}</td>
                     <td>{r.categoria}</td>
                     <td class="num">{r.stock}{r.stockMinimo ? <span class="muted"> / mín {r.stockMinimo}</span> : null}</td>
                     <td class="num">{soles2(r.costoUnitario)}</td>
@@ -86,13 +86,13 @@ async function vista(c: C, d: Deps) {
                     <td class="nowrap">{vidaTexto(r.vida)}</td>
                     <td>{r.instalado.length ? r.instalado.map((i) => `${i.unidad}${i.posicion ? ` (${i.posicion})` : ""}`).join(", ") : "—"}</td>
                     <td style="min-width:170px">
-                      <span style="font-size:11px">{textoPiezas(r.piezas)}</span>
+                      <span style="font-size:12px">{textoPiezas(r.piezas)}</span>
                       {r.piezas.length ? <> <a class="lbl-12" href={`/trailer?repuesto=${r.id}`} title="Ver en el modelo 3D dónde va">VER EN 3D</a></> : null}
                       {edita ? (
                         <details class="plegable"><summary><span class="lbl-12" style="text-decoration:underline;cursor:pointer">{r.piezasElegidas ? "cambiar" : "elegir piezas"}</span></summary>
                           <form method="post" action={`/inventario/repuesto/${r.id}/piezas`} class="filas" style="margin-top:6px;min-width:240px">
                             <SelectPiezas elegidas={r.piezasElegidas ? r.piezas : []} />
-                            <span class="muted" style="font-size:11px">Sin elegir ninguna, va donde va su tipo de parte.</span>
+                            <span class="muted" style="font-size:12px">Sin elegir ninguna, va donde va su tipo de parte.</span>
                             <button class="btn chico primario" type="submit">GUARDAR</button>
                           </form>
                         </details>
@@ -118,7 +118,7 @@ async function vista(c: C, d: Deps) {
                 </div>
                 <label class="campo"><span>Proveedor</span><input name="proveedor" /></label>
                 <button class="btn primario" type="submit" disabled={todos.length === 0}>REGISTRAR COMPRA</button>
-                {todos.length === 0 ? <span class="muted" style="font-size:11px">Primero crea el repuesto →</span> : null}
+                {todos.length === 0 ? <span class="muted" style="font-size:12px">Primero crea el repuesto →</span> : null}
               </form>
               <form method="post" action="/inventario/repuesto" class="panel" style="background:var(--white)">
                 <b class="lbl-12">NUEVO REPUESTO EN EL CATÁLOGO</b>

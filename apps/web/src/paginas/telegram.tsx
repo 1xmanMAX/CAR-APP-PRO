@@ -29,7 +29,7 @@ async function vista(c: C, d: Deps) {
     <div class="grid g-tg">
       <Panel titulo="ASÍ SE VE EN EL CELULAR DEL CHOFER">
         <div class="telefono" aria-label="Ejemplo de conversación con el bot">
-          <div class="tcab"><b>🤖 Control Flota</b><span style="font-size:11px;color:#8FA3B5">bot · {bot.enLinea ? "en línea" : "desconectado"}</span></div>
+          <div class="tcab"><b>🤖 Control Flota</b><span style="font-size:12px;color:#8FA3B5">bot · {bot.enLinea ? "en línea" : "desconectado"}</span></div>
           {peor && peor.pct >= 70 ? (
             <div class="burbuja bot"><span class="t">ALERTA · {unidadPeor?.codigo}</span>{peor.nombreCorto} al {peor.pct}%. Quedan ≈ {peor.restanteTexto.toLowerCase()}. Programa el cambio.</div>
           ) : null}
@@ -60,7 +60,7 @@ async function vista(c: C, d: Deps) {
           <div class="tabla-wrap"><table class="t"><tbody>
             {COMANDOS.map(([k, v]) => <tr><td class="nowrap"><b style="color:var(--accent)">{k}</b></td><td>{v}</td></tr>)}
           </tbody></table></div>
-          <span class="muted" style="font-size:11px">Solo responde a usuarios registrados. Para sumar un chofer: créalo en Ajustes con su ID de Telegram (el bot se lo dice con /start).</span>
+          <span class="muted" style="font-size:12px">Solo responde a usuarios registrados. Para sumar un chofer: créalo en Ajustes con su ID de Telegram (el bot se lo dice con /start).</span>
         </Panel>
       </div>
       <Panel clase="oscuro" titulo="TELEGRAM · TODAS LAS ENTRADAS" der={<span class={`vivo${bot.enLinea ? "" : " off"}`}>● {bot.enLinea ? "LIVE" : "OFF"}</span>}>

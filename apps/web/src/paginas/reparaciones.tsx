@@ -78,7 +78,7 @@ async function vista(c: C, d: Deps) {
                   </table>
                 </div>
                 <button type="button" class="btn chico fantasma" id="agregar-rep" style="margin-top:6px">+ AGREGAR REPUESTO</button>
-                {disponibles.length === 0 ? <span class="muted" style="font-size:11px"> No hay repuestos con stock. <a href="/inventario">Registra una compra</a>.</span> : null}
+                {disponibles.length === 0 ? <span class="muted" style="font-size:12px"> No hay repuestos con stock. <a href="/inventario">Registra una compra</a>.</span> : null}
               </div>
               <div class="form-grid">
                 <label class="campo"><span>Mano de obra S/</span><input name="manoObra" id="mano-obra" inputmode="decimal" placeholder="0.00" /></label>
@@ -141,7 +141,7 @@ async function vista(c: C, d: Deps) {
             </tbody>
           </table>
         </div>
-        <span class="muted" style="font-size:11px">Total en el historial: {soles(historial.reduce((s, h) => s + h.costoTotal, 0))}</span>
+        <span class="muted" style="font-size:12px">Total en el historial: {soles(historial.reduce((s, h) => s + h.costoTotal, 0))}</span>
       </Panel>
     </>
   ));

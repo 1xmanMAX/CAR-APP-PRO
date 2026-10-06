@@ -52,7 +52,7 @@ async function vista(c: C, d: Deps) {
                     <div class="filas">
                       {otros.map((m) => (
                         <form method="post" action="/sincronizar/con" class="fila-flota" style="grid-template-columns:minmax(0,1fr) auto">
-                          <div><b>{m.nombre}</b> <span class="chip neutro">{codigoDispositivo(m.id)}</span><div class="muted" style="font-size:11px">{m.direccion ? `última dirección ${m.direccion}` : "sin dirección guardada"}{m.visto ? ` · visto ${hora(new Date(m.visto))}` : ""}</div></div>
+                          <div><b>{m.nombre}</b> <span class="chip neutro">{codigoDispositivo(m.id)}</span><div class="muted" style="font-size:12px">{m.direccion ? `última dirección ${m.direccion}` : "sin dirección guardada"}{m.visto ? ` · visto ${hora(new Date(m.visto))}` : ""}</div></div>
                           {m.direccion ? <><input type="hidden" name="destino" value={m.direccion} /><button class="btn chico" type="submit">SINCRONIZAR</button></> : <span></span>}
                         </form>
                       ))}
@@ -65,7 +65,7 @@ async function vista(c: C, d: Deps) {
                     <input name="destino" required placeholder="192.168.1.20" aria-label="Dirección del otro dispositivo" style="flex:1" />
                     <button class="btn primario chico" type="submit">SINCRONIZAR</button>
                   </form>
-                  <span class="muted" style="font-size:11px">La dirección de cada dispositivo aparece en su pantalla Sincronizar («Este dispositivo»). Si hay firewall en la PC, permite Node.js en redes privadas (puertos 47474 y 47475).</span>
+                  <span class="muted" style="font-size:12px">La dirección de cada dispositivo aparece en su pantalla Sincronizar («Este dispositivo»). Si hay firewall en la PC, permite Node.js en redes privadas (puertos 47474 y 47475).</span>
                 </details>
               </>
             )}
@@ -88,7 +88,7 @@ async function vista(c: C, d: Deps) {
                 })}</tbody>
               </table></div>
             )}
-            <span class="muted" style="font-size:11px">↓ recibidos · ↑ enviados · ⇄ juntados (cambiados en los dos) · ✕ borrados</span>
+            <span class="muted" style="font-size:12px">↓ recibidos · ↑ enviados · ⇄ juntados (cambiados en los dos) · ✕ borrados</span>
           </Panel>
         </div>
 
@@ -110,7 +110,7 @@ async function vista(c: C, d: Deps) {
                 <span class="lbl">CÓDIGO DEL GRUPO · TECLÉALO EN LOS DEMÁS DISPOSITIVOS</span>
                 <b class="mono-t" style="font-size:24px;letter-spacing:.08em">{codigoLegible(i.grupo)}</b>
                 <div style="max-width:180px">{raw(qr)}</div>
-                <span class="muted" style="font-size:11px">Quien tenga este código puede sincronizar con tus dispositivos: compártelo solo con tu equipo.</span>
+                <span class="muted" style="font-size:12px">Quien tenga este código puede sincronizar con tus dispositivos: compártelo solo con tu equipo.</span>
                 <form method="post" action="/sincronizar/salir" data-confirmar="¿Salir del grupo? Los datos se quedan en este dispositivo, pero deja de sincronizar.">
                   <button class="btn chico" type="submit">SALIR DEL GRUPO</button>
                 </form>
@@ -120,7 +120,7 @@ async function vista(c: C, d: Deps) {
                 <form method="post" action="/sincronizar/crear">
                   <button class="btn primario" type="submit" style="width:100%">CREAR UN GRUPO</button>
                 </form>
-                <span class="muted" style="font-size:11px">Hazlo en el primer dispositivo (por ejemplo la PC). Te dará un código de 10 signos.</span>
+                <span class="muted" style="font-size:12px">Hazlo en el primer dispositivo (por ejemplo la PC). Te dará un código de 10 signos.</span>
                 <hr style="border:0;border-top:1px solid var(--divider);width:100%" />
                 <form method="post" action="/sincronizar/unirse" class="filas">
                   <label class="campo"><span>Unirme con un código</span><input name="codigo" required placeholder="K7Q2M-9XMPA" autocomplete="off" style="text-transform:uppercase" /></label>
@@ -134,7 +134,7 @@ async function vista(c: C, d: Deps) {
             <form method="post" action="/sincronizar/identidad" data-confirmar="Solo si copiaste la carpeta de datos desde otro dispositivo. ¿Crear una identidad nueva para este?">
               <button class="btn chico" type="submit">NUEVA IDENTIDAD</button>
             </form>
-            <span class="muted" style="font-size:11px">Úsalo si copiaste la carpeta de datos de otro dispositivo: los dos tendrían el mismo código y no podrían sincronizar.</span>
+            <span class="muted" style="font-size:12px">Úsalo si copiaste la carpeta de datos de otro dispositivo: los dos tendrían el mismo código y no podrían sincronizar.</span>
           </Panel>
         </div>
       </div>

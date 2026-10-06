@@ -62,7 +62,7 @@ async function vista(c: C, d: Deps) {
               <button class="btn primario" type="submit">AGREGAR</button>
             </form>
           </details>
-          <span class="muted" style="font-size:11px">Dueño: ve y edita todo. Contador: viajes, facturas, finanzas y rentabilidad. Taller: trailer 3D, flota, inventario y reparaciones. Chofer: solo Telegram.</span>
+          <span class="muted" style="font-size:12px">Dueño: ve y edita todo. Contador: viajes, facturas, finanzas y rentabilidad. Taller: trailer 3D, flota, inventario y reparaciones. Chofer: solo Telegram.</span>
         </Panel>
         <Panel titulo="EMPRESA" id="empresa" der={emp ? null : <span class="lbl">SE PIDE AL EMITIR GUÍAS Y FACTURAS</span>}>
           {emp ? null : <span class="muted" style="font-size:12px">Todavía no hace falta: complétalo cuando vayas a emitir tu primera guía o factura. Queda guardado aquí.</span>}
@@ -79,7 +79,7 @@ async function vista(c: C, d: Deps) {
             <button class="btn primario chico" type="submit">{emp ? "GUARDAR CAMBIOS" : "GUARDAR EMPRESA"}</button>
           </form>
           {emp ? (
-            <span class="muted" style="font-size:11px">Series: guía {emp.serieGre} · factura {emp.serieFactura} · SUNAT {d.ctx.simulado ? "simulado / beta (sin validez tributaria)" : "real"}</span>
+            <span class="muted" style="font-size:12px">Series: guía {emp.serieGre} · factura {emp.serieFactura} · SUNAT {d.ctx.simulado ? "simulado / beta (sin validez tributaria)" : "real"}</span>
           ) : null}
         </Panel>
       </div>
@@ -158,7 +158,7 @@ async function vista(c: C, d: Deps) {
             <button class="btn primario chico" type="submit">AGREGAR</button>
           </form>
         </details>
-        <span class="muted" style="font-size:11px">Ejemplo actual: frenos del semirremolque {miles(tipos.find((t) => t.codigo === "frenos_sr")?.vidaKm)} km. Los valores iniciales son de ejemplo: ajústalos a tu experiencia. Cada parte instalada puede tener su propia vida útil (desde Trailer 3D).</span>
+        <span class="muted" style="font-size:12px">Ejemplo actual: frenos del semirremolque {miles(tipos.find((t) => t.codigo === "frenos_sr")?.vidaKm)} km. Los valores iniciales son de ejemplo: ajústalos a tu experiencia. Cada parte instalada puede tener su propia vida útil (desde Trailer 3D).</span>
       </Panel>
     </>
   ));

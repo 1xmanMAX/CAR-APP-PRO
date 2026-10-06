@@ -77,7 +77,7 @@ async function vista(c: C, d: Deps) {
                 <CamposPlantilla categorias={variables} valores={new Map(l.lineas.filter((x) => l.presupuestoOrigen.tipo === "viaje" && x.presupuesto > 0).map((x) => [x.categoria, x.presupuesto]))}
                   promedio={new Map(l.lineas.filter((x) => l.presupuestoOrigen.tipo === "promedio").map((x) => [x.categoria, x.presupuesto]))} />
                 <button class="btn primario chico" type="submit">GUARDAR PRESUPUESTO</button>
-                <span class="muted" style="font-size:11px">Las plantillas por ruta se editan en <a href="/rutas">Rutas</a>.</span>
+                <span class="muted" style="font-size:12px">Las plantillas por ruta se editan en <a href="/rutas">Rutas</a>.</span>
               </form>
             </details>
           ) : null}
@@ -113,7 +113,7 @@ async function vista(c: C, d: Deps) {
             {l.entregas.length === 0 ? <Vacio>Sin entregas. El chofer también puede avisar por Telegram («me yapearon 500»).</Vacio> : (
               <div class="tabla-wrap"><table class="t"><tbody>{l.entregas.map((e) => (
                 <tr>
-                  <td class="nowrap">{fechaCorta(e.fecha)}</td><td>{MEDIOS_ENTREGA[e.medio]}{e.nota ? <div class="muted" style="font-size:11px">{e.nota}</div> : null}</td>
+                  <td class="nowrap">{fechaCorta(e.fecha)}</td><td>{MEDIOS_ENTREGA[e.medio]}{e.nota ? <div class="muted" style="font-size:12px">{e.nota}</div> : null}</td>
                   <td class="num">{soles2(e.monto)}</td>
                   <td>{edita ? <form method="post" action={`/viajes/${l.viaje.id}/entrega/${e.id}/borrar`}><button class="btn chico fantasma" type="submit" aria-label="Borrar entrega">×</button></form> : null}</td>
                 </tr>

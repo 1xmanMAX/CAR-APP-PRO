@@ -8,9 +8,10 @@ import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import type { Child } from "hono/jsx";
 import {
   canjearEnlaceWeb, cerrarSesion, crearSesion, encolarAviso, entrarConClave, ErrorNegocio, ErrorValidacion, estadoBot,
-  fechaHoraLima, guardarUsuario, listarUnidades, obtenerEmpresa, necesitaConfiguracionInicial, puedeEditar, puedeVer, rangoMes,
-  resumenFinanciero, usuarioDeSesion, type Contexto, type RedSinc, type Seccion, type UsuarioWeb,
+  guardarUsuario, obtenerEmpresa, necesitaConfiguracionInicial, puedeEditar, puedeVer,
+  usuarioDeSesion, type Contexto, type RedSinc, type Seccion, type UsuarioWeb,
 } from "@sunatapp/core";
+import { LUGAR_DE_SECCION, type Lugar } from "./lugares";
 import { Layout, PaginaSimple, type DatosCabecera } from "./ui";
 
 export interface OpcionesWeb {
@@ -99,25 +100,19 @@ export function esDelMismoEquipo(c: C): boolean {
   return local && ["127.0.0.1", "localhost", "[::1]"].includes(host);
 }
 
-/** Datos del header: se calculan en cada página (son consultas baratas). */
+/** Datos comunes del layout: se calculan en cada página (dos consultas baratas). */
 export async function datosCabecera(ctx: Contexto): Promise<DatosCabecera> {
-  const { fecha, hora } = fechaHoraLima(ctx.reloj());
   const emp = await obtenerEmpresa(ctx);
-  const todas = await listarUnidades(ctx, true);
-  const activas = todas.filter((u) => u.estado !== "inactivo");
-  const { desde, hasta } = rangoMes(fecha);
-  const fin = await resumenFinanciero(ctx, desde, hasta);
   const bot = await estadoBot(ctx);
-  return {
-    empresa: (emp?.nombreComercial || emp?.razonSocial || "EMPRESA").toUpperCase(),
-    unidadesActivas: activas.filter((u) => u.estado === "en_ruta" || u.estado === "en_base").length,
-    unidadesTotal: activas.length,
-    viajesMes: fin.viajes,
-    margenPct: fin.margenPct,
-    botEnLinea: bot.enLinea,
-    hora: hora.slice(0, 5),
-    simulado: ctx.simulado,
-  };
+  return { empresa: (emp?.nombreComercial || emp?.razonSocial || "EMPRESA").toUpperCase(), botEnLinea: bot.enLinea, simulado: ctx.simulado };
+}
+
+/** Ruta actual sin los avisos (?ok= / ?error=). */
+export function rutaActual(c: C): string {
+  const u = new URL(c.req.url);
+  u.searchParams.delete("ok");
+  u.searchParams.delete("error");
+  return u.pathname + u.search;
 }
 
 /** Texto de error legible para el usuario (nunca el volcado interno). */
@@ -169,12 +164,14 @@ export async function formularioMultiparte(c: C): Promise<{ campos: Record<strin
 
 /** Renderiza una página con el layout común. */
 export async function pagina(
-  c: C, d: Deps, o: { titulo: string; seccion: Seccion; scripts?: string[]; importmap?: boolean }, cuerpo: Child,
+  c: C, d: Deps,
+  o: { titulo: string; seccion: Seccion; lugar?: Lugar; scripts?: string[]; importmap?: boolean; sinNavInferior?: boolean },
+  cuerpo: Child,
 ) {
   const html = (
     <Layout
-      titulo={o.titulo} seccion={o.seccion} usuario={c.get("usuario")} cab={await d.cabecera()}
-      ok={c.req.query("ok")} error={c.req.query("error")} scripts={o.scripts} importmap={o.importmap}
+      titulo={o.titulo} lugar={o.lugar ?? LUGAR_DE_SECCION[o.seccion]} usuario={c.get("usuario")} cab={await d.cabecera()} ruta={rutaActual(c)}
+      ok={c.req.query("ok")} error={c.req.query("error")} scripts={o.scripts} importmap={o.importmap} sinNavInferior={o.sinNavInferior}
     >
       {cuerpo}
     </Layout>

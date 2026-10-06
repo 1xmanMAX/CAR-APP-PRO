@@ -74,7 +74,7 @@ async function vista(c: C, d: Deps) {
                 <select name="EXTRACTOR"><option value="reglas" selected={(a.EXTRACTOR || "reglas") === "reglas"}>Reglas (sin internet)</option><option value="ia" selected={a.EXTRACTOR === "ia"}>IA</option></select>
               </label>
             </div>
-            <span class="muted" style="font-size:11px">Pon el token en <b>un solo dispositivo</b>, el que pase más tiempo encendido y con internet: Telegram no deja conectar el mismo bot en dos a la vez.
+            <span class="muted" style="font-size:12px">Pon el token en <b>un solo dispositivo</b>, el que pase más tiempo encendido y con internet: Telegram no deja conectar el mismo bot en dos a la vez.
               Sin bot, los avisos para Telegram esperan en cola en este dispositivo.</span>
           </Panel>
 
@@ -106,7 +106,7 @@ async function vista(c: C, d: Deps) {
             </div>
             <label class="campo"><span>Certificado digital .pfx ({a.SUNAT_CERT_PATH ? "cargado" : "sin cargar"})</span><input name="certificado" type="file" accept=".pfx,.p12,application/x-pkcs12" /></label>
             <label class="campo"><span>Clave del certificado ({oculto(a.SUNAT_CERT_PASSWORD)})</span><input name="SUNAT_CERT_PASSWORD" type="password" autocomplete="off" /></label>
-            <span class="muted" style="font-size:11px">Las claves vacías no se cambian. Emite los documentos reales desde un solo dispositivo para que la numeración no se cruce.</span>
+            <span class="muted" style="font-size:12px">Las claves vacías no se cambian. Emite los documentos reales desde un solo dispositivo para que la numeración no se cruce.</span>
           </Panel>
         </div>
         <Panel titulo="LECTURA DE BOLETAS POR TELEGRAM">
@@ -116,7 +116,7 @@ async function vista(c: C, d: Deps) {
               <span class={`chip ${e.ia.voz ? "ok" : "neutro"}`}>{e.ia.voz ? "NOTAS DE VOZ ACTIVAS" : "SIN NOTAS DE VOZ"}</span>
             </span>
             {e.ia.error ? <div class="aviso error">{e.ia.error}</div> : null}
-            <span class="muted" style="font-size:11px">Este mes: {ia.lecturas} lecturas · US$ {ia.usd.toFixed(3)}. Lo que quedó a medias está en <a href="/revisar">Por revisar</a>.</span>
+            <span class="muted" style="font-size:12px">Este mes: {ia.lecturas} lecturas · US$ {ia.usd.toFixed(3)}. Lo que quedó a medias está en <a href="/revisar">Por revisar</a>.</span>
           </div>
           <span class="muted" style="font-size:12px">El chofer manda la foto de la boleta, un texto («grifo 350») o una nota de voz, y el bot le pide confirmar antes de guardar el gasto.
             Sin clave de IA se entienden los textos y las fotos se completan con botones. Con DeepSeek también se leen las fotos (cuesta menos de un centavo de dólar por boleta).</span>

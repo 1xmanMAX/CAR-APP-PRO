@@ -78,9 +78,9 @@ async function vista(c: C, d: Deps) {
                     <span class={`chip ${CHIP_UNIDAD[s.unidad.estado]}`}>{ESTADO_UNIDAD[s.unidad.estado]}</span>
                   </div>
                   <div class="tira" aria-label={`${s.conteo.ok} ok, ${s.conteo.proximo} próximas, ${s.conteo.cambiar} por cambiar`}>
-                    {s.partes.length ? s.partes.map((p) => <i class={`b-${p.estado}`} title={`${p.nombreCorto} ${p.pct}%`}></i>) : <span class="muted" style="font-size:11px">sin partes controladas</span>}
+                    {s.partes.length ? s.partes.map((p) => <i class={`b-${p.estado}`} title={`${p.nombreCorto} ${p.pct}%`}></i>) : <span class="muted" style="font-size:12px">sin partes controladas</span>}
                   </div>
-                  <div style="font-size:11px;text-align:right" class={s.peor ? `t-${s.peor.estado}` : "muted"}>
+                  <div style="font-size:12px;text-align:right" class={s.peor ? `t-${s.peor.estado}` : "muted"}>
                     {s.peor ? <><b>{s.peor.nombreCorto}</b><br />{s.peor.restanteTexto}</> : "—"}
                   </div>
                 </a>
@@ -108,7 +108,7 @@ async function vista(c: C, d: Deps) {
           <div data-refrescar="/api/feed" data-cada="20">
             <FeedTelegram eventos={eventos} />
           </div>
-          <a href="/telegram" style="color:var(--accent-on-dark);font-size:11px">VER CONVERSACIÓN DEL BOT →</a>
+          <a href="/telegram" style="color:var(--accent-on-dark);font-size:12px">VER CONVERSACIÓN DEL BOT →</a>
         </Panel>
       </div>
 
@@ -124,7 +124,7 @@ async function vista(c: C, d: Deps) {
                     <i title={`${v.fecha} · ${v.ruta} · ${v.km ?? "?"} km`} style={`left:calc(${(diaIdx(v.fecha) / 30) * 100}%);height:${v.km ? Math.max(12, (v.km / maxKm) * 100) : 20}%;${v.km ? "" : "opacity:.45"}`}></i>
                   ))}
                 </div>
-                <span class="muted" style="font-size:11px;text-align:right">{propios.length} viajes</span>
+                <span class="muted" style="font-size:12px;text-align:right">{propios.length} viajes</span>
               </div>
             );
           })}

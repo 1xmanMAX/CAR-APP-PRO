@@ -1,8 +1,8 @@
 /** @jsxRuntime automatic @jsxImportSource hono/jsx */
 import type { Child, FC, PropsWithChildren } from "hono/jsx";
 import { raw } from "hono/html";
-import type { EstadoDesgaste, Seccion, UsuarioWeb } from "@sunatapp/core";
-import { puedeVer } from "@sunatapp/core";
+import type { EstadoDesgaste, UsuarioWeb } from "@sunatapp/core";
+import { menuDe, veAjustes, type EntradaMenu, type Lugar } from "./lugares";
 
 // ── Formato ──────────────────────────────────────────────────────────────────
 
@@ -41,29 +41,50 @@ export const CHIP_UNIDAD: Record<string, string> = { en_ruta: "ok", en_base: "ne
 
 // ── Navegación ───────────────────────────────────────────────────────────────
 
-export const NAV: Array<{ n: string; etiqueta: string; href: string; seccion: Seccion }> = [
-  { n: "01", etiqueta: "DASHBOARD", href: "/", seccion: "dashboard" },
-  { n: "02", etiqueta: "TRAILER 3D", href: "/trailer", seccion: "trailer" },
-  { n: "03", etiqueta: "FLOTA", href: "/flota", seccion: "flota" },
-  { n: "04", etiqueta: "INVENTARIO", href: "/inventario", seccion: "inventario" },
-  { n: "05", etiqueta: "REPARACIONES", href: "/reparaciones", seccion: "reparaciones" },
-  { n: "06", etiqueta: "VIAJES", href: "/viajes", seccion: "viajes" },
-  { n: "07", etiqueta: "FINANZAS", href: "/finanzas", seccion: "finanzas" },
-  { n: "08", etiqueta: "RENTABILIDAD", href: "/rentabilidad", seccion: "rentabilidad" },
-  { n: "09", etiqueta: "TELEGRAM", href: "/telegram", seccion: "telegram" },
-  { n: "10", etiqueta: "SINCRONIZAR", href: "/sincronizar", seccion: "sincronizar" },
-];
-
 export interface DatosCabecera {
   empresa: string;
-  unidadesActivas: number;
-  unidadesTotal: number;
-  viajesMes: number;
-  margenPct: number | null;
   botEnLinea: boolean;
-  hora: string;
   simulado: boolean;
 }
+
+/** Íconos de trazo (24×24), los mismos del lienzo aprobado. Son constantes: se insertan sin escapar. */
+const ICONOS = {
+  inicio: '<path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>',
+  viajes: '<path d="M4 19l4-14h8l4 14"/><path d="M12 7v2M12 12v2M12 17v2"/>',
+  camiones: '<path d="M2 16V7h11v9M13 10h5l4 4v2h-9"/><circle cx="6" cy="17" r="2"/><circle cx="17" cy="17" r="2"/>',
+  numeros: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
+  ajustes: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 1 1-4 0v-.1a1.6 1.6 0 0 0-2.7-1.1l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.6 1.6 0 0 0 3.6 15H3a2 2 0 1 1 0-4h.1a1.6 1.6 0 0 0 1.1-2.7l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.6 1.6 0 0 0 9.7 4.4V4a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 2.7 1.1l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0 1.1 2.7H21a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z"/>',
+  mas: '<path d="M12 5v14M5 12h14"/>',
+  volver: '<path d="M15 6l-6 6 6 6"/>',
+  gaste: '<rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18M7 15h3"/>',
+  chofer: '<circle cx="9" cy="7" r="3"/><path d="M3 20c0-3 3-5 6-5s6 2 6 5M17 8h5M19.5 5.5v5"/>',
+  cobro: '<path d="M12 3v18M7 8l5-5 5 5"/>',
+  repare: '<path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.5-.5-.5-2.5z"/>',
+  empresa: '<path d="M4 21V8l8-5 8 5v13M9 21v-6h6v6"/>',
+  prestamo: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 9h18M8 15h2M14 15h2"/>',
+  combustible: '<path d="M4 21V5a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v16M3 21h12M14 9h2a2 2 0 0 1 2 2v5a1.5 1.5 0 0 0 3 0V8l-3-3"/><path d="M7 7h4"/>',
+  peaje: '<path d="M3 20h18M6 20V9h12v11M4 9l8-5 8 5"/>',
+  comida: '<path d="M4 11h16a8 8 0 0 1-16 0zM8 7c0-2 2-2 2-4M13 7c0-2 2-2 2-4"/>',
+  otro: '<circle cx="12" cy="12" r="8"/><path d="M12 8v8M8 12h8"/>',
+  camara: '<path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>',
+} as const;
+export type NombreIcono = keyof typeof ICONOS;
+
+export const Icono: FC<{ n: NombreIcono; t?: number }> = (p) =>
+  raw(`<svg width="${p.t ?? 22}" height="${p.t ?? 22}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">${ICONOS[p.n]}</svg>`);
+
+/** Título de cada pantalla: botón volver (opcional), texto arriba/abajo y acciones a la derecha. */
+export const Cabecera: FC<{ titulo: Child; sobre?: Child; sub?: Child; volver?: string; der?: Child }> = (p) => (
+  <header class="cab-pagina">
+    {p.volver ? <a class="btn-icono" href={p.volver} aria-label="Volver"><Icono n="volver" t={20} /></a> : null}
+    <div class="cab-textos">
+      {p.sobre ? <span class="lbl">{p.sobre}</span> : null}
+      <h1>{p.titulo}</h1>
+      {p.sub ? <span class="muted">{p.sub}</span> : null}
+    </div>
+    {p.der ? <div class="der">{p.der}</div> : null}
+  </header>
+);
 
 const Logo = () => (
   <svg width="40" height="40" viewBox="0 0 40 40" aria-hidden="true">
@@ -76,71 +97,71 @@ const Logo = () => (
 
 export interface PropsLayout {
   titulo: string;
-  seccion: Seccion;
+  lugar: Lugar;
   usuario: UsuarioWeb;
   cab: DatosCabecera;
+  /** Ruta actual sin ?ok/?error (para volver aquí después de anotar). */
+  ruta: string;
   ok?: string | null;
   error?: string | null;
   scripts?: string[];
   importmap?: boolean;
+  /** Pantallas de un solo paso (Anotar en el celular): sin barra de abajo. */
+  sinNavInferior?: boolean;
 }
 
-export const Layout: FC<PropsWithChildren<PropsLayout>> = (p) => (
-  <html lang="es">
-    <head>
-      <meta charset="utf-8" />
-      <meta name="viewport" content="width=device-width, initial-scale=1" />
-      <title>{`${p.titulo} · Control Flota`}</title>
-      <link rel="preconnect" href="https://fonts.googleapis.com" />
-      <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="" />
-      <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Space+Mono:wght@400;700&display=swap" />
-      <link rel="manifest" href="/manifest.webmanifest" />
-      <meta name="theme-color" content="#121719" />
-      <meta name="mobile-web-app-capable" content="yes" />
-      <meta name="apple-mobile-web-app-capable" content="yes" />
-      <meta name="apple-mobile-web-app-title" content="Flota" />
-      <link rel="apple-touch-icon" href="/static/iconos/apple-touch-icon.png" />
-      <link rel="stylesheet" href={`/static/app.css?v=${V}`} />
-      <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='4' fill='%23121719'/%3E%3Ccircle cx='29' cy='13' r='5' fill='%23FF5AAE'/%3E%3Ccircle cx='13' cy='26' r='5' fill='%238FB4CC'/%3E%3C/svg%3E" />
-      {p.importmap ? raw(`<script type="importmap">{"imports":{"three":"/vendor/three/build/three.module.js","three/addons/":"/vendor/three/examples/jsm/"}}</script>`) : null}
-    </head>
-    <body>
-      <div class="pagina">
-        <header class="header">
-          <Logo />
-          <a class="marca" href="/">
-            <span class="t">{p.cab.empresa} · <span class="c">Control</span> <span class="f">Flota</span></span>
-            <span class="s">TRANSPORTE DE CARGA PESADA · CADA PIEZA, CADA VIAJE, BAJO CONTROL</span>
-          </a>
-          <div class="datos">
-            <div class="dato"><span class="lbl">UNIDADES</span><b>{p.cab.unidadesActivas}/{p.cab.unidadesTotal}</b></div>
-            <div class="dato"><span class="lbl">VIAJES MES</span><b class="t-cambiar">{p.cab.viajesMes}</b></div>
-            <div class="dato"><span class="lbl">MARGEN</span><b class="t-cambiar">{pct(p.cab.margenPct)}</b></div>
-            <a href="/telegram" class={`bot-estado${p.cab.botEnLinea ? "" : " off"}`}>BOT TELEGRAM · {p.cab.botEnLinea ? "EN LÍNEA" : "DESCONECTADO"}</a>
-            <span class="hora" data-reloj="">{p.cab.hora}</span>
-            <button type="button" class="btn chico primario" id="instalar-app" hidden>⬇ INSTALAR APP</button>
-            <div class="usuario-menu">
-              <span class="muted">{p.usuario.nombre}</span>
-              <form method="post" action="/salir"><button class="btn chico" type="submit">SALIR</button></form>
+export const Layout: FC<PropsWithChildren<PropsLayout>> = (p) => {
+  const menu = menuDe(p.usuario.rol);
+  const enlace = (m: EntradaMenu) => (
+    <a href={m.href} class={m.lugar === p.lugar ? "activo" : undefined} aria-current={m.lugar === p.lugar ? "page" : undefined}>
+      <Icono n={m.lugar} />{m.etiqueta}
+    </a>
+  );
+  return (
+    <html lang="es">
+      <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+        <title>{`${p.titulo} · Control Flota`}</title>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="" />
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Space+Mono:wght@400;700&display=swap" />
+        <link rel="manifest" href="/manifest.webmanifest" />
+        <meta name="theme-color" content="#121719" />
+        <meta name="mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-title" content="Flota" />
+        <link rel="apple-touch-icon" href="/static/iconos/apple-touch-icon.png" />
+        <link rel="stylesheet" href={`/static/app.css?v=${V}`} />
+        <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='4' fill='%23121719'/%3E%3Ccircle cx='29' cy='13' r='5' fill='%23FF5AAE'/%3E%3Ccircle cx='13' cy='26' r='5' fill='%238FB4CC'/%3E%3C/svg%3E" />
+        {p.importmap ? raw(`<script type="importmap">{"imports":{"three":"/vendor/three/build/three.module.js","three/addons/":"/vendor/three/examples/jsm/"}}</script>`) : null}
+      </head>
+      <body class={p.sinNavInferior ? "sin-inferior" : undefined}>
+        <div class="marco">
+          <nav class="lateral" aria-label="Lugares">
+            <a class="marca" href="/"><Logo /><span><b>Control Flota</b><span class="s">{p.cab.empresa}</span></span></a>
+            {menu.map(enlace)}
+            <div class="abajo">
+              {veAjustes(p.usuario.rol) ? (
+                <a href="/ajustes" class={p.lugar === "ajustes" ? "activo" : undefined} aria-current={p.lugar === "ajustes" ? "page" : undefined}><Icono n="ajustes" />Ajustes</a>
+              ) : null}
+              <span class="quien">{p.usuario.nombre}</span>
+              <form method="post" action="/salir"><button class="btn chico" type="submit">Salir</button></form>
             </div>
-          </div>
-        </header>
-        <nav class="nav" aria-label="Secciones">
-          {NAV.filter((n) => puedeVer(p.usuario.rol, n.seccion)).map((n) => (
-            <a href={n.href} class={n.seccion === p.seccion ? "activo" : ""} aria-current={n.seccion === p.seccion ? "page" : undefined}>{n.n} {n.etiqueta}</a>
-          ))}
-          {puedeVer(p.usuario.rol, "ajustes") ? <a href="/ajustes" class={p.seccion === "ajustes" ? "activo fin" : "fin"}>⚙ AJUSTES</a> : null}
-          {p.cab.simulado ? <span class="chip proximo" title="SUNAT en modo simulado">SUNAT SIMULADO</span> : null}
-        </nav>
-        {p.ok ? <div class="aviso ok" role="status">{p.ok}</div> : null}
-        {p.error ? <div class="aviso error" role="alert">{p.error}</div> : null}
-        {p.children}
-      </div>
-      <script src={`/static/app.js?v=${V}`} defer></script>
-      {(p.scripts ?? []).map((s) => <script type="module" src={`${s}?v=${V}`}></script>)}
-    </body>
-  </html>
-);
+          </nav>
+          <main class="contenido" id="contenido">
+            {p.ok ? <div class="aviso ok" role="status">{p.ok}</div> : null}
+            {p.error ? <div class="aviso error" role="alert">{p.error}</div> : null}
+            {p.children}
+          </main>
+        </div>
+        {p.sinNavInferior ? null : <nav class="inferior" aria-label="Lugares" style={`--n:${menu.length}`}>{menu.map(enlace)}</nav>}
+        <script src={`/static/app.js?v=${V}`} defer></script>
+        {(p.scripts ?? []).map((s) => <script type="module" src={`${s}?v=${V}`}></script>)}
+      </body>
+    </html>
+  );
+};
 
 // ── Piezas ───────────────────────────────────────────────────────────────────
 

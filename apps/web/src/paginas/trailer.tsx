@@ -124,7 +124,7 @@ async function vista(c: C, d: Deps) {
                 <label class="campo"><span>Odómetro al instalar (km)</span><input name="km" inputmode="numeric" placeholder={String(unidad.odometroKm)} /></label>
                 <label class="campo"><span>Viajes hechos desde entonces</span><input name="viajesDesde" inputmode="numeric" placeholder="0" /></label>
                 <button class="btn primario" type="submit">GUARDAR</button>
-                <span class="muted" style="font-size:11px">Si no sabes la fecha exacta, déjala vacía: se cuenta desde hoy.</span>
+                <span class="muted" style="font-size:12px">Si no sabes la fecha exacta, déjala vacía: se cuenta desde hoy.</span>
               </form>
             </details>
           ) : null}
@@ -190,7 +190,7 @@ async function vista(c: C, d: Deps) {
             <div id="pieza-detalle" class="filas" hidden={!piezaSel}>
               <div>
                 <b id="pieza-nombre" class="mono-t" style="font-size:15px">{piezaSel?.nombre ?? ""}</b><br />
-                <span id="pieza-zona" class="muted" style="font-size:11px"></span>
+                <span id="pieza-zona" class="muted" style="font-size:12px"></span>
               </div>
               <div id="pieza-partes" class="filas"></div>
               <div id="pieza-repuestos" class="filas"></div>
@@ -223,7 +223,7 @@ async function vista(c: C, d: Deps) {
                       <select name="parteId" id="pieza-parte"><option value="">— no reinicia ningún contador —</option></select>
                     </label>
                     <button class="btn primario" type="submit">GUARDAR EN ESTA PIEZA</button>
-                    <span class="muted" style="font-size:11px">Queda en el historial de la pieza y en Reparaciones. Sin costo sirve para anotar un incidente (por ejemplo, se abrió el retrovisor).</span>
+                    <span class="muted" style="font-size:12px">Queda en el historial de la pieza y en Reparaciones. Sin costo sirve para anotar un incidente (por ejemplo, se abrió el retrovisor).</span>
                   </form>
                 </details>
               ) : null}
@@ -231,14 +231,14 @@ async function vista(c: C, d: Deps) {
           </Panel>
           {sel ? (
             <Panel titulo={sel.nombre} der={<ChipEstado estado={sel.estado} />}>
-              <span class="muted" style="font-size:11px">INSTALADO {fechaMedia(sel.fechaInstalacion)} · REPUESTO {sel.repuesto?.codigo ?? "—"} · COSTO {sel.costo ? soles2(sel.costo) : "—"}</span>
+              <span class="muted" style="font-size:12px">INSTALADO {fechaMedia(sel.fechaInstalacion)} · REPUESTO {sel.repuesto?.codigo ?? "—"} · COSTO {sel.costo ? soles2(sel.costo) : "—"}</span>
               <Contador etiqueta="KILÓMETROS" uso={sel.uso.km} vida={sel.vida.km} unidad="km" manda={sel.manda === "km"} />
               <Contador etiqueta="VIAJES" uso={sel.uso.viajes} vida={sel.vida.viajes} unidad="viajes" manda={sel.manda === "viajes"} />
               <Contador etiqueta="DÍAS" uso={sel.uso.dias} vida={sel.vida.dias} unidad="días" manda={sel.manda === "dias"} />
               <div class="caja-oscura">
                 <span class="lbl">CAMBIAR ANTES DE</span>
                 <b>{sel.restanteTexto}</b>
-                <span class="muted" style="font-size:11px">Manda el contador que se cumpla primero · desgaste {sel.pct}% · {ETIQUETA_ESTADO[sel.estado]}</span>
+                <span class="muted" style="font-size:12px">Manda el contador que se cumpla primero · desgaste {sel.pct}% · {ETIQUETA_ESTADO[sel.estado]}</span>
               </div>
               <div class="acciones">
                 {puedeEditarTaller ? <a class="btn primario" href={`/reparaciones?unidad=${unidad.id}&parte=${sel.id}#registrar`}>REGISTRAR CAMBIO</a> : null}
@@ -266,7 +266,7 @@ async function vista(c: C, d: Deps) {
                   ))}
                 </tbody></table></div>
               )}
-              {desdeCambio.length > 8 ? <span class="muted" style="font-size:11px">… y {desdeCambio.length - 8} viajes más</span> : null}
+              {desdeCambio.length > 8 ? <span class="muted" style="font-size:12px">… y {desdeCambio.length - 8} viajes más</span> : null}
               <a class="lbl-12" href={`/viajes?unidad=${unidad.id}`}>VER TODOS LOS VIAJES →</a>
             </Panel>
           ) : null}

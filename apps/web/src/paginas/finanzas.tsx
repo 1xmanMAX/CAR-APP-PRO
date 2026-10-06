@@ -111,7 +111,7 @@ async function vista(c: C, d: Deps) {
                   <optgroup label="Fijos (del mes)">{categorias.filter((k) => k.tipo === "fijo").map((k) => <option value={k.clave}>{k.nombre}</option>)}</optgroup>
                 </select></label>
                 <label class="campo"><span>Foto del voucher</span><input type="file" name="foto" accept="image/*,application/pdf" /></label>
-                <span class="muted" style="font-size:11px">Se guarda con: {previa} · ahora</span>
+                <span class="muted" style="font-size:12px">Se guarda con: {previa} · ahora</span>
                 <details class="plegable"><summary><span class="btn chico fantasma">cambiar</span></summary>
                   <div class="filas" style="margin-top:6px">
                     <label class="campo"><span>Unidad</span><select name="vehiculoId"><option value="">— general —</option>{unidades.map((u) => <option value={u.id} selected={u.id === unidadDef}>{u.codigo}</option>)}</select></label>
@@ -125,7 +125,7 @@ async function vista(c: C, d: Deps) {
               </form>
               <form method="post" action="/finanzas/ingreso" class="panel">
                 <b class="lbl-12">+ OTRO INGRESO</b>
-                <span class="muted" style="font-size:11px">Los fletes entran solos desde Viajes.</span>
+                <span class="muted" style="font-size:12px">Los fletes entran solos desde Viajes.</span>
                 <label class="campo"><span>Concepto</span><input name="concepto" required /></label>
                 <label class="campo"><span>Monto S/</span><input name="monto" inputmode="decimal" required /></label>
                 <SelUnidad />
@@ -151,7 +151,7 @@ async function vista(c: C, d: Deps) {
                 <div style="display:flex;justify-content:space-between"><b>{p.entidad}</b><span class="muted">TASA {p.tasaAnual}%</span></div>
                 <div><b class="mono-t" style="font-size:18px">{soles(p.saldo)}</b> <span class="lbl">PENDIENTE</span></div>
                 <div class="tira" aria-label={`${p.pagadas} de ${p.total} cuotas pagadas`}>{p.cuotas.map((q) => <i style={`width:8px;height:14px;background:${q.pagada ? "var(--accent)" : "var(--divider)"}`} title={`Cuota ${q.numero} · ${q.vencimiento} · ${soles2(q.monto)}`}></i>)}</div>
-                <div style="display:flex;justify-content:space-between;font-size:11px"><span>{p.pagadas} DE {p.total} CUOTAS</span><span>PRÓXIMA {p.proxima ? `${fechaMedia(p.proxima.vencimiento)} · ${soles2(p.proxima.monto)}` : "—"}</span></div>
+                <div style="display:flex;justify-content:space-between;font-size:12px"><span>{p.pagadas} DE {p.total} CUOTAS</span><span>PRÓXIMA {p.proxima ? `${fechaMedia(p.proxima.vencimiento)} · ${soles2(p.proxima.monto)}` : "—"}</span></div>
                 {edita && p.proxima ? (
                   <form method="post" action={`/finanzas/prestamo/${p.id}/pagar`} data-confirmar={`¿Registrar el pago de la cuota de ${soles2(p.proxima.monto)}?`}>
                     <button class="btn chico" type="submit">PAGAR CUOTA</button>

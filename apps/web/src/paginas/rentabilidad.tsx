@@ -92,7 +92,7 @@ async function vista(c: C, d: Deps) {
                 <td>{nombreMes(m.mes)}{m.provisional ? <span class="chip proximo" style="margin-left:4px">PROVISIONAL</span> : null}</td><td>{m.unidad}</td>
                 <td class="num">{m.viajes}</td><td class="num">{soles(m.ingresos)}</td><td class="num">{soles(m.variables)}</td><td class="num">{soles(m.contribucion)}</td>
                 <td class="num">{m.fijosDetalle.length ? (
-                  <details class="plegable"><summary>{soles(m.fijos)}</summary>{m.fijosDetalle.map((x) => <div style="font-size:11px">{x.nombre}: {soles(x.monto)}</div>)}</details>
+                  <details class="plegable"><summary>{soles(m.fijos)}</summary>{m.fijosDetalle.map((x) => <div style="font-size:12px">{x.nombre}: {soles(x.monto)}</div>)}</details>
                 ) : soles(m.fijos)}</td>
                 <td class="num"><b style={m.ganancia < 0 ? "color:var(--accent)" : ""}>{soles(m.ganancia)}</b></td><td class="num">{m.margenPct === null ? "—" : `${m.margenPct}%`}</td>
               </tr>
@@ -164,7 +164,7 @@ async function vista(c: C, d: Deps) {
           <div class="grid g-2">
             <Panel titulo="PROYECCIÓN · 6 MESES" der={<span class="leyenda"><span><i style="background:#2D5B7A"></i>INGRESOS</span><span><i style="background:#B8236E"></i>COSTOS</span><span>CLARO = PROYECTADO</span></span>}>
               <GraficoProyeccion meses={proy.meses} />
-              <span class="muted" style="font-size:11px">Se proyecta con {proy.base.viajesMes} viajes/mes, flete promedio {soles(proy.base.fletePromedio)}, {proy.base.kmPorViaje} km/viaje a S/ {(proy.base.costoPorKm / 100).toFixed(2)} por km (sin repuestos) más los cambios de repuestos que ya vienen en camino según los contadores de desgaste.</span>
+              <span class="muted" style="font-size:12px">Se proyecta con {proy.base.viajesMes} viajes/mes, flete promedio {soles(proy.base.fletePromedio)}, {proy.base.kmPorViaje} km/viaje a S/ {(proy.base.costoPorKm / 100).toFixed(2)} por km (sin repuestos) más los cambios de repuestos que ya vienen en camino según los contadores de desgaste.</span>
             </Panel>
             <Panel titulo="PRESUPUESTO VS REAL · MES" der={edita ? <a class="lbl-12" href="#presupuesto">EDITAR</a> : null}>
               {pvr.length === 0 ? <Vacio>Sin gastos ni presupuesto este mes.</Vacio> : (

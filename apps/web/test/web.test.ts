@@ -6,6 +6,8 @@ import {
 import { crearDb, gasto } from "../../../packages/db/src/index";
 import { crearContextoPrueba } from "../../../packages/core/test/helpers";
 import { crearWeb } from "../src/app";
+import { tiposAnotar } from "../src/lugares";
+import { conParametros } from "../src/redirecciones";
 
 let ctx: Contexto;
 let cerrar: () => Promise<void>;
@@ -56,9 +58,35 @@ describe("web", () => {
     expect((await app.request("/")).headers.get("location")).toBe("/entrar");
   });
 
+  it("tipos de Anotar según el rol", () => {
+    expect(tiposAnotar("taller")).toEqual(["repare"]);
+    expect(tiposAnotar("contador")).toEqual(["gaste", "chofer", "cobro", "empresa", "prestamo"]);
+    expect(tiposAnotar("dueno")).toHaveLength(6);
+    expect(tiposAnotar("chofer")).toEqual([]);
+  });
+
+  it("las redirecciones conservan solo los parámetros útiles", () => {
+    expect(conParametros("/camiones/2", { pieza: "faro-der", ok: "x" }, ["pieza"])).toBe("/camiones/2?pieza=faro-der");
+    expect(conParametros("/camiones?tab=repuestos", { q: "filtro" }, ["q"])).toBe("/camiones?tab=repuestos&q=filtro");
+    expect(conParametros("/numeros/caja", {}, ["mes"])).toBe("/numeros/caja");
+  });
+
   describe("con el dueño configurado", () => {
     beforeEach(async () => {
       await guardarUsuario(ctx, { id: 1, nombre: "Dueño", email: "dueno@demo.pe", rol: "dueno", clave: "clave-segura" });
+    });
+
+    it("menú: lateral en la PC, barra abajo en el celular y solo los lugares del rol", async () => {
+      const cookie = await entrar();
+      const html = await (await app.request("/", { headers: { cookie } })).text();
+      expect(html).toContain('<nav class="lateral"');
+      expect(html).toContain('<nav class="inferior"');
+      expect(html).not.toContain('<header class="header"');
+      for (const e of ["Inicio", "Viajes", "Camiones", "Números", "Ajustes"]) expect(html).toMatch(new RegExp(`${e}</a>`));
+      await guardarUsuario(ctx, { nombre: "Conta", email: "conta@demo.pe", rol: "contador", clave: "clave-segura" });
+      const conta = await (await app.request("/", { headers: { cookie: await entrar("conta@demo.pe") } })).text();
+      expect(conta).not.toMatch(/Camiones<\/a>/);
+      expect(conta).toMatch(/Números<\/a>/);
     });
 
     it("gasto mínimo: solo monto y categoría; el resto se completa solo", async () => {

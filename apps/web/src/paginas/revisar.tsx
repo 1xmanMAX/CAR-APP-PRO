@@ -52,7 +52,7 @@ async function vista(c: C, d: Deps) {
                   <span class={`chip ${it.estado === "error" ? "cambiar" : "proximo"}`}>{ESTADO[it.estado]}</span>
                 </div>
                 {it.texto ? <span style="font-size:12px">«{it.texto}»</span> : null}
-                {it.error ? <span class="muted" style="font-size:11px">⚠️ {it.error}</span> : null}
+                {it.error ? <span class="muted" style="font-size:12px">⚠️ {it.error}</span> : null}
                 {it.rutaArchivo && it.tipo === "foto" ? <a href={`/archivo/documento/${it.documentoId}`} target="_blank"><img src={`/archivo/documento/${it.documentoId}`} alt="Foto enviada" style="max-width:100%;max-height:220px;border-radius:4px" /></a> : null}
                 {it.rutaArchivo && it.tipo === "voz" ? <audio controls src={`/archivo/documento/${it.documentoId}`} style="width:100%"></audio> : null}
                 {edita ? (

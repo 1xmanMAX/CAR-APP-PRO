@@ -15,6 +15,7 @@
     "demo": "tsx packages/core/scripts/demo.ts",
     "ubigeos": "tsx packages/core/scripts/generar-ubigeos.ts",
     "web": "tsx apps/web/src/main.ts",
+    "capturas": "tsx apps/web/scripts/capturas.ts",
     "demo:flota": "tsx packages/core/scripts/demo-flota.ts",
     "app": "tsx apps/bot/src/app.ts"
   },

@@ -28,3 +28,6 @@ logs/
 data-demo/
 data-demo-b/
 dist-movil/
+
+# Capturas del rediseño (pnpm capturas)
+capturas/

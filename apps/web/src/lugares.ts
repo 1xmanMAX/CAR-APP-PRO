@@ -19,7 +19,8 @@ export const RUTA = {
   numeros: "/finanzas",
   catalogoPartes: "/ajustes",
   revisar: "/revisar",
-  cobrar: (_facturaId: number) => "/viajes",
+  /** Cobrar una factura: en el viaje de su guía (tarea 7: «Papeles y cobro»); si no tiene viaje, la lista. */
+  cobrar: (viajeId: number | null) => (viajeId ? `/viajes/${viajeId}` : "/viajes"),
 };
 
 export interface EntradaMenu { lugar: "inicio" | "viajes" | "camiones" | "numeros"; etiqueta: string; href: string; seccion: Seccion }

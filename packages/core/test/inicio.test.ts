@@ -1,9 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { eq, guiaTransportista } from "@sunatapp/db";
 import {
-  categoriasMasUsadas, choferDeViaje, primerNombre, registrarEntrega, registrarGasto, registrarIngreso, registrarViajeFlota, resumenInicio, viajesEnRuta,
+  categoriasMasUsadas, choferDeViaje, emitirGuia, prepararFactura, primerNombre, registrarEntrega, registrarGasto, registrarGuiaBorrador, registrarIngreso,
+  registrarViajeFlota, resumenInicio, viajeDeFactura, viajesEnRuta,
   type Contexto,
 } from "../src";
-import { crearContextoPrueba } from "./helpers";
+import { crearContextoPrueba, entradaGuia } from "./helpers";
 
 let ctx: Contexto;
 let cerrar: () => Promise<void>;
@@ -27,6 +29,18 @@ describe("consultas de Inicio", () => {
     expect(r).toMatchObject({ mes: "2026-09", mesAnterior: "2026-08", entro: 50000, teDeben: 0, facturasPorCobrar: 0 });
     expect(r.salio).toBeGreaterThanOrEqual(2000);
     expect(r.ganancia).toBe(r.entro - r.salio);
+  });
+
+  it("viaje de una factura: por su guía; null si no hay", async () => {
+    const v = await registrarViajeFlota(ctx, { vehiculoId: 1, origenLugar: "Yura", destinoLugar: "Puno", estado: "cerrado", fecha: "2026-09-12", origen: "web" });
+    const guiaId = await registrarGuiaBorrador(ctx, entradaGuia());
+    await emitirGuia(ctx, guiaId);
+    await ctx.db.update(guiaTransportista).set({ viajeId: v.id }).where(eq(guiaTransportista.id, guiaId));
+    const { facturaId } = await prepararFactura(ctx, { guiaId, montoCentimos: 100000, incluyeIgv: false, formaPago: "contado" });
+    expect(await viajeDeFactura(ctx, facturaId)).toBe(v.id);
+    await ctx.db.update(guiaTransportista).set({ viajeId: null }).where(eq(guiaTransportista.id, guiaId));
+    expect(await viajeDeFactura(ctx, facturaId)).toBeNull();
+    expect(await viajeDeFactura(ctx, 9999)).toBeNull();
   });
 
   it("categorías más usadas (solo variables) y primer nombre", async () => {

@@ -308,7 +308,8 @@ body.sin-inferior .contenido { padding-bottom: 24px; }
 .tarjeta-oscura .lbl, .tarjeta-oscura .sub { color: var(--dark-muted); }
 .tarjeta-oscura .sub { font-size: 13px; }
 .cifra-grande { font-family: var(--f-title); font-size: 36px; line-height: 1.1; color: var(--accent-on-dark); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
-.cifra-grande.neg { color: var(--amber-dark); }
+.cifra-grande.neg { color: var(--accent-on-dark-2); }
+.tarjeta-oscura.perdida { box-shadow: inset 4px 0 0 var(--accent-on-dark-2); }
 .tres-cifras { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .dos-cifras { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .cifra { background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 10px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }

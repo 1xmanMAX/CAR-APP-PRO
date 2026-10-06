@@ -7,6 +7,7 @@ import { crearDb, gasto } from "../../../packages/db/src/index";
 import { crearContextoPrueba } from "../../../packages/core/test/helpers";
 import { crearWeb } from "../src/app";
 import { tiposAnotar } from "../src/lugares";
+import { atenciones, elegirAvisos, enOracion, textoGanancia } from "../src/paginas/dashboard";
 import { conParametros } from "../src/redirecciones";
 
 let ctx: Contexto;
@@ -65,6 +66,27 @@ describe("web", () => {
     expect(tiposAnotar("chofer")).toEqual([]);
   });
 
+  it("inicio: la tarjeta dice ganaste o perdiste y compara bien con el mes anterior", () => {
+    expect(textoGanancia(845000, 712000, "2026-09")).toEqual({ etiqueta: "Ganaste este mes", monto: "S/ 8,450", sub: "Mejor que septiembre (ganaste S/ 7,120)", perdida: false });
+    expect(textoGanancia(-2825400, 5559900, "2026-09")).toEqual({ etiqueta: "Perdiste este mes", monto: "S/ 28,254", sub: "Peor que septiembre (ganaste S/ 55,599)", perdida: true });
+    expect(textoGanancia(-10000, -50000, "2026-09").sub).toBe("Mejor que septiembre (perdiste S/ 500)");
+    expect(textoGanancia(0, 0, "2026-08").sub).toBe("Igual que agosto (S/ 0)");
+    expect(textoGanancia(30000, 30000, "2026-08").sub).toBe("Igual que agosto (ganaste S/ 300)");
+  });
+
+  it("inicio: las fotos por confirmar nunca se quedan fuera; luego lo urgente; todos con ?ver=atencion", () => {
+    const urgentes = Array.from({ length: 6 }, (_, i) => ({ color: "cambiar" as const, texto: `urgente ${i}`, href: "/" }));
+    const items = [{ color: "proximo" as const, texto: "SUNAT", href: "/" }, ...urgentes, { color: "proximo" as const, texto: "2 fotos por confirmar", href: "/revisar", fijo: true }];
+    const cinco = elegirAvisos(items, false);
+    expect(cinco.map((a) => a.texto)).toEqual(["2 fotos por confirmar", "urgente 0", "urgente 1", "urgente 2", "urgente 3"]);
+    const todos = elegirAvisos(items, true);
+    expect(todos).toHaveLength(8);
+    expect(todos.at(-1)!.texto).toBe("SUNAT");
+    expect(enOracion("FRENOS SEMIRREMOLQUE")).toBe("Frenos semirremolque");
+    expect(enOracion("ACEITE + FILTRO")).toBe("Aceite + filtro");
+    expect(enOracion("Llanta delantera")).toBe("Llanta delantera");
+  });
+
   it("las redirecciones conservan solo los parámetros útiles", () => {
     expect(conParametros("/camiones/2", { pieza: "faro-der", ok: "x" }, ["pieza"])).toBe("/camiones/2?pieza=faro-der");
     expect(conParametros("/camiones?tab=repuestos", { q: "filtro" }, ["q"])).toBe("/camiones?tab=repuestos&q=filtro");
@@ -100,6 +122,20 @@ describe("web", () => {
       expect(html).toMatch(/<a class="btn-icono solo-movil" href="\/ajustes" aria-label="Ajustes">/);
       expect(html).not.toContain("TELEGRAM · ENTRADAS DEL BOT");
       expect(html).not.toContain("GASTOS · POR CATEGORÍA");
+    });
+
+    it("inicio: mes con pérdida, bot apagado en ámbar y la lista completa de avisos", async () => {
+      const cookie = await entrar();
+      await registrarGasto(ctx, { categoria: "peaje", monto: 500000, origen: "web" });
+      const html = await (await app.request("/", { headers: { cookie } })).text();
+      expect(html).toContain("Perdiste este mes");
+      expect(html).not.toContain("Ganaste este mes");
+      expect(html).not.toMatch(/cifra-grande[^>]*>-S\//);
+      const lista = await atenciones(ctx, "dueno", { empresa: "X", botEnLinea: false, simulado: true });
+      expect(lista.find((a) => a.texto.includes("bot de Telegram"))).toMatchObject({ color: "proximo" });
+      const todos = await (await app.request("/?ver=atencion", { headers: { cookie } })).text();
+      expect(todos).toContain("Necesita tu atención");
+      expect(todos).toContain("SUNAT en modo simulado");
     });
 
     it("inicio del taller: sin plata", async () => {

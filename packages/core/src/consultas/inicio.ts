@@ -1,4 +1,4 @@
-import { and, categoriaGasto, conductor, eq, gasto, sql, viaje } from "@sunatapp/db";
+import { and, categoriaGasto, conductor, eq, facturaGuia, gasto, guiaTransportista, isNotNull, sql, viaje } from "@sunatapp/db";
 import { listarCobrosPendientes } from "../cobros/cobros";
 import { mesAnterior, rangoMes, sumarDias } from "../dominio/fechas";
 import { resumenFinanciero } from "../finanzas/finanzas";
@@ -93,4 +93,12 @@ export async function categoriasMasUsadas(ctx: Contexto, n = 3, dias = 90): Prom
     .where(and(sql`${gasto.fecha} >= ${desde}`, eq(categoriaGasto.tipo, "variable"), eq(categoriaGasto.activa, true)))
     .groupBy(gasto.categoria).orderBy(sql`count(*) desc`, gasto.categoria).limit(n);
   return filas.map((f) => f.categoria);
+}
+
+/** El viaje de una factura (por la guía que factura); null si ninguna guía está enlazada a un viaje. */
+export async function viajeDeFactura(ctx: Contexto, facturaId: number): Promise<number | null> {
+  const [f] = await ctx.db.select({ viajeId: guiaTransportista.viajeId }).from(facturaGuia)
+    .innerJoin(guiaTransportista, eq(guiaTransportista.id, facturaGuia.guiaId))
+    .where(and(eq(facturaGuia.facturaId, facturaId), isNotNull(guiaTransportista.viajeId))).limit(1);
+  return f?.viajeId ?? null;
 }

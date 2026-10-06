@@ -10,6 +10,7 @@ export * from "./infra/almacen";
 export * from "./infra/auditoria";
 export * from "./infra/sembrar";
 export * from "./infra/contexto";
+export * from "./sunat/pausa";
 export * from "./documentos/recibidos";
 export * from "./guias/validar";
 export * from "./guias/desde-extraccion";

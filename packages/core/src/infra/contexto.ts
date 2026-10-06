@@ -7,6 +7,7 @@ import {
 } from "@sunatapp/sunat";
 import { crearAlmacenLocal, type Almacen } from "./almacen";
 import type { Config } from "./config";
+import { reanudarSunat } from "../sunat/pausa";
 
 export type NivelLog = "info" | "error";
 
@@ -106,6 +107,8 @@ export async function reconfigurarSunat(ctx: Contexto, config: Config): Promise<
   Object.defineProperty(ctx, "certificado", { get: certificado, configurable: true, enumerable: true });
   ctx.simulado = config.sunatModo !== "real";
   ctx.facturaSimulada = config.sunatModo !== "real" || config.sunatAmbienteFactura === "beta";
+  // Claves nuevas: lo que estaba en pausa por credenciales vuelve a intentarse.
+  await reanudarSunat(ctx);
 }
 
 export async function crearContexto(config: Config): Promise<{ ctx: Contexto; cerrar: () => Promise<void> }> {

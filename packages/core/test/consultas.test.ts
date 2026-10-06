@@ -11,7 +11,7 @@ import {
   auditarTelegramDesconocido, contarAuditoria, duenoTelegramId, hayDueno, hayUsuarios,
   registrarUsuarioTelegram, usuarioPorTelegram,
 } from "../src/usuarios/usuarios";
-import { DATOS_INICIALES, crearContextoPrueba, entradaGuia } from "./helpers";
+import { DATOS_INICIALES, crearContextoPrueba, entradaGuia, prepararDatosTransporte } from "./helpers";
 
 const cerrables: Array<() => Promise<void>> = [];
 afterEach(async () => {
@@ -27,6 +27,7 @@ async function contexto(o: Parameters<typeof crearContextoPrueba>[0] = {}) {
 describe("consultas de guías", () => {
   it("listarGuias ordena por id descendente y marca facturada", async () => {
     const ctx = await contexto();
+    await prepararDatosTransporte(ctx);
     const id1 = await registrarGuiaBorrador(ctx, entradaGuia());
     const id2 = await registrarGuiaBorrador(ctx, entradaGuia());
     await emitirGuia(ctx, id2);
@@ -59,6 +60,7 @@ describe("consultas de guías", () => {
 
   it("listarGuiasSinFacturar solo devuelve aceptadas sin factura_guia", async () => {
     const ctx = await contexto();
+    await prepararDatosTransporte(ctx);
     const idSinFacturar = await registrarGuiaBorrador(ctx, entradaGuia());
     await emitirGuia(ctx, idSinFacturar);
     const idFacturada = await registrarGuiaBorrador(ctx, entradaGuia());

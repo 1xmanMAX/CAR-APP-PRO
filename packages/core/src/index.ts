@@ -17,6 +17,7 @@ export * from "./guias/registrar";
 export * from "./guias/cargar";
 export * from "./guias/emitir";
 export * from "./facturas/preparar";
+export * from "./facturas/transporte";
 export * from "./facturas/emitir";
 export * from "./cobros/cobros";
 export * from "./transporte/transporte";

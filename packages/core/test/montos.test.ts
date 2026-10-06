@@ -15,6 +15,11 @@ describe("calcularMontosFactura", () => {
     });
   });
 
+  it("la detracción usa la base mínima (valor referencial) si es mayor que el total", () => {
+    const m = calcularMontosFactura({ montoCentimos: 100000, incluyeIgv: false, detraccion: { porcentaje: 4, umbralCentimos: 40000 }, baseMinimaDetraccion: 300000 });
+    expect(m).toMatchObject({ total: 118000, detraccionMonto: 12000, cobrable: 106000 });
+  });
+
   it("monto con IGV: separa subtotal e IGV", () => {
     const m = calcularMontosFactura({ montoCentimos: 118000, incluyeIgv: true, detraccion });
     expect(m.subtotal).toBe(100000);

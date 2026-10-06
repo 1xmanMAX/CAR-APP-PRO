@@ -2,7 +2,7 @@ import { and, contraparte, empresa, eq, factura, facturaGuia, guiaTransportista,
 import { generarPdfFactura } from "@sunatapp/pdf";
 import {
   construirXmlFactura, extraerDigest, firmarXml, montoEnLetras, nombreArchivo, SunatNoDisponibleError, validarXsd,
-  type RespuestaSunat, type TipoDocIdentidadSunat,
+  type RespuestaSunat, type TipoDocIdentidadSunat, type TransporteFactura,
 } from "@sunatapp/sunat";
 import { fechaHoraLima, sumarDias } from "../dominio/fechas";
 import { formatearSoles } from "../dominio/montos";
@@ -11,6 +11,7 @@ import type { ResultadoEmision } from "../guias/emitir";
 import { MAX_INTENTOS, REINTENTO_MS } from "../guias/emitir";
 import { registrarAuditoria } from "../infra/auditoria";
 import type { Contexto } from "../infra/contexto";
+import { transporteDeGuia } from "./transporte";
 
 // Mensajes y umbrales de reintento espejados de packages/core/src/guias/emitir.ts (Tarea 11):
 // a diferencia de la guía, la factura recibe la respuesta de SUNAT de inmediato (sin ticket),
@@ -167,6 +168,26 @@ async function generarPdfFacturaSiFalta(ctx: Contexto, id: number): Promise<void
   }
 }
 
+/**
+ * Arma el bloque 1004 con los VR congelados en la factura al prepararla (no se recalculan al
+ * reintentar ni si cambian después el VR de la ruta o la carga útil). Origen y destino salen de
+ * la guía; los datos del vehículo son opcionales (solo generan observaciones si faltan).
+ */
+async function transporteGuardado(ctx: Contexto, facturaId: number, f: typeof factura.$inferSelect): Promise<TransporteFactura> {
+  const [fg] = await ctx.db.select({ guiaId: facturaGuia.guiaId }).from(facturaGuia).where(eq(facturaGuia.facturaId, facturaId)).limit(1);
+  if (!fg) throw new Error(`La factura ${facturaId} no tiene guía relacionada`);
+  const [g] = await ctx.db.select().from(guiaTransportista).where(eq(guiaTransportista.id, fg.guiaId));
+  if (!g) throw new Error(`La guía ${fg.guiaId} no existe`);
+  const base = await transporteDeGuia(ctx, fg.guiaId).catch(() => null);
+  return {
+    origen: { ubigeo: g.partidaUbigeo, direccion: g.partidaDireccion },
+    destino: { ubigeo: g.llegadaUbigeo, direccion: g.llegadaDireccion },
+    detalleViaje: f.detalleViaje!,
+    vr: { vrServicio: f.vrServicio!, vrCargaEfectiva: f.vrCargaEfectiva!, vrCargaUtil: f.vrCargaUtil! },
+    ...(base?.transporte.vehiculo ? { vehiculo: base.transporte.vehiculo } : {}),
+  };
+}
+
 export async function emitirFactura(ctx: Contexto, facturaId: number): Promise<ResultadoEmision> {
   const reserva = await ctx.db.transaction(async (tx) => {
     const [f] = await tx.select().from(factura).where(eq(factura.id, facturaId)).for("update");
@@ -231,6 +252,7 @@ export async function emitirFactura(ctx: Contexto, facturaId: number): Promise<R
       const d = await cargarFactura(ctx, facturaId);
       const f = d.factura;
       nombre = nombreArchivo(d.empresa.ruc, "01", f.serie, f.numero!);
+      const transporte = f.vrServicio !== null ? await transporteGuardado(ctx, facturaId, f) : undefined;
       xml = firmarXml(
         construirXmlFactura({
           emisor: {
@@ -250,6 +272,7 @@ export async function emitirFactura(ctx: Contexto, facturaId: number): Promise<R
           montos: { subtotal: f.subtotal, igv: f.igv, total: f.total, detraccionPorcentaje: f.detraccionPorcentaje, detraccionMonto: f.detraccionMonto },
           formaPago: f.formaPago === "credito" ? { tipo: "credito", fechaVencimiento: f.fechaVencimiento! } : { tipo: "contado" },
           guiasRelacionadas: d.guias,
+          ...(transporte ? { transporte } : {}),
         }),
         ctx.certificado,
       );

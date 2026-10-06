@@ -3,6 +3,7 @@ import { calcularMontosFactura, type MontosFactura } from "../dominio/montos";
 import { ErrorNegocio, FALTA_EMPRESA } from "../errores";
 import { registrarAuditoria } from "../infra/auditoria";
 import type { Contexto } from "../infra/contexto";
+import { transporteDeGuia } from "./transporte";
 
 export interface EntradaFactura {
   guiaId: number;
@@ -29,14 +30,16 @@ export async function prepararFactura(ctx: Contexto, e: EntradaFactura, usuarioI
     if (!cliente) throw new ErrorNegocio("El cliente no existe");
     if (cliente.tipoDoc !== "6") throw new ErrorNegocio("La factura requiere un cliente con RUC");
 
-    const montos = calcularMontosFactura({
-      montoCentimos: e.montoCentimos,
-      incluyeIgv: e.incluyeIgv,
-      detraccion: { porcentaje: emp.detraccionPorcentaje, umbralCentimos: emp.detraccionUmbral },
-    });
-    if (montos.detraccionMonto > 0 && !emp.cuentaDetraccionBn) {
+    // Solo una factura con detracción necesita los valores referenciales (operación 1004).
+    const detraccion = { porcentaje: emp.detraccionPorcentaje, umbralCentimos: emp.detraccionUmbral };
+    const sinVr = calcularMontosFactura({ montoCentimos: e.montoCentimos, incluyeIgv: e.incluyeIgv, detraccion });
+    if (sinVr.detraccionMonto > 0 && !emp.cuentaDetraccionBn) {
       throw new ErrorNegocio("Configura la cuenta de detracciones del Banco de la Nación antes de facturar montos mayores a S/ 400");
     }
+    const transporte = sinVr.detraccionMonto > 0 ? await transporteDeGuia(ctx, e.guiaId, tx) : null;
+    const montos = transporte
+      ? calcularMontosFactura({ montoCentimos: e.montoCentimos, incluyeIgv: e.incluyeIgv, detraccion, baseMinimaDetraccion: transporte.vr.vrServicio })
+      : sinVr;
 
     const [fila] = await tx
       .insert(factura)
@@ -51,6 +54,10 @@ export async function prepararFactura(ctx: Contexto, e: EntradaFactura, usuarioI
         detraccionMonto: montos.detraccionMonto,
         formaPago: e.formaPago,
         diasCredito: e.formaPago === "credito" ? e.diasCredito! : null,
+        vrServicio: transporte?.vr.vrServicio ?? null,
+        vrCargaEfectiva: transporte?.vr.vrCargaEfectiva ?? null,
+        vrCargaUtil: transporte?.vr.vrCargaUtil ?? null,
+        detalleViaje: transporte?.transporte.detalleViaje ?? null,
       })
       .returning({ id: factura.id });
     await tx.insert(facturaGuia).values({ facturaId: fila!.id, guiaId: e.guiaId });

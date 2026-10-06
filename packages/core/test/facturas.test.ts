@@ -1,4 +1,4 @@
-import { cobro, contraparte, empresa, eq, factura, sql, type EstadoSunatFactura } from "@sunatapp/db";
+import { cobro, contraparte, empresa, eq, factura, sql, valorReferencialRuta, vehiculo, type EstadoSunatFactura } from "@sunatapp/db";
 import { SunatNoDisponibleError, SunatSimulado, type DocumentoFirmado, type RespuestaSunat, type SunatGateway } from "@sunatapp/sunat";
 import { extractText, getDocumentProxy } from "unpdf";
 import { afterEach, describe, expect, it } from "vitest";
@@ -6,10 +6,11 @@ import { buscarFacturaPorSerieNumero, listarCobrosPendientes, registrarCobro } f
 import { ErrorNegocio } from "../src/errores";
 import { emitirFactura, procesarPendientesFacturas } from "../src/facturas/emitir";
 import { prepararFactura } from "../src/facturas/preparar";
+import { FaltaDatoTransporteError } from "../src/facturas/transporte";
 import { emitirGuia } from "../src/guias/emitir";
 import { registrarGuiaBorrador } from "../src/guias/registrar";
 import type { Contexto } from "../src/infra/contexto";
-import { crearContextoPrueba, entradaGuia } from "./helpers";
+import { crearContextoPrueba, entradaGuia, prepararDatosTransporte } from "./helpers";
 
 async function textoPdf(pdf: Buffer): Promise<string> {
   const doc = await getDocumentProxy(new Uint8Array(pdf));
@@ -27,6 +28,7 @@ async function contextoConGuia(gateway?: SunatGateway, o: { facturaSimulada?: bo
   ahora = new Date("2026-09-13T15:00:00Z");
   const r = await crearContextoPrueba({ reloj: () => ahora, ...(gateway ? { gateway } : {}), ...(o.facturaSimulada !== undefined ? { facturaSimulada: o.facturaSimulada } : {}) });
   cerrables.push(r.cerrar);
+  await prepararDatosTransporte(r.ctx);
   const guiaId = await registrarGuiaBorrador(r.ctx, entradaGuia());
   await emitirGuia(r.ctx, guiaId);
   return { ctx: r.ctx, guiaId };
@@ -36,9 +38,48 @@ describe("prepararFactura", () => {
   it("calcula montos con detracción y factura al remitente por defecto", async () => {
     const { ctx, guiaId } = await contextoConGuia();
     const { facturaId, montos } = await prepararFactura(ctx, { guiaId, montoCentimos: 100000, incluyeIgv: false, formaPago: "contado" });
-    expect(montos).toMatchObject({ total: 118000, detraccionMonto: 4700, cobrable: 113300 });
+    // Guía de 1.501 TM, VR 85.50/TM, carga útil 30 TM: VR01 = max(128.34, 0.7 × 2565.00) = 1795.50.
+    expect(montos).toMatchObject({ total: 118000, detraccionMonto: 7200, cobrable: 110800 });
     const [f] = await ctx.db.select().from(factura).where(eq(factura.id, facturaId));
     expect(f).toMatchObject({ estadoSunat: "borrador", serie: "F001", descripcion: expect.stringContaining("V001-1") });
+    expect(f).toMatchObject({ vrServicio: 179550, vrCargaEfectiva: 12834, vrCargaUtil: 256500, detalleViaje: expect.stringContaining("V001-1") });
+  });
+
+  it("sin valor referencial de la ruta pide ese dato (FaltaDatoTransporteError)", async () => {
+    const { ctx, guiaId } = await contextoConGuia();
+    await ctx.db.delete(valorReferencialRuta);
+    const error = await prepararFactura(ctx, { guiaId, montoCentimos: 100000, incluyeIgv: false, formaPago: "contado" }).catch((e) => e);
+    expect(error).toBeInstanceOf(FaltaDatoTransporteError);
+    expect(error.falta).toMatchObject({ tipo: "vr_ruta", partidaUbigeo: "150115", llegadaUbigeo: "250101" });
+  });
+
+  it("sin carga útil del vehículo pide ese dato", async () => {
+    const { ctx, guiaId } = await contextoConGuia();
+    await ctx.db.update(vehiculo).set({ cargaUtilTm: null });
+    const error = await prepararFactura(ctx, { guiaId, montoCentimos: 100000, incluyeIgv: false, formaPago: "contado" }).catch((e) => e);
+    expect(error).toBeInstanceOf(FaltaDatoTransporteError);
+    expect(error.falta).toMatchObject({ tipo: "carga_util", placa: "ABC-123" });
+  });
+
+  it("sin detracción (≤ S/ 400) no pide valor referencial", async () => {
+    const { ctx, guiaId } = await contextoConGuia();
+    await ctx.db.delete(valorReferencialRuta);
+    const { facturaId } = await prepararFactura(ctx, { guiaId, montoCentimos: 30000, incluyeIgv: true, formaPago: "contado" });
+    const r = await emitirFactura(ctx, facturaId);
+    expect(r.estado).toBe("aceptada");
+    const [f] = await ctx.db.select().from(factura).where(eq(factura.id, facturaId));
+    expect(f).toMatchObject({ vrServicio: null, detalleViaje: null });
+    expect(await ctx.almacen.leerTexto(f!.rutaXml!)).toContain('listID="0101"');
+  });
+
+  it("emitida con detracción lleva 1004 y cac:Delivery en el XML", async () => {
+    const { ctx, guiaId } = await contextoConGuia();
+    const { facturaId } = await prepararFactura(ctx, { guiaId, montoCentimos: 100000, incluyeIgv: false, formaPago: "contado" });
+    await emitirFactura(ctx, facturaId);
+    const [f] = await ctx.db.select().from(factura).where(eq(factura.id, facturaId));
+    const xml = await ctx.almacen.leerTexto(f!.rutaXml!);
+    expect(xml).toContain('listID="1004"');
+    expect(xml).toContain('<cac:DeliveryTerms><cbc:ID>01</cbc:ID><cbc:Amount currencyID="PEN">1795.50</cbc:Amount></cac:DeliveryTerms>');
   });
 
   it("no permite facturar dos veces la misma guía", async () => {
@@ -461,31 +502,31 @@ describe("cobros", () => {
 
   it("pago parcial y luego total sobre el monto cobrable (sin detracción)", async () => {
     const { ctx, facturaId } = await facturaEmitida();
-    expect(await registrarCobro(ctx, { facturaId, montoCentimos: 50000, fecha: "2026-09-14", medio: "transferencia" })).toEqual({ estadoCobro: "parcial", saldo: 63300 });
-    expect(await registrarCobro(ctx, { facturaId, montoCentimos: 63300, fecha: "2026-09-15", medio: "efectivo" })).toEqual({ estadoCobro: "pagada", saldo: 0 });
+    expect(await registrarCobro(ctx, { facturaId, montoCentimos: 50000, fecha: "2026-09-14", medio: "transferencia" })).toEqual({ estadoCobro: "parcial", saldo: 60800 });
+    expect(await registrarCobro(ctx, { facturaId, montoCentimos: 60800, fecha: "2026-09-15", medio: "efectivo" })).toEqual({ estadoCobro: "pagada", saldo: 0 });
     await expect(registrarCobro(ctx, { facturaId, montoCentimos: 1, fecha: "2026-09-15", medio: "otro" })).rejects.toThrow("supera el saldo");
   });
 
   it("dos cobros concurrentes que exceden el saldo: solo uno tiene éxito y nunca se sobrepasa el cobrable", async () => {
-    const { ctx, facturaId } = await facturaEmitida(); // total 118000, detracción 4700, cobrable 113300
+    const { ctx, facturaId } = await facturaEmitida(); // total 118000, detracción 7200 (sobre VR 1795.50), cobrable 110800
     const resultados = await Promise.allSettled([
       registrarCobro(ctx, { facturaId, montoCentimos: 70000, fecha: "2026-09-14", medio: "transferencia" }),
       registrarCobro(ctx, { facturaId, montoCentimos: 70000, fecha: "2026-09-14", medio: "efectivo" }),
     ]);
     const exitosos = resultados.filter((r) => r.status === "fulfilled");
     const fallidos = resultados.filter((r) => r.status === "rejected");
-    expect(exitosos).toHaveLength(1); // el segundo (70000+70000 > 113300) debe fallar, no sobre-cobrar
+    expect(exitosos).toHaveLength(1); // el segundo (70000+70000 > 110800) debe fallar, no sobre-cobrar
     expect(fallidos).toHaveLength(1);
 
     const [fila] = await ctx.db.select({ suma: sql<string>`coalesce(sum(${cobro.monto}), 0)` }).from(cobro).where(eq(cobro.facturaId, facturaId));
     const totalCobrado = Number(fila?.suma ?? 0);
     expect(totalCobrado).toBe(70000);
-    expect(totalCobrado).toBeLessThanOrEqual(113300);
+    expect(totalCobrado).toBeLessThanOrEqual(110800);
 
     const [f] = await ctx.db.select().from(factura).where(eq(factura.id, facturaId));
     expect(f!.estadoCobro).toBe("parcial"); // consistente con el único cobro que sí se aplicó
     const exitoso = exitosos[0] as PromiseFulfilledResult<{ estadoCobro: string; saldo: number }>;
-    expect(exitoso.value).toEqual({ estadoCobro: "parcial", saldo: 43300 });
+    expect(exitoso.value).toEqual({ estadoCobro: "parcial", saldo: 40800 });
   });
 
   it("busca por serie-número con o sin ceros", async () => {
@@ -498,8 +539,8 @@ describe("cobros", () => {
   it("lista pendientes, vence hoy y vencidas con totales", async () => {
     const { ctx } = await facturaEmitida(30);
     let lista = await listarCobrosPendientes(ctx);
-    expect(lista.filas).toEqual([expect.objectContaining({ serieNumero: "F001-1", estado: "pendiente", saldo: 113300, fechaVencimiento: "2026-10-13" })]);
-    expect(lista).toMatchObject({ totalPendiente: 113300, totalVencido: 0 });
+    expect(lista.filas).toEqual([expect.objectContaining({ serieNumero: "F001-1", estado: "pendiente", saldo: 110800, fechaVencimiento: "2026-10-13" })]);
+    expect(lista).toMatchObject({ totalPendiente: 110800, totalVencido: 0 });
 
     ahora = new Date("2026-10-13T15:00:00Z");
     expect((await listarCobrosPendientes(ctx)).filas[0]?.estado).toBe("vence_hoy");
@@ -507,6 +548,6 @@ describe("cobros", () => {
     ahora = new Date("2026-10-20T15:00:00Z");
     lista = await listarCobrosPendientes(ctx);
     expect(lista.filas[0]?.estado).toBe("vencida");
-    expect(lista.totalVencido).toBe(113300);
+    expect(lista.totalVencido).toBe(110800);
   });
 });

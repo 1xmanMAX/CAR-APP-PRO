@@ -18,6 +18,8 @@ export function calcularMontosFactura(e: {
   montoCentimos: number;
   incluyeIgv: boolean;
   detraccion: ParametrosDetraccion;
+  /** Valor referencial del servicio (VR01): la detracción se calcula sobre el mayor entre este y el total. */
+  baseMinimaDetraccion?: number;
 }): MontosFactura {
   if (!Number.isInteger(e.montoCentimos) || e.montoCentimos <= 0) {
     throw new Error("El monto debe ser un entero positivo en céntimos");
@@ -34,8 +36,10 @@ export function calcularMontosFactura(e: {
     igv = Math.round((subtotal * IGV_PORCENTAJE) / 100);
     total = subtotal + igv;
   }
+  // El umbral de S/ 400 se mide sobre el importe de la operación, no sobre el valor referencial.
   const aplica = total > e.detraccion.umbralCentimos;
-  const detraccionMonto = aplica ? Math.round((total * e.detraccion.porcentaje) / 100 / 100) * 100 : 0;
+  const base = Math.max(total, e.baseMinimaDetraccion ?? 0);
+  const detraccionMonto = aplica ? Math.round((base * e.detraccion.porcentaje) / 100 / 100) * 100 : 0;
   return {
     subtotal,
     igv,

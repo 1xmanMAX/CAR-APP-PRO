@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { emitirGuia, registrarGuiaBorrador, registrarVehiculo } from "@sunatapp/core";
-import { crearContextoPrueba, entradaGuia, SunatSimulado } from "../../../packages/core/test/helpers";
+import { crearContextoPrueba, entradaGuia, prepararDatosTransporte, SunatSimulado } from "../../../packages/core/test/helpers";
 import { crearArnes } from "./arnes";
 import { notificarFactura } from "../src/flujo-factura";
 import { lineasFixture, pdfConLineas } from "./pdf-prueba";
@@ -156,6 +156,7 @@ describe("flujo de factura: camino feliz", () => {
   it("avisa al dueño si el envío en segundo plano revienta", async () => {
     const creado = await crearContextoPrueba();
     cerrables.push(creado.cerrar);
+    await prepararDatosTransporte(creado.ctx);
     // El almacén se cae al buscar el PDF ya emitido: notificarFactura lanza dentro de la tarea.
     creado.ctx.almacen = {
       ...creado.ctx.almacen,

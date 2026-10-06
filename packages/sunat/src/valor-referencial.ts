@@ -25,11 +25,13 @@ export function calcularValoresReferenciales(e: { vrPorTmCentimos: number; carga
   if (!(e.vrPorTmCentimos > 0) || !(e.cargaEfectivaTm > 0) || !(e.cargaUtilTm > 0)) {
     throw new Error("El valor referencial por TM, la carga efectiva y la carga útil deben ser mayores que cero");
   }
-  const vrCargaEfectiva = Math.round(e.vrPorTmCentimos * e.cargaEfectivaTm);
-  const vrCargaUtil = Math.round(e.vrPorTmCentimos * e.cargaUtilTm);
-  // Piso: 70 % de la carga útil. Usar formación entera para evitar error de redondeo.
-  // vrServicio = max(vrCargaEfectiva, 0.70 × vrCargaUtil) = max(vrCargaEfectiva, ⌊vrCargaUtil × 70 / 100⌋)
-  const vrServicio = Math.max(vrCargaEfectiva, Math.round((vrCargaUtil * 70) / 100));
+  // Usar aritmética entera (kilopondios) para evitar error de redondeo: vrPorTm × kg → ÷1000.
+  const toKilograms = (tm: number) => Math.round(tm * 1000);
+  const vrCargaEfectiva = Math.round((e.vrPorTmCentimos * toKilograms(e.cargaEfectivaTm)) / 1000);
+  const vrCargaUtil = Math.round((e.vrPorTmCentimos * toKilograms(e.cargaUtilTm)) / 1000);
+  // Piso: FACTOR_CARGA_UTIL_MINIMA de la carga útil. Usar aritmética entera para evitar error de redondeo.
+  // vrServicio = max(vrCargaEfectiva, FACTOR_CARGA_UTIL_MINIMA × vrCargaUtil)
+  const vrServicio = Math.max(vrCargaEfectiva, Math.round((vrCargaUtil * Math.round(FACTOR_CARGA_UTIL_MINIMA * 100)) / 100));
   return { vrServicio, vrCargaEfectiva, vrCargaUtil };
 }
 

@@ -56,7 +56,8 @@ packages/sunat/src/
   valor-referencial.ts     NUEVO: cálculo puro de VR 01/02/03 y base de detracción
 packages/db/
   src/schema.ts            valor_referencial_ruta (tabla); vehiculo.configuracion_vehicular, vehiculo.carga_util_tm;
-                           factura: vr_servicio, vr_carga_efectiva, vr_carga_util, detalle_viaje; empresa: sunat_pausa*, factura_automatica
+                           factura: vr_servicio, vr_carga_efectiva, vr_carga_util, detalle_viaje
+                           (pausa, primera emisión real y factura automática van en la tabla `ajuste`)
   drizzle/0013_sunat_real.sql
 packages/core/src/
   facturas/preparar.ts     calcula VR y detracción sobre el mayor; error de negocio claro si falta el VR de la ruta o los datos del vehículo
@@ -152,7 +153,7 @@ Salidas, en céntimos y redondeadas al céntimo:
 - un 401 persiste después de renovar el token;
 - un fault SOAP trae un código de autenticación (0102 usuario o clave incorrectos, 0111 sin perfil, 0103/0104/0105/0106 problemas de usuario). La lista exacta se fija en el plan desde `CodeErrors` / las reglas oficiales.
 
-**Pausa (`core/sunat/pausa.ts`).** Se guarda en `empresa`: `sunat_pausa_desde`, `sunat_pausa_motivo`. Al recibir `SunatCredencialesError`:
+**Pausa (`core/sunat/pausa.ts`).** Se guarda en `ajuste` con la clave `sunat_pausa` (`{ desde, motivo }`). Esa clave **no se sincroniza**: las claves SUNAT son de cada dispositivo, y su pausa también. Al recibir `SunatCredencialesError`:
 
 - **El documento en curso:** vuelve a su estado anterior (pendiente) sin sumar intento.
 - **Al dueño:** se le avisa una sola vez por Telegram y con un aviso fijo en la web: "SUNAT en pausa: {motivo}. Revisa tus claves en Ajustes → Este dispositivo".
@@ -170,14 +171,15 @@ Salidas, en céntimos y redondeadas al céntimo:
 | Código | Tratamiento |
 |---|---|
 | 2000–3999 | Rechazo (igual que hoy) |
-| 1033 y equivalentes de "ya registrado" | `getStatusCdr` en `billConsultService` → se aplica el CDR recuperado como respuesta normal |
-| Autenticación (§6.1) | `SunatCredencialesError` → pausa |
-| 0100–0199 de servicio no disponible (0109, 0130, etc.) | `SunatNoDisponibleError` → reintento normal |
+| 1032, 1033 ("ya informado" / "registrado previamente") | `getStatusCdr` en `billConsultService` (solo producción) → se aplica el CDR recuperado; si SUNAT no lo devuelve, rechazo con el código original |
+| Otros 1000–1999 y 0150–0199 (contenido, nombre o ZIP inválido) | Rechazo: reintentar no lo arregla |
+| 0101–0106, 0110–0113 (autenticación, perfil, usuario secundario) | `SunatCredencialesError` → pausa |
+| 0109, 0130–0149, 0200–0299 (servicio no disponible / error interno) | `SunatNoDisponibleError` → reintento normal |
 | Otros | Error genérico → reintento normal (igual que hoy) |
 
 ### 6.3 "En proceso"
 
-- **Facturas:** una respuesta `en_proceso` deja de marcarse como rechazada. Queda `pendiente_envio` con estado de consulta, y el fondo la resuelve con `getStatusCdr` en vez de reenviar.
+- **Facturas:** una respuesta `en_proceso` deja de marcarse como rechazada. Queda `pendiente_envio` y se reintenta; si al reintentar SUNAT dice "ya registrado", se recupera el CDR (§6.2).
 - **Guías:** el ticket acepta `"98"` y `"0098"` (en proceso), `"0"` y `"0001"` (aceptado) y `"99"` (rechazado, con CDR o `error.numError`).
 
 ## 7. Parte 3 — "Pon tus claves y funciona"
@@ -205,11 +207,11 @@ Las pruebas 2 y 3 se hacen con los valores **escritos en el formulario**, antes 
 
 ### 7.3 Primera emisión real
 
-Mientras no exista ninguna guía o factura aceptada en modo real, el bot y la web piden una confirmación extra antes de enviar: "Esta será tu primera guía REAL ante SUNAT. ¿Enviar?". Después de la primera aceptada, desaparece.
+Mientras este dispositivo no haya tenido aceptada ninguna guía (o factura) en modo real, la confirmación que ya existe antes de emitir (botón ✅ Emitir del bot) muestra un aviso destacado: "⚠️ Esta será tu PRIMERA guía REAL ante SUNAT". Se guarda en el ajuste local `sunat_primera_real` (`{ guia, factura }`), que no se sincroniza. Después de la primera aceptada, el aviso desaparece.
 
 ## 8. Parte 4 — Factura automática (opcional)
 
-- Columna `empresa.factura_automatica` (boolean, por defecto `false`), con un interruptor en Ajustes.
+- Ajuste `factura_automatica` (`{ activa: boolean }`, por defecto `false`), que **sí se sincroniza** (se agrega al filtro de `ajuste` en `sincro/registro.ts`), con un interruptor en Ajustes.
 - Al aceptarse una guía, la factura se prepara y se emite sola si se cumple todo esto:
   - el interruptor está encendido;
   - la guía tiene viaje con `flete` pactado;

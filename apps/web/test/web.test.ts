@@ -1,4 +1,20 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+const prueba = vi.hoisted(() => ({ simularTodoOk: false }));
+vi.mock("@sunatapp/core", async (importOriginal) => {
+  const real = await importOriginal<typeof import("@sunatapp/core")>();
+  return {
+    ...real,
+    probarConexionSunat: async (ctx: Parameters<typeof real.probarConexionSunat>[0], datos: Parameters<typeof real.probarConexionSunat>[1], o?: Parameters<typeof real.probarConexionSunat>[2]) => {
+      if (!prueba.simularTodoOk) return real.probarConexionSunat(ctx, datos, o);
+      const ok = { ok: true, mensaje: "ok" };
+      return { certificado: ok, claveSol: ok, credencialesGre: ok, todoOk: true, huella: real.huellaPrueba(datos) };
+    },
+  };
+});
 import {
   buscarUnidad, listarValoresReferenciales, crearCategoria, crearEnlaceWeb, guardarUsuario, registrarGasto, registrarViajeFlota, listarEventos, listarUsuarios, listarViajesFlota, obtenerEmpresa, partesDeUnidad, instalarParte, listarTiposParte,
   type Contexto,
@@ -407,13 +423,44 @@ describe("web", () => {
       expect(await r.text()).toContain("Sube tu certificado digital");
     });
 
+    it("probar guarda lo escrito sin tocar el modo y luego Real se guarda sin repetir secretos", async () => {
+      const dir = mkdtempSync(join(tmpdir(), "sunat-"));
+      const guardado: Record<string, string> = { SUNAT_MODO: "simulado" };
+      const sv = {
+        ...servicios,
+        estado: () => ({ ...servicios.estado(), sunat: { modo: guardado.SUNAT_MODO as "simulado" | "beta" | "real" } }),
+        ajustes: () => ({ ...guardado }),
+        guardarAjustes: async (cambios: Record<string, string | null>, cert?: Buffer) => {
+          if (cert) { const ruta = join(dir, "c.pfx"); writeFileSync(ruta, cert); cambios = { ...cambios, SUNAT_CERT_PATH: ruta }; }
+          for (const [k, v] of Object.entries(cambios)) { if (v === null) delete guardado[k]; else guardado[k] = v; }
+        },
+      };
+      app = crearWeb(ctx, { servicios: sv });
+      const cookie = await entrar();
+      prueba.simularTodoOk = true;
+      try {
+        const fd = new FormData();
+        for (const [k, v] of Object.entries({ ...claves, SUNAT_MODO: "real" })) fd.set(k, v);
+        fd.set("certificado", new File([Buffer.from("pfx-de-prueba")], "c.pfx"));
+        const r = await app.request("/ajustes/dispositivo/probar", { method: "POST", headers: { cookie, origin: ORIGEN }, body: fd });
+        expect(r.status).toBe(200);
+        expect(guardado.SUNAT_MODO).toBe("simulado");
+        expect(guardado.SUNAT_SOL_CLAVE).toBe("x");
+        const r2 = await postForm(cookie, "/ajustes/dispositivo", { SUNAT_MODO: "real", SUNAT_SOL_USUARIO: "MODDATOS", SUNAT_GRE_CLIENT_ID: "id" });
+        expect(decodeURIComponent(aviso(r2).replace(/\+/g, " "))).toContain("Ajustes guardados");
+        expect(guardado.SUNAT_MODO).toBe("real");
+      } finally {
+        prueba.simularTodoOk = false;
+      }
+    });
+
     it("el modo Real se bloquea sin una prueba previa con esos datos", async () => {
       const cookie = await entrar();
       const fd = new FormData();
       for (const [k, v] of Object.entries({ ...claves, SUNAT_MODO: "real" })) fd.set(k, v);
       fd.set("certificado", new File([Buffer.from("no-es-pfx")], "c.pfx"));
       const r = await app.request("/ajustes/dispositivo", { method: "POST", headers: { cookie, origin: ORIGEN }, body: fd });
-      expect(decodeURIComponent(aviso(r).replace(/\+/g, " "))).toContain("Prueba la conexión");
+      expect(decodeURIComponent(aviso(r).replace(/\+/g, " "))).toContain("toca PROBAR CONEXIÓN");
     });
 
     it("guarda y borra un valor referencial por ruta", async () => {

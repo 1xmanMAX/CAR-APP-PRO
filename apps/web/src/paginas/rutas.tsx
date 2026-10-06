@@ -94,7 +94,7 @@ async function vista(c: C, d: Deps) {
               <label class="campo" style="flex:1"><span>S/ por TM *</span><input name="vrPorTm" required inputmode="decimal" placeholder="85.50" /></label>
               <label class="campo" style="flex:1"><span>Fuente (opcional)</span><input name="fuente" placeholder="Anexo MTC" /></label>
             </div>
-            <button class="btn primario" type="submit">GUARDAR VALOR REFERENCIAL</button>
+            <button class="btn primario" type="submit" style="min-height:44px">GUARDAR VALOR REFERENCIAL</button>
           </form>
         ) : null}
       </Panel>

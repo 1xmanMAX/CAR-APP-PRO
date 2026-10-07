@@ -63,6 +63,14 @@ describe("costos fijos recurrentes", () => {
     expect(cuotas[0]).toMatchObject({ fecha: "2026-09-10", vehiculoId: 1, periodo: "2026-09" });
   });
 
+  it("pagar la cuota con su número: un segundo envío de la misma no paga la siguiente", async () => {
+    const p = await crearPrestamo(ctx, { entidad: "BCP", monto: 1200000, tasaAnual: 0, cuotas: 12, fechaInicio: "2026-08-10" });
+    expect(await pagarCuota(ctx, p, undefined, undefined, 1)).toMatchObject({ numero: 1 });
+    await expect(pagarCuota(ctx, p, undefined, undefined, 1)).rejects.toThrow("Esa cuota ya se pagó");
+    await expect(pagarCuota(ctx, p, undefined, undefined, 5)).rejects.toThrow("Primero va la cuota 2");
+    expect(await pagarCuota(ctx, p, undefined, undefined, 2)).toMatchObject({ numero: 2 });
+  });
+
   it("flujo sin doble conteo: la cuota pagada sale una sola vez en caja y en movimientos", async () => {
     const p = await crearPrestamo(ctx, { entidad: "BCP", monto: 1200000, tasaAnual: 0, cuotas: 12, fechaInicio: "2026-08-10" });
     await generarFijosDelMes(ctx, "2026-09");

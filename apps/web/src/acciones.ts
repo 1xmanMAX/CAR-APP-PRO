@@ -151,9 +151,9 @@ export async function guardarPrestamo(d: Deps, usuarioId: number, f: Campos): Pr
   return "Préstamo creado con su cronograma de cuotas";
 }
 
-/** Paga la próxima cuota (antes: POST /finanzas/prestamo/:id/pagar). */
-export async function pagarCuotaDe(d: Deps, usuarioId: number, prestamoId: number): Promise<string> {
-  const r = await pagarCuota(d.ctx, prestamoId, undefined, usuarioId);
+/** Paga la próxima cuota (antes: POST /finanzas/prestamo/:id/pagar). `numeroCuota`: la que se veía; un doble envío no paga la siguiente. */
+export async function pagarCuotaDe(d: Deps, usuarioId: number, prestamoId: number, numeroCuota?: string): Promise<string> {
+  const r = await pagarCuota(d.ctx, prestamoId, undefined, usuarioId, enteroONull(numeroCuota) ?? undefined);
   return `Cuota ${r.numero} pagada (${soles2(r.monto)})`;
 }
 

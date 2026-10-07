@@ -519,6 +519,7 @@ async function parteAnotarPrestamo(_c: C, d: Deps, q: Q): Promise<PartesForm> {
           </div>
         </fieldset>
         <input type="hidden" name="prestamoId" value={sel.id} />
+        <input type="hidden" name="numeroCuota" value={sel.pagadas + 1} />
       </>
     ),
     solo: { texto: `Se paga hoy la cuota de ${soles2(sel.proxima!.monto)} de ${sel.entidad}` },
@@ -737,7 +738,7 @@ async function guardarAnotacion(d: Deps, u: UsuarioWeb, tipo: TipoAnotar, f: Cam
       if (f.modo === "reinversion") return guardarReinversion(d, u.id, f);
       const prestamoId = num(f.prestamoId);
       if (prestamoId === null) throw new ErrorNegocio("Elige la cuota que pagaste");
-      return pagarCuotaDe(d, u.id, prestamoId);
+      return pagarCuotaDe(d, u.id, prestamoId, f.numeroCuota);
     }
   }
 }

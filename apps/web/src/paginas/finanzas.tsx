@@ -3,7 +3,7 @@ import {
   borrarGasto, deudaPrestamos, flujoCaja, hoy, listarMovimientos, listarPrestamos, listarReinversiones, obtenerGasto, puedeEditar, puedeVer, rangoMes,
   reinvertidoEnAnio, resumenFinanciero, type Movimiento,
 } from "@sunatapp/core";
-import { accion, pagina, servirDeAlmacen, type App, type C, type Deps } from "../base";
+import { accion, formulario, pagina, servirDeAlmacen, type App, type C, type Deps } from "../base";
 import { pagarCuotaDe } from "../acciones";
 import { redirigir } from "../redirecciones";
 import { Cabecera, Cifra, deCada100, fechaDia, fechaMedia, GrafScroll, mesLargo, Origen, Panel, SelectMes, soles, soles2, Vacio } from "../ui";
@@ -126,6 +126,7 @@ async function vistaPrestamos(c: C, d: Deps) {
                 : <span>Próxima {p.proxima ? `${fechaMedia(p.proxima.vencimiento).toLowerCase()} · ${soles2(p.proxima.monto)}` : "—"}</span>}</div>
             {edita && p.proxima ? (
               <form method="post" action={`/finanzas/prestamo/${p.id}/pagar`} data-confirmar={`¿Registrar el pago de la cuota de ${soles2(p.proxima.monto)}?`}>
+                <input type="hidden" name="numeroCuota" value={p.pagadas + 1} />
                 <button class="btn chico" type="submit">Pagar cuota</button>
               </form>
             ) : null}
@@ -150,7 +151,10 @@ export function rutasFinanzas(app: App, d: Deps): void {
     await borrarGasto(d.ctx, Number(c.req.param("id")), c.get("usuario").id);
     return "Gasto borrado";
   }));
-  app.post("/finanzas/prestamo/:id/pagar", async (c) => accion(c, "/numeros/prestamos", () => pagarCuotaDe(d, c.get("usuario").id, Number(c.req.param("id")))));
+  app.post("/finanzas/prestamo/:id/pagar", async (c) => {
+    const f = await formulario(c);
+    return accion(c, "/numeros/prestamos", () => pagarCuotaDe(d, c.get("usuario").id, Number(c.req.param("id")), f.numeroCuota));
+  });
   app.get("/archivo/gasto/:id{[0-9]+}", async (c) => {
     // La foto de un gasto es de Viajes o de Números: el taller no la abre aunque adivine el número.
     const rol = c.get("usuario").rol;

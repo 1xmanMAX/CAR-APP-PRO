@@ -470,7 +470,14 @@ describe("web", () => {
         const [p] = await listarPrestamos(ctx);
         const html = await (await app.request("/anotar?tipo=prestamo", { headers: { cookie } })).text();
         expect(html).toContain("Caja Arequipa");
-        expect(aviso(await enviar(cookie, { tipo: "prestamo", volver: "/", prestamoId: String(p!.id) }))).toContain("ok=Cuota 1 pagada");
+        expect(html).toContain(`<input type="hidden" name="numeroCuota" value="1"`);
+        // Pagar la cuota manda su número: el doble envío no paga la cuota 2.
+        expect(aviso(await enviar(cookie, { tipo: "prestamo", volver: "/", prestamoId: String(p!.id), numeroCuota: "1" }))).toContain("ok=Cuota 1 pagada");
+        expect(aviso(await enviar(cookie, { tipo: "prestamo", volver: "/", prestamoId: String(p!.id), numeroCuota: "1" }))).toContain("error=Esa cuota ya se pagó");
+        expect((await listarPrestamos(ctx))[0]!.pagadas).toBe(1);
+        const numeros = await (await app.request("/numeros/prestamos", { headers: { cookie } })).text();
+        expect(numeros).toContain(`<input type="hidden" name="numeroCuota" value="2"`);
+        expect(aviso(await post(cookie, `/finanzas/prestamo/${p!.id}/pagar`, { numeroCuota: "1" }))).toContain("error=Esa cuota ya se pagó");
         expect(aviso(await enviar(cookie, { tipo: "prestamo", modo: "reinversion", volver: "/", concepto: "GPS", monto: "900" }))).toContain("ok=Reinversión guardada");
       });
 

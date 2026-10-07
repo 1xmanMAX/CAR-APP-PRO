@@ -225,11 +225,14 @@ export async function crearPrestamo(
 }
 
 /** Paga la próxima cuota pendiente del préstamo. */
-export async function pagarCuota(ctx: Contexto, prestamoId: number, fecha?: string, usuarioId?: number): Promise<{ numero: number; monto: number }> {
+/** `numero`: la cuota que se ve en pantalla; si ya no es la próxima (doble envío), no se paga otra. */
+export async function pagarCuota(ctx: Contexto, prestamoId: number, fecha?: string, usuarioId?: number, numero?: number): Promise<{ numero: number; monto: number }> {
   return ctx.db.transaction(async (tx) => {
     const [c] = await tx.select().from(cuotaPrestamo).where(and(eq(cuotaPrestamo.prestamoId, prestamoId), isNull(cuotaPrestamo.pagadaEn)))
       .orderBy(cuotaPrestamo.numero).limit(1).for("update");
+    if (numero !== undefined && (!c || c.numero > numero)) throw new ErrorNegocio("Esa cuota ya se pagó");
     if (!c) throw new ErrorNegocio("El préstamo no tiene cuotas pendientes");
+    if (numero !== undefined && c.numero !== numero) throw new ErrorNegocio(`Primero va la cuota ${c.numero}`);
     await tx.update(cuotaPrestamo).set({ pagadaEn: fecha ?? hoy(ctx) }).where(eq(cuotaPrestamo.id, c.id));
     const [pend] = await tx.select({ n: sql<number>`count(*)` }).from(cuotaPrestamo).where(and(eq(cuotaPrestamo.prestamoId, prestamoId), isNull(cuotaPrestamo.pagadaEn)));
     if (Number(pend?.n ?? 0) === 0) await tx.update(prestamo).set({ activo: false }).where(eq(prestamo.id, prestamoId));

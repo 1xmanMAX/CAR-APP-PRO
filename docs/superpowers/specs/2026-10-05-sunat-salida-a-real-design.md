@@ -127,7 +127,7 @@ Salidas, en céntimos y redondeadas al céntimo:
 - **Base de detracción:** `max(total de la factura, VR 01)`.
 - **Detracción:** `round(4 % × base)`, redondeada a soles enteros como hoy.
 
-**Fórmula de VR 01 — verificación obligatoria.** El D.S. 010-2006-MTC define cómo se combinan carga efectiva y carga útil nominal para el valor referencial del servicio. Por ejemplo, puede haber un mínimo de carga efectiva respecto de la útil. La investigación no pudo leer el texto vigente. La **primera tarea del plan** es descargar el D.S. 010-2006-MTC y sus modificatorias y fijar la fórmula de VR 01 con un caso de prueba numérico tomado de la norma. Mientras no esté verificada, la función usa `VR 01 = max(VR 02, 0.9 × VR 03)` y el modo Real muestra "fórmula de valor referencial sin verificar". Ese 0.9 es provisional y explícito en el código, en una sola constante.
+**Fórmula de VR 01 — verificada (2026-10-05).** La norma vigente es el **D.S. 020-2021-MTC** (deroga el 010-2006 y el 033-2006). Su art. 3: el valor referencial del servicio es el valor por TM × la carga efectiva, y "en ningún caso puede ser inferior al 70 % de la capacidad de carga útil nominal". La app usa `VR 01 = max(VR 02, 0.7 × VR 03)` (constante `FACTOR_CARGA_UTIL_MINIMA = 0.7`, `FORMULA_VR_VERIFICADA = true`), en céntimos enteros. Detalle y caso numérico: `docs/superpowers/notas/2026-10-05-valor-referencial-mtc.md`. **No implementado:** el factor de retorno al vacío 1.4 (art. 4: cisternas, tolvas, contenedores, carga peligrosa… en rutas > 200 km virtuales); la app siempre declara `ReturnabilityIndicator=false`.
 
 ### 5.3 Datos nuevos (una sola vez)
 

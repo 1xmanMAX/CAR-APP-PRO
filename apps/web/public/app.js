@@ -55,20 +55,22 @@
     window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js").catch(() => {}));
   }
   let aviso = null;
-  const boton = document.getElementById("instalar-app");
+  // Uno en la barra lateral (PC) y otro en Ajustes (celular): se muestran solo si el navegador ofrece instalar.
+  const botones = [...document.querySelectorAll("[data-instalar]")];
+  const mostrar = (si) => { for (const b of botones) b.hidden = !si; };
   window.addEventListener("beforeinstallprompt", (e) => {
     e.preventDefault();
     aviso = e;
-    if (boton) boton.hidden = false;
+    mostrar(true);
   });
-  if (boton) boton.addEventListener("click", async () => {
+  for (const b of botones) b.addEventListener("click", async () => {
     if (!aviso) return;
     aviso.prompt();
     await aviso.userChoice.catch(() => {});
     aviso = null;
-    boton.hidden = true;
+    mostrar(false);
   });
-  window.addEventListener("appinstalled", () => { if (boton) boton.hidden = true; });
+  window.addEventListener("appinstalled", () => mostrar(false));
 })();
 
 // Dentro de la app de Android: sin botón de instalar y con arreglos para WebViews viejos.

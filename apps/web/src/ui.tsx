@@ -199,6 +199,7 @@ export const Layout: FC<PropsWithChildren<PropsLayout>> = (p) => {
               {veAjustes(p.usuario.rol) ? (
                 <a href="/ajustes" class={p.lugar === "ajustes" ? "activo" : undefined} aria-current={p.lugar === "ajustes" ? "page" : undefined}><Icono n="ajustes" />Ajustes</a>
               ) : null}
+              <button type="button" class="btn chico instalar" data-instalar="" hidden>Instalar app</button>
               <span class="quien">{p.usuario.nombre}</span>
               <form method="post" action="/salir"><button class="btn chico" type="submit">Salir</button></form>
             </div>

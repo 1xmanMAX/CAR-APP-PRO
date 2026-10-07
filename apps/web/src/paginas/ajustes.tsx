@@ -221,7 +221,7 @@ async function hub(c: C, d: Deps) {
         <div class="fila-sep">
           <span>Entraste como <b>{u.nombre}</b> · {NOMBRE_ROL[u.rol]}</span>
           <div class="acciones">
-            <button type="button" class="btn chico primario" id="instalar-app" hidden>Instalar app</button>
+            <button type="button" class="btn chico primario" data-instalar="" hidden>Instalar app</button>
             <form method="post" action="/salir"><button class="btn" type="submit">Salir</button></form>
           </div>
         </div>

@@ -485,6 +485,16 @@ describe("web", () => {
       expect(rutas).toMatch(/<summary>[^<]*<span[^>]*>Poner cuánto debería costar \(opcional\)/);
     });
 
+    it("«Instalar app» está en la barra lateral de la PC (escondido hasta que el navegador lo ofrezca)", async () => {
+      const cookie = await entrar();
+      const html = await (await app.request("/viajes", { headers: { cookie } })).text();
+      const lateral = /<nav class="lateral"[^]*?<\/nav>/.exec(html)![0];
+      expect(lateral).toMatch(/<button type="button" class="btn chico instalar"[^>]*data-instalar=""[^>]*hidden=""[^>]*>Instalar app<\/button>/);
+      const hub = await (await app.request("/ajustes", { headers: { cookie } })).text();
+      expect(hub.match(/data-instalar=""/g)).toHaveLength(2);
+      expect(hub).not.toContain('id="instalar-app"');
+    });
+
     it("ajustes: hub con tarjetas según el rol", async () => {
       const cookie = await entrar();
       const html = await (await app.request("/ajustes", { headers: { cookie } })).text();

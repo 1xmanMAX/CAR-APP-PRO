@@ -299,6 +299,7 @@ body.sin-inferior .contenido { padding-bottom: 24px; }
   .lateral > a.activo:not(.marca):not(.btn), .lateral .abajo > a.activo,
   .lateral > a.activo:not(.marca):not(.btn):hover, .lateral .abajo > a.activo:hover { background: var(--accent-soft); color: var(--accent-hover); font-weight: 600; }
   .lateral .abajo { margin-top: auto; display: flex; flex-direction: column; gap: 6px; }
+  .lateral .abajo .instalar { align-self: flex-start; }
   .lateral .quien { font-size: 12px; color: var(--muted); padding: 0 12px; }
   .inferior { display: none; }
   .contenido { padding: 24px 28px 32px; }

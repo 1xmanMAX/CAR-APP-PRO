@@ -53,3 +53,4 @@ export * from "./rentabilidad/por-viaje-mes";
 export * from "./sincro/index";
 export * from "./sunat/probar";
 export * from "./facturas/automatica";
+export * from "./sunat/aplicar";

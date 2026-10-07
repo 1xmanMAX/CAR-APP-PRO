@@ -1,7 +1,7 @@
-import { and, contraparte, empresa, eq, factura, facturaGuia, guiaTransportista, inArray, isNull, lt, lte, or, siguienteCorrelativo } from "@sunatapp/db";
+import { and, contraparte, empresa, eq, factura, facturaGuia, guiaTransportista, inArray, isNull, lt, lte, notInArray, or, siguienteCorrelativo } from "@sunatapp/db";
 import { generarPdfFactura } from "@sunatapp/pdf";
 import {
-  construirXmlFactura, extraerDigest, firmarXml, montoEnLetras, nombreArchivo, SunatCredencialesError, SunatNoDisponibleError, validarXsd,
+  construirXmlFactura, extraerDigest, firmarXml, montoEnLetras, nombreArchivo, SunatCredencialesError, SunatNoDisponibleError, SunatYaRegistradoError, validarXsd,
   type RespuestaSunat, type TipoDocIdentidadSunat, type TransporteFactura,
 } from "@sunatapp/sunat";
 import { fechaHoraLima, sumarDias } from "../dominio/fechas";
@@ -11,7 +11,9 @@ import type { ResultadoEmision } from "../guias/emitir";
 import { MAX_INTENTOS, REINTENTO_MS } from "../guias/emitir";
 import { registrarAuditoria } from "../infra/auditoria";
 import type { Contexto } from "../infra/contexto";
-import { leerPausaSunat, marcarPrimeraRealHecha, MENSAJE_EN_PAUSA, pausarSunat } from "../sunat/pausa";
+import {
+  anotarRespuestaRaraSunat, certificadoVencido, leerPausaSunat, limpiarRespuestasRarasSunat, marcarPrimeraRealHecha, MENSAJE_EN_PAUSA, pausarSunat,
+} from "../sunat/pausa";
 import { transporteDeGuia } from "./transporte";
 
 // Mensajes y umbrales de reintento espejados de packages/core/src/guias/emitir.ts (Tarea 11):
@@ -19,6 +21,14 @@ import { transporteDeGuia } from "./transporte";
 // así que no hay estado "enviada" intermedio ni sondeo — solo "pendiente_envio" mientras se
 // reintenta el envío en sí.
 const MENSAJE_AGOTADO = "No se pudo enviar a SUNAT durante 24 horas. Revisa la conexión y vuelve a emitir.";
+/**
+ * SUNAT dijo 1032/1033 (ese número ya lo tiene) y no se pudo recuperar el CDR: la factura queda
+ * pendiente con ese código y el fondo NO la reenvía; el dueño la verifica en SOL.
+ */
+export const MENSAJE_VERIFICAR_EN_SOL = "SUNAT dice que ya tiene esta factura: verifícala en SOL antes de volver a emitir";
+const CODIGOS_VERIFICAR = ["1032", "1033"];
+/** Códigos de "rechazada" que nunca llegaron a SUNAT: al reemitir se conserva el número. */
+const SIN_LLEGAR_A_SUNAT = ["XSD", "SIN_ENVIO"];
 
 type CambiosFactura = Partial<typeof factura.$inferInsert>;
 
@@ -204,6 +214,8 @@ async function transporteGuardado(ctx: Contexto, facturaId: number, f: typeof fa
 }
 
 export async function emitirFactura(ctx: Contexto, facturaId: number): Promise<ResultadoEmision> {
+  // Con el certificado real vencido no se firma ni se reserva número: SUNAT queda en pausa.
+  if (await certificadoVencido(ctx, !ctx.simulado || !ctx.facturaSimulada)) return resultadoFactura(ctx, facturaId);
   const reserva = await ctx.db.transaction(async (tx) => {
     const [f] = await tx.select().from(factura).where(eq(factura.id, facturaId)).for("update");
     if (!f) throw new ErrorNegocio(`La factura ${facturaId} no existe`);
@@ -220,7 +232,10 @@ export async function emitirFactura(ctx: Contexto, facturaId: number): Promise<R
     // fecha/hora/vencimiento e intentos: de lo contrario, una factura que agotó MAX_INTENTOS
     // (SIN_ENVIO) o que fue rechazada por SUNAT quedaría con fechas viejas al reemitirla.
     const fechaNueva = numeroNuevo || f.estadoSunat === "rechazada";
-    const numero = f.numero ?? (await siguienteCorrelativo(tx, "01", f.serie));
+    // Un número que SUNAT rechazó (con su código) no se vuelve a firmar con otra fecha: se toma uno nuevo.
+    // Si el "rechazo" fue local (XSD) o nunca llegó (SIN_ENVIO), el número se conserva.
+    const rechazadaPorSunat = f.estadoSunat === "rechazada" && f.codigoRespuesta !== null && !SIN_LLEGAR_A_SUNAT.includes(f.codigoRespuesta);
+    const numero = f.numero !== null && !rechazadaPorSunat ? f.numero : await siguienteCorrelativo(tx, "01", f.serie);
     const cambios: CambiosFactura = {
       numero,
       estadoSunat: "pendiente_envio",
@@ -237,6 +252,7 @@ export async function emitirFactura(ctx: Contexto, facturaId: number): Promise<R
       // preparación de este intento falla antes de firmar/guardar uno nuevo, el siguiente
       // reintento no debe reenviar el XML rechazado que SUNAT ya conoce.
       cambios.rutaXml = null;
+      cambios.codigoRespuesta = null;
     }
     await tx.update(factura).set(cambios).where(eq(factura.id, facturaId));
     return {
@@ -320,14 +336,22 @@ export async function emitirFactura(ctx: Contexto, facturaId: number): Promise<R
       await dejarEnPausa(ctx, facturaId, error.message, { rutaXml });
       return resultadoFactura(ctx, facturaId);
     }
+    if (error instanceof SunatYaRegistradoError) {
+      await limpiarRespuestasRarasSunat(ctx);
+      await actualizar(ctx, facturaId, { rutaXml, proximoIntentoEn: null, codigoRespuesta: error.codigo, mensajeRespuesta: MENSAJE_VERIFICAR_EN_SOL });
+      await registrarAuditoria(ctx.db, { accion: "factura_verificar_en_sol", entidad: "factura", entidadId: facturaId, detalle: { codigo: error.codigo } });
+      return resultadoFactura(ctx, facturaId);
+    }
     // Cualquier error al enviar (caída de SUNAT o no) se reintenta igual que en guías: solo
     // una respuesta real de SUNAT (CDR) o una falla de validación XSD rechazan la factura.
     const mensaje = error instanceof SunatNoDisponibleError
       ? "SUNAT no disponible; se reintentará automáticamente"
       : `Error al comunicarse con SUNAT: ${(error as Error).message}`;
     await manejarFalloEnvio(ctx, facturaId, reserva.intentosPrevios, mensaje, { rutaXml });
+    if (!(error instanceof SunatNoDisponibleError)) await anotarRespuestaRaraSunat(ctx);
     return resultadoFactura(ctx, facturaId);
   }
+  await limpiarRespuestasRarasSunat(ctx);
 
   // El envío llegó a SUNAT: se persiste su resultado de inmediato (aplicarRespuestaSunat, en un
   // único update junto con rutaXml/intentos), antes de cualquier paso adicional — desde aquí la
@@ -348,6 +372,8 @@ export async function procesarPendientesFacturas(ctx: Contexto): Promise<Resulta
       and(
         eq(factura.estadoSunat, "pendiente_envio"),
         lt(factura.intentos, MAX_INTENTOS),
+        // Las que SUNAT ya tiene (1032/1033 sin CDR) esperan a que el dueño las verifique.
+        or(isNull(factura.codigoRespuesta), notInArray(factura.codigoRespuesta, CODIGOS_VERIFICAR)),
         lte(factura.actualizadoEn, new Date(ahora.getTime() - 60_000)),
         or(isNull(factura.proximoIntentoEn), lte(factura.proximoIntentoEn, ahora)),
       ),

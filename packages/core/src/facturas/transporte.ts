@@ -1,4 +1,4 @@
-import { and, eq, guiaTransportista, valorReferencialRuta, vehiculo, type Ejecutor } from "@sunatapp/db";
+import { and, eq, guiaTransportista, inArray, valorReferencialRuta, vehiculo, type Ejecutor } from "@sunatapp/db";
 import { calcularValoresReferenciales, toneladas, type TransporteFactura, type ValoresReferenciales } from "@sunatapp/sunat";
 import { ErrorNegocio } from "../errores";
 import type { Contexto } from "../infra/contexto";
@@ -80,4 +80,25 @@ export async function transporteDeGuia(
       ...(v.configuracionVehicular ? { vehiculo: { configuracion: v.configuracionVehicular, cargaUtilTm, cargaEfectivaTm } } : {}),
     },
   };
+}
+
+/**
+ * Art. 4 del D.S. 020-2021-MTC: para ciertos vehículos (cisternas, entre otros) en rutas largas el
+ * valor referencial se multiplica por 1.4 (retorno al vacío). La app no lo calcula: solo avisa
+ * cuando la unidad de la guía jala una cisterna, el único de esos tipos que el modelo distingue.
+ */
+export const AVISO_RETORNO_VACIO = "Para cisternas en rutas largas la norma multiplica el valor referencial por 1.4: revisa el monto antes de emitir";
+
+/** Ids de las guías [guiaIds] cuya unidad jala una cisterna. */
+export async function guiasConAvisoRetornoVacio(ctx: Contexto, guiaIds: number[]): Promise<Set<number>> {
+  if (!guiaIds.length) return new Set();
+  const filas = await ctx.db.select({ id: guiaTransportista.id })
+    .from(guiaTransportista)
+    .innerJoin(vehiculo, eq(vehiculo.id, guiaTransportista.vehiculoId))
+    .where(and(inArray(guiaTransportista.id, guiaIds), eq(vehiculo.semirremolque, "cisterna")));
+  return new Set(filas.map((f) => f.id));
+}
+
+export async function avisoRetornoVacio(ctx: Contexto, guiaId: number): Promise<string | null> {
+  return (await guiasConAvisoRetornoVacio(ctx, [guiaId])).has(guiaId) ? AVISO_RETORNO_VACIO : null;
 }

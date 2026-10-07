@@ -45,3 +45,20 @@ describe("probarConexionSunat", () => {
     expect(r.certificado).toMatchObject({ ok: false, mensaje: expect.stringContaining("Sube") });
   });
 });
+
+describe("probarConexionSunat — no multiplica intentos fallidos", () => {
+  it("si SUNAT rechaza usuario/clave SOL no prueba las credenciales de guías (otro login más)", async () => {
+    const { ctx, cerrar } = await crearContextoPrueba();
+    cerrables.push(cerrar);
+    let oauth = 0;
+    const fetchMalo = (async (url: string | URL) => {
+      if (String(url).includes("oauth2")) { oauth++; return token(); }
+      return new Response("", { status: 401 });
+    }) as typeof fetch;
+    const pfx = generarCertificadoPrueba({ ruc: "20606433094", razonSocial: "TRANSPORTES DEMO SAC", password: "clave123" });
+    const r = await probarConexionSunat(ctx, { pfx, clavePfx: "clave123", usuarioSol: "U", claveSol: "mala", greClientId: "i", greClientSecret: "s" }, { fetch: fetchMalo });
+    expect(r.claveSol).toMatchObject({ ok: false, mensaje: expect.stringContaining("usuario o clave SOL") });
+    expect(r.credencialesGre).toEqual({ ok: false, mensaje: "No se probó: primero corrige usuario/clave SOL" });
+    expect(oauth).toBe(0);
+  });
+});

@@ -44,7 +44,11 @@ export async function probarConexionSunat(ctx: Contexto, d: DatosPrueba, o: { fe
     { ruc: emp.ruc, usuarioSol: d.usuarioSol, claveSol: d.claveSol, greClientId: d.greClientId, greClientSecret: d.greClientSecret, ambienteFactura: "produccion" },
     o.fetch ? { fetch: o.fetch } : {},
   );
-  const claveSol = d.usuarioSol && d.claveSol ? await real.probarClaveSol() : { ok: false, mensaje: "Escribe tu usuario y clave SOL" };
-  const credencialesGre = d.greClientId && d.greClientSecret ? await real.probarCredencialesGre() : { ok: false, mensaje: "Escribe el client_id y el client_secret de guías" };
+  const sol = d.usuarioSol && d.claveSol ? await real.probarClaveSol() : { ok: false, mensaje: "Escribe tu usuario y clave SOL" };
+  const claveSol: PuntoPrueba = { ok: sol.ok, mensaje: sol.mensaje };
+  // Con usuario/clave SOL rechazados, pedir el permiso de guías sería otro login fallido (bloquea el usuario SOL).
+  const credencialesGre = "credenciales" in sol && sol.credenciales
+    ? { ok: false, mensaje: "No se probó: primero corrige usuario/clave SOL" }
+    : d.greClientId && d.greClientSecret ? await real.probarCredencialesGre() : { ok: false, mensaje: "Escribe el client_id y el client_secret de guías" };
   return { certificado, claveSol, credencialesGre, todoOk: certificado.ok && claveSol.ok && credencialesGre.ok, huella };
 }

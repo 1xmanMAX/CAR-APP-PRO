@@ -118,6 +118,17 @@
       if (texto) mensual.querySelector("input").checked = false;
     }
   });
+  // Gasté: al cambiar el camión, un viaje de otro camión se suelta («— sin viaje —»).
+  document.addEventListener("change", (e) => {
+    const sel = e.target;
+    if (!(sel instanceof HTMLSelectElement) || sel.name !== "vehiculoId" || !sel.form) return;
+    const viaje = sel.form.querySelector("select[name=viajeId][data-de-camion]");
+    const op = viaje && viaje.selectedOptions[0];
+    if (op && op.value && op.dataset.camion !== sel.value) {
+      viaje.value = "";
+      viaje.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+  });
   enlazarAsiQueda(document);
   // Si la ventana pasa a tamaño PC con /anotar abierto, «Así queda» empieza a escuchar.
   ancho.addEventListener("change", () => enlazarAsiQueda(document));

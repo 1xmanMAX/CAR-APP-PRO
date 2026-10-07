@@ -98,12 +98,13 @@ const SelectUnidad: FC<{ unidades: Array<{ id: number; codigo: string; placa: st
   </label>
 );
 
-type OpcionViaje = { id: number; texto: string };
-const SelectViaje: FC<{ opciones: OpcionViaje[]; elegido: number | null; requerido?: boolean }> = (p) => (
+/** `camion`: el camión del viaje (al cambiar de camión, el JS suelta un viaje de otro). */
+type OpcionViaje = { id: number; texto: string; camion?: number | null };
+const SelectViaje: FC<{ opciones: OpcionViaje[]; elegido: number | null; requerido?: boolean; deCamion?: boolean }> = (p) => (
   <label class="campo"><span>Viaje</span>
-    <select name="viajeId" required={p.requerido}>
+    <select name="viajeId" required={p.requerido} data-de-camion={p.deCamion ? "" : undefined}>
       {p.requerido ? null : <option value="">— sin viaje —</option>}
-      {p.opciones.map((o) => <option value={o.id} selected={o.id === p.elegido}>{o.texto}</option>)}
+      {p.opciones.map((o) => <option value={o.id} selected={o.id === p.elegido} data-camion={o.camion ?? undefined}>{o.texto}</option>)}
     </select>
   </label>
 );
@@ -123,9 +124,9 @@ const CampoFecha: FC<{ d: Deps }> = (p) => <label class="campo"><span>Fecha</spa
 const ahora = (d: Deps) => fechaHoraLima(d.ctx.reloj()).hora.slice(0, 5);
 const iconoCategoria = (k: string): NombreIcono => (({ combustible: "combustible", peaje: "peaje", viaticos: "comida" }) as Record<string, NombreIcono>)[k] ?? "otro";
 
-function opcionesDeViaje(enRuta: ViajeEnRuta[], actual: { viajeId: number | null; viajeCodigo: string | null }): OpcionViaje[] {
-  const r = enRuta.map((v) => ({ id: v.viajeId, texto: `${v.codigo} · ${v.unidad} · ${v.ruta}` }));
-  if (actual.viajeId !== null && !r.some((o) => o.id === actual.viajeId)) r.unshift({ id: actual.viajeId, texto: actual.viajeCodigo ?? `Viaje ${actual.viajeId}` });
+function opcionesDeViaje(enRuta: ViajeEnRuta[], actual: { viajeId: number | null; viajeCodigo: string | null; vehiculoId: number | null }): OpcionViaje[] {
+  const r: OpcionViaje[] = enRuta.map((v) => ({ id: v.viajeId, texto: `${v.codigo} · ${v.unidad} · ${v.ruta}`, camion: v.vehiculoId }));
+  if (actual.viajeId !== null && !r.some((o) => o.id === actual.viajeId)) r.unshift({ id: actual.viajeId, texto: actual.viajeCodigo ?? `Viaje ${actual.viajeId}`, camion: actual.vehiculoId });
   return r;
 }
 
@@ -220,6 +221,9 @@ async function parteGaste(c: C, d: Deps, q: Q): Promise<PartesForm> {
           <label class="campo otro-cual"><span>¿Cuál?</span><select name="categoriaOtra">{categorias.map((k) => <option value={k.clave} selected={k.clave === q.categoria}>{k.nombre}</option>)}</select></label>
         </fieldset>
         {elegirViaje ? <ViajesRadios viajes={enRuta} /> : null}
+        {/* Lo que vino puesto: si se cambia el camión y el viaje quedó como venía, el servidor suelta el viaje. */}
+        <input type="hidden" name="camionInicial" value={g.vehiculoId ?? ""} />
+        <input type="hidden" name="viajeInicial" value={elegirViaje ? "" : (g.viajeId ?? "")} />
         <FotoOpcional />
       </>
     ),
@@ -228,7 +232,7 @@ async function parteGaste(c: C, d: Deps, q: Q): Promise<PartesForm> {
       cambiar: (
         <>
           <SelectUnidad unidades={unidades} elegido={g.vehiculoId} vacio="— de la empresa —" />
-          {elegirViaje ? null : <SelectViaje opciones={opcionesDeViaje(enRuta, g)} elegido={g.viajeId} />}
+          {elegirViaje ? null : <SelectViaje deCamion opciones={opcionesDeViaje(enRuta, g)} elegido={g.viajeId} />}
           <CampoFecha d={d} />
           <label class="campo"><span>Km del tablero</span><input name="km" inputmode="numeric" placeholder={g.km !== null ? String(g.km) : ""} /></label>
           <label class="campo"><span>¿Cómo se pagó?</span>
@@ -680,13 +684,27 @@ async function vista(c: C, d: Deps) {
   return pagina(c, d, { titulo: "Anotar", seccion: "dashboard", lugar: "anotar", sinNavInferior: true }, cuerpo);
 }
 
+/**
+ * Gasté con un camión distinto al del viaje: si se cambió el camión en «cambiar» y el viaje quedó
+ * como venía puesto, el viaje se suelta (gasto del camión elegido); si el viaje de otro camión se
+ * eligió a mano, se avisa. Sin tocar el camión, el viaje elegido manda (con su camión).
+ */
+async function viajeDelCamion(d: Deps, f: Campos): Promise<string> {
+  const viajeId = num(f.viajeId), vehiculoId = num(f.vehiculoId);
+  if (viajeId === null || vehiculoId === null || f.camionInicial === f.vehiculoId) return f.viajeId ?? "";
+  const delViaje = await capturarContexto(d.ctx, { viajeId });
+  if (delViaje.viajeId === null || delViaje.vehiculoId === vehiculoId) return f.viajeId ?? "";
+  if (f.viajeInicial === f.viajeId) return "";
+  throw new ErrorNegocio(`Ese viaje es del camión ${delViaje.unidad}: elige ese camión o deja «sin viaje»`);
+}
+
 /** Guarda lo anotado con el mismo manejador que usan las rutas de siempre. */
 async function guardarAnotacion(d: Deps, u: UsuarioWeb, tipo: TipoAnotar, f: Campos, archivos: Record<string, File>): Promise<string> {
   switch (tipo) {
     case "gaste": {
       const categoria = f.categoria === "otro" ? (f.categoriaOtra ?? "") : (f.categoria ?? "");
       if (!categoria) throw new ErrorNegocio("Elige en qué se gastó");
-      return guardarGasto(d, u.id, { ...f, categoria }, archivos.foto);
+      return guardarGasto(d, u.id, { ...f, categoria, viajeId: await viajeDelCamion(d, f) }, archivos.foto);
     }
     case "chofer": {
       const viajeId = num(f.viajeId);

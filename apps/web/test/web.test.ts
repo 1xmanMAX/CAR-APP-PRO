@@ -322,6 +322,30 @@ describe("web", () => {
         expect(dueno).toContain('aria-label="Anotar"');
       });
 
+      it("Gasté: si en «cambiar» se elige otro camión, el viaje del primero se suelta; un viaje de otro camión elegido a mano se rechaza", async () => {
+        const cookie = await entrar();
+        const v = await registrarViajeFlota(ctx, { vehiculoId: 1, origenLugar: "Yura", destinoLugar: "Puno", estado: "en_curso", origen: "web" });
+        const t2 = await crearUnidad(ctx, { placa: "XYZ-987" });
+        const html = await (await app.request("/anotar?tipo=gaste", { headers: { cookie } })).text();
+        expect(html).toContain(`<input type="hidden" name="viajeInicial" value="${v.id}"`);
+        expect(html).toContain('<input type="hidden" name="camionInicial" value="1"');
+        expect(html).toMatch(new RegExp(`<option value="${v.id}" selected="" data-camion="1">`));
+        // Cambió el camión y dejó el viaje que venía puesto: gasto del camión elegido, sin viaje.
+        const base = { tipo: "gaste", volver: "/", monto: "40", categoria: "peaje", camionInicial: "1", viajeInicial: String(v.id) };
+        let r = await enviar(cookie, { ...base, vehiculoId: String(t2.id), viajeId: String(v.id) });
+        expect(aviso(r)).toContain("ok=Gasto guardado");
+        let [g] = await ctx.db.select().from(gasto);
+        expect(g).toMatchObject({ vehiculoId: t2.id, viajeId: null });
+        // Eligió a mano un viaje de otro camión: no se adivina, se avisa.
+        r = await enviar(cookie, { ...base, viajeInicial: "", vehiculoId: String(t2.id), viajeId: String(v.id) });
+        expect(aviso(r)).toContain("error=Ese viaje es del camión T-01");
+        expect(await ctx.db.select().from(gasto)).toHaveLength(1);
+        // Sin tocar el camión, el viaje elegido manda (como siempre).
+        r = await enviar(cookie, { ...base, vehiculoId: "1", viajeId: String(v.id) });
+        [, g] = await ctx.db.select().from(gasto).orderBy(gasto.id);
+        expect(g).toMatchObject({ vehiculoId: 1, viajeId: v.id });
+      });
+
       it("si no se pudo guardar, vuelve con el monto y la categoría puestos", async () => {
         const cookie = await entrar();
         const r = await enviar(cookie, { tipo: "gaste", volver: "/viajes", monto: "35", categoria: "peaje", viajeId: "99999", vehiculoId: "1" });

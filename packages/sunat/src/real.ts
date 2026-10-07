@@ -61,7 +61,8 @@ export class SunatReal implements SunatGateway {
         password: claveSol,
       }).toString(),
     });
-    if (resp.status >= 500) throw new SunatNoDisponibleError(`SUNAT OAuth HTTP ${resp.status}`);
+    // 5xx o 429 (demasiados pedidos): pasajero, se reintenta sin contar para la pausa.
+    if (resp.status >= 500 || resp.status === 429) throw new SunatNoDisponibleError(`SUNAT OAuth HTTP ${resp.status}`);
     if (resp.status === 400 || resp.status === 401) {
       throw new SunatCredencialesError("SUNAT rechazó las credenciales de guías (client_id, client_secret, usuario o clave SOL)");
     }
@@ -80,7 +81,7 @@ export class SunatReal implements SunatGateway {
       resp = await hacer();
     }
     if (resp.status === 401) throw new SunatCredencialesError("SUNAT no aceptó el permiso de las credenciales de guías");
-    if (resp.status >= 500) throw new SunatNoDisponibleError(`SUNAT GRE HTTP ${resp.status}`);
+    if (resp.status >= 500 || resp.status === 429) throw new SunatNoDisponibleError(`SUNAT GRE HTTP ${resp.status}`);
     const texto = await resp.text();
     if (!resp.ok) throw new Error(`SUNAT GRE HTTP ${resp.status}: ${texto.slice(0, 300)}`);
     return texto ? JSON.parse(texto) : {};
@@ -143,8 +144,11 @@ export class SunatReal implements SunatGateway {
     if (m) {
       const mensaje = m[2]!.trim();
       // El código suele venir al final del faultcode («soap-env:Client.0102»); si no, al inicio del
-      // faultstring («0102 Usuario o contraseña incorrectos»).
-      const codigo = m[1]!.match(/(\d{4})\s*$/)?.[1] ?? mensaje.match(/\b(\d{4})\b/)?.[1] ?? m[1]!.trim();
+      // faultstring («0102 Usuario o contraseña incorrectos»). Solo al inicio: un año o «F001-1234»
+      // dentro del mensaje no son el código.
+      const codigo = m[1]!.match(/(\d{4})\s*$/)?.[1] ?? mensaje.match(/^\s*(\d{4})\b/)?.[1] ?? m[1]!.trim();
+      // Sin código de SUNAT y con HTTP 5xx: el servicio falló (pasajero), no cuenta para la pausa.
+      if (!/^\d{4}$/.test(codigo) && resp.status >= 500) throw new SunatNoDisponibleError(`SUNAT no disponible (HTTP ${resp.status}: ${mensaje})`);
       const clase = clasificarFault(codigo);
       if (clase === "credenciales") throw new SunatCredencialesError(`SUNAT rechazó el usuario o la clave SOL (${codigo}: ${mensaje})`);
       if (clase === "no_disponible") throw new SunatNoDisponibleError(`SUNAT no disponible (${codigo}: ${mensaje})`);

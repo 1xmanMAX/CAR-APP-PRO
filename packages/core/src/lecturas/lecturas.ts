@@ -221,7 +221,8 @@ export async function confirmarLectura(
     throw new ErrorNegocio("Este mensaje todavía no tiene una lectura para confirmar");
   }
   // Un mensaje con error sigue con error (y en «Necesita tu atención»): un intento fallido no lo pasa a «por confirmar».
-  const siFalla = o.siFalla && !RESUELTOS.includes(o.siFalla) ? o.siFalla : "por_confirmar";
+  // «pendiente» no sirve de destino: fijarLectura ya borró su próximo intento y quedaría atascado (el worker lo salta).
+  const siFalla = o.siFalla && !RESUELTOS.includes(o.siFalla) && o.siFalla !== "pendiente" ? o.siFalla : "por_confirmar";
   const devolver = () => ctx.db.update(documentoRecibido).set({ estadoLectura: siFalla }).where(eq(documentoRecibido.id, documentoId));
   try {
     const l = esquemaLectura.parse(d.datosExtraidos);

@@ -1109,11 +1109,11 @@ describe("web", () => {
       }
     });
 
-    it("el número de viajes dice qué cuenta: Inicio con los en ruta, Viajes aparte los en ruta, Números los con flete", async () => {
+    it("el número de viajes dice qué cuenta: Inicio con «· M en ruta», Viajes aparte los en ruta, Números los con flete", async () => {
       const cookie = await entrar();
       for (let i = 0; i < 7; i++) await registrarViajeFlota(ctx, { vehiculoId: 1, origenLugar: "Yura", destinoLugar: `Puno ${i}`, estado: "cerrado", flete: 100000, origen: "web" });
       await registrarViajeFlota(ctx, { vehiculoId: 1, origenLugar: "Yura", destinoLugar: "Cusco", estado: "en_curso", flete: 100000, origen: "web" });
-      expect(await (await app.request("/", { headers: { cookie } })).text()).toContain("8 viajes (con los en ruta)");
+      expect(await (await app.request("/", { headers: { cookie } })).text()).toContain("8 viajes · 1 en ruta");
       expect(await (await app.request("/viajes", { headers: { cookie } })).text()).toContain("· 7 viajes + 1 en ruta</h2>");
       expect(await (await app.request("/numeros", { headers: { cookie } })).text()).toContain("Ver los 8 viajes con flete");
     });

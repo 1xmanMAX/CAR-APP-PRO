@@ -161,6 +161,13 @@ describe("lecturas de mensajes", () => {
     expect((await ctx.db.select().from(entrega)).map((e) => [e.monto, e.medio])).toEqual([[50000, "yape"]]);
   });
 
+  it("si guardar falla y antes estaba «pendiente», vuelve a «por confirmar» (no queda atascado sin próximo intento)", async () => {
+    const { id } = await recibirMensaje(ctx, { tipo: "voz", contenido: Buffer.from("ogg"), mime: "audio/ogg", telegramChatId: 111, telegramMessageId: 81 });
+    await fijarLectura(ctx, id, { tipo: "entrega", monto: 50, medio: "efectivo", fecha: null, dudas: [] });
+    await expect(confirmarLectura(ctx, id, { vehiculoId: 1, siFalla: "pendiente" })).rejects.toThrow(/viaje en curso/);
+    expect((await obtenerDocumento(ctx, id)).estado).toBe("por_confirmar");
+  });
+
   it("si guardar falla, el mensaje vuelve al estado que tenía (un error sigue en error) y se puede abrir por su número", async () => {
     const { id } = await recibirMensaje(ctx, { tipo: "voz", contenido: Buffer.from("ogg"), mime: "audio/ogg", telegramChatId: 111, telegramMessageId: 80 });
     await leerDocumento(ctx, id);

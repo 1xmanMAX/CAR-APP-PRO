@@ -147,8 +147,10 @@ export class SunatReal implements SunatGateway {
       // faultstring («0102 Usuario o contraseña incorrectos»). Solo al inicio: un año o «F001-1234»
       // dentro del mensaje no son el código.
       const codigo = m[1]!.match(/(\d{4})\s*$/)?.[1] ?? mensaje.match(/^\s*(\d{4})\b/)?.[1] ?? m[1]!.trim();
-      // Sin código de SUNAT y con HTTP 5xx: el servicio falló (pasajero), no cuenta para la pausa.
-      if (!/^\d{4}$/.test(codigo) && resp.status >= 500) throw new SunatNoDisponibleError(`SUNAT no disponible (HTTP ${resp.status}: ${mensaje})`);
+      // Sin código de SUNAT, faultcode «Server» y HTTP 5xx: el servicio falló (pasajero), no cuenta para la
+      // pausa. Un «Client» sin código sigue siendo raro (en SOAP 1.1 todo fault llega con 500; podría ser la clave).
+      const faultServidor = /(^|:)Server(\.|$)/.test(m[1]!.trim());
+      if (!/^\d{4}$/.test(codigo) && faultServidor && resp.status >= 500) throw new SunatNoDisponibleError(`SUNAT no disponible (HTTP ${resp.status}: ${mensaje})`);
       const clase = clasificarFault(codigo);
       if (clase === "credenciales") throw new SunatCredencialesError(`SUNAT rechazó el usuario o la clave SOL (${codigo}: ${mensaje})`);
       if (clase === "no_disponible") throw new SunatNoDisponibleError(`SUNAT no disponible (${codigo}: ${mensaje})`);

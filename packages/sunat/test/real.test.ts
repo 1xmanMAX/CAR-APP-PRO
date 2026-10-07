@@ -274,6 +274,19 @@ describe("SunatReal — seguimiento: errores pasajeros y código del faultstring
     await expect(r).rejects.toThrow("SUNAT SOAP");
   });
 
+  it("fault sin código: solo un faultcode «Server» es pasajero; «Client» con HTTP 500 sigue contando para la pausa", async () => {
+    const fault = (faultcode: string) => () =>
+      new Response(`<soap-env:Envelope xmlns:soap-env="http://schemas.xmlsoap.org/soap/envelope/"><soap-env:Body><soap-env:Fault><faultcode>${faultcode}</faultcode><faultstring>Algo falló</faultstring></soap-env:Fault></soap-env:Body></soap-env:Envelope>`, { status: 500 });
+    for (const faultcode of ["soap-env:Client", "Client", "env:Client.Auth"]) {
+      const r = new SunatReal(cred, { fetch: fetchFalso([fault(faultcode)]).fn }).enviarFactura({ nombreArchivo: "a", xml: "<a/>" });
+      await expect(r).rejects.toThrow("SUNAT SOAP");
+    }
+    for (const faultcode of ["soap-env:Server", "env:Server", "Server"]) {
+      await expect(new SunatReal(cred, { fetch: fetchFalso([fault(faultcode)]).fn }).enviarFactura({ nombreArchivo: "a", xml: "<a/>" }))
+        .rejects.toBeInstanceOf(SunatNoDisponibleError);
+    }
+  });
+
   it("GRE HTTP 429 (demasiados pedidos) es SUNAT no disponible", async () => {
     const gre = fetchFalso([token, () => new Response("Too Many Requests", { status: 429 })]);
     await expect(new SunatReal(cred, { fetch: gre.fn }).enviarGuia({ nombreArchivo: "a", xml: "<a/>" })).rejects.toBeInstanceOf(SunatNoDisponibleError);

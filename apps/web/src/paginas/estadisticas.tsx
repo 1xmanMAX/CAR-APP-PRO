@@ -4,7 +4,8 @@ import {
   estadisticas, hoy, listarCobrosPendientes, listarViajesFlota, liquidacionViaje, rentabilidadPorMes, rentabilidadPorViaje, sumarDias, type Estadisticas,
 } from "@sunatapp/core";
 import { pagina, type App, type C, type Deps } from "../base";
-import { Barra, Kpi, Panel, soles, soles2, Vacio } from "../ui";
+import { redirigir } from "../redirecciones";
+import { Barra, Cabecera, Kpi, Panel, soles, soles2, Vacio } from "../ui";
 
 const FECHA = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -32,7 +33,7 @@ function BarrasMeses(p: { meses: Estadisticas["meses"] }) {
           <g>
             {barra(m.ingresos, 0, "var(--ok)")}{barra(m.gastos, 1, "var(--accent)")}{barra(m.ganancia, 2, m.ganancia >= 0 ? "var(--amber-bar)" : "#B00020")}
             <text x={x + ancho * 1.5} y={alto + 16} text-anchor="middle" font-size="12" fill="currentColor">{m.mes}</text>
-            <text x={x + ancho * 1.5} y={alto + 30} text-anchor="middle" font-size="10" fill="currentColor" opacity=".7">{m.viajes} viajes</text>
+            <text x={x + ancho * 1.5} y={alto + 30} text-anchor="middle" font-size="12" fill="currentColor" opacity=".7">{m.viajes} viajes</text>
           </g>
         );
       })}
@@ -47,22 +48,21 @@ async function vista(c: C, d: Deps) {
   const maxGrifo = Math.max(1, ...e.combustiblePorGrifo.map((x) => x.monto));
   return pagina(c, d, { titulo: "Estadísticas", seccion: "finanzas" }, (
     <>
-      <section class="panel" style="flex-direction:row;align-items:center;flex-wrap:wrap;gap:10px">
-        <b class="mono-t" style="font-size:16px">ESTADÍSTICAS</b>
-        <form method="get" action="/estadisticas" class="linea" style="margin-left:auto">
-          <input type="date" name="desde" value={desde} aria-label="Desde" style="width:auto" />
-          <input type="date" name="hasta" value={hasta} aria-label="Hasta" style="width:auto" />
-          <button class="btn chico" type="submit">VER</button>
-          <a class="btn primario chico" href={`/estadisticas.xlsx?desde=${desde}&hasta=${hasta}`}>⬇ EXCEL</a>
+      <Cabecera volver="/numeros" titulo="Gráficos y Excel" sub="Para el contador" der={
+        <form method="get" action="/numeros/graficos" class="linea filtro">
+          <input type="date" name="desde" value={desde} aria-label="Desde" />
+          <input type="date" name="hasta" value={hasta} aria-label="Hasta" />
+          <button class="btn chico" type="submit">Ver</button>
+          <a class="btn primario chico" href={`/estadisticas.xlsx?desde=${desde}&hasta=${hasta}`}>⬇ Excel</a>
         </form>
-      </section>
+      } />
       <section class="kpis">
         <Kpi oscuro etiqueta="GANANCIA DEL PERIODO" valor={soles(e.totales.ganancia)} negativo={e.totales.ganancia < 0} />
         <Kpi etiqueta="INGRESOS" valor={soles(e.totales.ingresos)} />
         <Kpi etiqueta="GASTOS" valor={soles(e.totales.gastos)} />
         <Kpi etiqueta="VIAJES" valor={e.totales.viajes} />
       </section>
-      <Panel titulo="INGRESOS · GASTOS · GANANCIA POR MES" der={<span class="lbl"><span class="t-ok">■ INGRESOS</span> <span style="color:var(--accent)">■ GASTOS</span> <span style="color:var(--amber-bar)">■ GANANCIA</span></span>}>
+      <Panel titulo="INGRESOS · GASTOS · GANANCIA POR MES" der={<span class="leyenda"><span><i style="background:var(--ok)"></i>ingresos</span><span><i style="background:var(--accent)"></i>gastos</span><span><i style="background:var(--amber-bar)"></i>ganancia</span></span>}>
         {e.meses.length === 0 ? <Vacio>Sin datos.</Vacio> : <BarrasMeses meses={e.meses} />}
       </Panel>
       <div class="grid g-2">
@@ -159,7 +159,8 @@ export async function excelEstadisticas(d: Deps, desde: string, hasta: string): 
 }
 
 export function rutasEstadisticas(app: App, d: Deps): void {
-  app.get("/estadisticas", (c) => vista(c, d));
+  app.get("/numeros/graficos", (c) => vista(c as C, d));
+  redirigir(app, "/estadisticas", () => "/numeros/graficos", ["desde", "hasta"]);
   app.get("/estadisticas.xlsx", async (c) => {
     const { desde, hasta } = rango(c as C, d);
     const archivo = await excelEstadisticas(d, desde, hasta);

@@ -29,6 +29,7 @@ import { rutasLiquidacion } from "./paginas/liquidacion";
 import { rutasRevisar } from "./paginas/revisar";
 import { rutasRutas } from "./paginas/rutas";
 import { rutasEstadisticas } from "./paginas/estadisticas";
+import { rutasNumeros } from "./paginas/numeros";
 
 export type { OpcionesWeb } from "./base";
 
@@ -37,7 +38,7 @@ function seccionDeRuta(ruta: string): Seccion | null {
   const primero = ruta.split("/")[1] ?? "";
   const mapa: Record<string, Seccion> = {
     "": "dashboard", camiones: "trailer", trailer: "trailer", parte: "trailer", flota: "flota", inventario: "inventario", reparaciones: "reparaciones",
-    viajes: "viajes", revisar: "viajes", rutas: "viajes", guias: "viajes", facturas: "viajes", cobros: "viajes", finanzas: "finanzas", estadisticas: "finanzas", "estadisticas.xlsx": "finanzas", rentabilidad: "rentabilidad",
+    viajes: "viajes", revisar: "viajes", rutas: "viajes", guias: "viajes", facturas: "viajes", cobros: "viajes", numeros: "finanzas", finanzas: "finanzas", estadisticas: "finanzas", "estadisticas.xlsx": "finanzas", rentabilidad: "rentabilidad",
     cotizacion: "rentabilidad", telegram: "telegram", ajustes: "ajustes", sincronizar: "sincronizar", archivo: "dashboard", api: "dashboard",
   };
   return mapa[primero] ?? null;
@@ -269,7 +270,7 @@ export function crearWeb(ctx: Contexto, opciones: OpcionesWeb = {}): App {
     await next();
   });
 
-  for (const m of [rutasAnotar, rutasDashboard, rutasCamiones, rutasTrailer, rutasFlota, rutasInventario, rutasReparaciones, rutasLiquidacion, rutasRevisar, rutasRutas, rutasViajes, rutasFinanzas, rutasEstadisticas, rutasRentabilidad, rutasTelegram, rutasDispositivo, rutasAjustes, rutasSincronizar]) {
+  for (const m of [rutasAnotar, rutasDashboard, rutasCamiones, rutasTrailer, rutasFlota, rutasInventario, rutasReparaciones, rutasLiquidacion, rutasRevisar, rutasRutas, rutasViajes, rutasNumeros, rutasFinanzas, rutasEstadisticas, rutasRentabilidad, rutasTelegram, rutasDispositivo, rutasAjustes, rutasSincronizar]) {
     m(app, deps);
   }
   return app;

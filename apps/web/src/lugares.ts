@@ -18,7 +18,7 @@ export const RUTA = {
   camion: (id: number, q = "") => `/camiones/${id}${q}`,
   /** Los repuestos (antes Inventario). */
   repuestos: "/camiones?tab=repuestos",
-  numeros: "/finanzas",
+  numeros: "/numeros",
   catalogoPartes: "/ajustes",
   revisar: "/revisar",
   /** Cobrar una factura: «Me pagaron» de Anotar con la factura elegida; al guardar vuelve a Inicio. */

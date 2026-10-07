@@ -5,7 +5,8 @@ import {
   presupuestoVsReal, proyeccion, puedeEditar, rangoMes, rentabilidadPorMes, rentabilidadPorUnidad, rentabilidadPorViaje,
 } from "@sunatapp/core";
 import { accion, formulario, pagina, type App, type C, type Deps } from "../base";
-import { Barra, Datos, fechaCorta, nombreMes, Panel, soles, soles2, Vacio } from "../ui";
+import { redirigir } from "../redirecciones";
+import { Barra, Cabecera, Datos, fechaCorta, nombreMes, Panel, soles, soles2, Vacio } from "../ui";
 
 function GraficoProyeccion({ meses }: { meses: Array<{ mes: string; ingresos: number; costos: number; proyectado: boolean }> }) {
   const W = 640, H = 190, pad = 6;
@@ -22,7 +23,7 @@ function GraficoProyeccion({ meses }: { meses: Array<{ mes: string; ingresos: nu
             <title>{`${nombreMes(m.mes)}${m.proyectado ? " (proyectado)" : ""}: ingresos ${soles(m.ingresos)}, costos ${soles(m.costos)}`}</title>
             <rect x={x} y={H - hi} width={w} height={hi} fill={m.proyectado ? "#8FB4CC" : "#2D5B7A"} rx="1" />
             <rect x={x + w + 2} y={H - hc} width={w} height={hc} fill={m.proyectado ? "#F7D3E5" : "#B8236E"} rx="1" />
-            <text x={x + w} y={H + 14} font-size="10" text-anchor="middle" fill={m.proyectado ? "#9A8F7E" : "#6B6254"}>{nombreMes(m.mes)}</text>
+            <text x={x + w} y={H + 14} font-size="12" text-anchor="middle" fill={m.proyectado ? "#857A69" : "#6B6254"}>{nombreMes(m.mes).toLowerCase()}</text>
           </g>
         );
       })}
@@ -30,7 +31,7 @@ function GraficoProyeccion({ meses }: { meses: Array<{ mes: string; ingresos: nu
   );
 }
 
-async function vista(c: C, d: Deps) {
+async function vista(c: C, d: Deps, parte: "rentabilidad" | "cotizar") {
   const ctx = d.ctx;
   const h = hoy(ctx);
   const { desde, hasta } = rangoMes(h);
@@ -44,7 +45,7 @@ async function vista(c: C, d: Deps) {
   const rango = { desde: `${desdeMes}-01`, hasta: rangoMes(`${hastaMes}-01`).hasta, vehiculoId: unidadSel };
   const filasViaje = vistaSel === "viaje" ? await rentabilidadPorViaje(ctx, rango) : [];
   const filasMes = vistaSel === "mes" ? await rentabilidadPorMes(ctx, rango) : [];
-  const enlace = (v: string) => `/rentabilidad?vista=${v}&desde=${desdeMes}&hasta=${hastaMes}${unidadSel ? `&unidad=${unidadSel}` : ""}`;
+  const enlace = (v: string) => `/numeros/rentabilidad?vista=${v}&desde=${desdeMes}&hasta=${hastaMes}${unidadSel ? `&unidad=${unidadSel}` : ""}`;
   const [unidades, params, rent, proy, pvr, cotizaciones, presupuesto] = await Promise.all([
     listarUnidades(ctx), parametrosCotizador(ctx), rentabilidadPorUnidad(ctx, desde, hasta), proyeccion(ctx), presupuestoVsReal(ctx, h),
     listarCotizaciones(ctx, 8), presupuestoMensual(ctx),
@@ -57,10 +58,10 @@ async function vista(c: C, d: Deps) {
   };
   const maxPvr = Math.max(100, ...pvr.map((b) => b.pct ?? 0));
 
-  return pagina(c, d, { titulo: "Rentabilidad y fletes", seccion: "rentabilidad", scripts: ["/static/cotizador.js"] }, (
+  const bloqueRentabilidad = (
     <>
       <Panel titulo="RENTABILIDAD" der={
-        <form method="get" action="/rentabilidad" class="linea" style="gap:6px;flex-wrap:wrap">
+        <form method="get" action="/numeros/rentabilidad" class="linea" style="gap:6px;flex-wrap:wrap">
           <a class={`btn chico${vistaSel === "viaje" ? " primario" : ""}`} href={enlace("viaje")}>POR VIAJE</a>
           <a class={`btn chico${vistaSel === "mes" ? " primario" : ""}`} href={enlace("mes")}>POR MES</a>
           <input type="hidden" name="vista" value={vistaSel} />
@@ -100,11 +101,55 @@ async function vista(c: C, d: Deps) {
           </table></div>
         )}
       </Panel>
+          <Panel titulo="RENTABILIDAD · POR TRAILER, ESTE MES">
+            <div class="tabla-wrap"><table class="t">
+              <thead><tr><th>Unidad</th><th class="num">Viajes</th><th class="num">Ingresos</th><th class="num">Costos</th><th class="num">S/ por km</th><th style="width:30%">Margen</th></tr></thead>
+              <tbody>{rent.length === 0 ? <tr><td colspan={6}><Vacio>Sin unidades.</Vacio></td></tr> : rent.map((r) => (
+                <tr>
+                  <td><b>{r.unidad}</b></td><td class="num">{r.viajes}</td><td class="num">{soles(r.ingresos)}</td><td class="num">{soles(r.costos)}</td>
+                  <td class="num">{r.solesPorKm ?? "—"}</td>
+                  <td><div style="display:flex;gap:6px;align-items:center"><div style="flex:1"><Barra pct={Math.max(0, r.margenPct ?? 0)} color={(r.margenPct ?? 0) < 0 ? "var(--accent)" : "var(--ok)"} /></div><b class="mono-t" style="width:44px;text-align:right">{r.margenPct === null ? "—" : `${r.margenPct}%`}</b></div></td>
+                </tr>
+              ))}</tbody>
+            </table></div>
+          </Panel>
+          <div class="grid g-2">
+            <Panel titulo="PROYECCIÓN · 6 MESES" der={<span class="leyenda"><span><i style="background:#2D5B7A"></i>INGRESOS</span><span><i style="background:#B8236E"></i>COSTOS</span><span>CLARO = PROYECTADO</span></span>}>
+              <GraficoProyeccion meses={proy.meses} />
+              <span class="muted" style="font-size:12px">Se proyecta con {proy.base.viajesMes} viajes/mes, flete promedio {soles(proy.base.fletePromedio)}, {proy.base.kmPorViaje} km/viaje a S/ {(proy.base.costoPorKm / 100).toFixed(2)} por km (sin repuestos) más los cambios de repuestos que ya vienen en camino según los contadores de desgaste.</span>
+            </Panel>
+            <Panel titulo="PRESUPUESTO VS REAL · MES" der={edita ? <a class="lbl-12" href="#presupuesto">EDITAR</a> : null}>
+              {pvr.length === 0 ? <Vacio>Sin gastos ni presupuesto este mes.</Vacio> : (
+                <div class="filas">
+                  {pvr.map((b) => (
+                    <div>
+                      <div style="display:flex;justify-content:space-between;font-size:12px"><span>{b.nombre}</span><span class={b.pct !== null && b.pct > 100 ? "t-cambiar" : ""}><b>{b.pct === null ? "sin presupuesto" : `${b.pct}%`}</b> <span class="muted">{soles(b.real)} / {soles(b.presupuesto)}</span></span></div>
+                      <Barra pct={((b.pct ?? 0) / maxPvr) * 100} color={b.pct !== null && b.pct > 100 ? "var(--accent)" : b.pct !== null && b.pct >= 90 ? "var(--amber-bar)" : "var(--ok)"} linea100={(100 / maxPvr) * 100} />
+                    </div>
+                  ))}
+                  <span class="lbl">LÍNEA NEGRA = 100% DEL PRESUPUESTO</span>
+                </div>
+              )}
+            </Panel>
+          </div>
+      {edita ? (
+              <Panel titulo="PRESUPUESTO MENSUAL POR CATEGORÍA" id="presupuesto">
+                <form method="post" action="/rentabilidad/presupuesto" class="form-grid">
+                  {categorias.map(({ clave: k, nombre }) => (
+                    <label class="campo"><span>{nombre}</span><input name={k} inputmode="decimal" value={presupuesto[k] !== undefined ? String(presupuesto[k]! / 100) : ""} /></label>
+                  ))}
+                  <button class="btn" type="submit">GUARDAR</button>
+                </form>
+              </Panel>
+      ) : null}
+    </>
+  );
+  const bloqueCotizar = (
+    <>
       <Datos id="datos-coti" valor={datos} />
       {/^\d+$/.test(c.req.query("pdf") ?? "") ? (
         <div class="aviso info">Presupuesto listo: <a href={`/cotizacion/${c.req.query("pdf")}.pdf`} target="_blank" rel="noopener"><b>ABRIR PDF P-{c.req.query("pdf")!.padStart(4, "0")}</b></a></div>
       ) : null}
-      <div class="grid g-coti">
         <Panel titulo="COTIZADOR DE FLETE · PRESUPUESTO AL INSTANTE" der={<span class="lbl">CAMBIA LOS VALORES Y EL PRECIO SE RECALCULA</span>}>
           <form method="post" action="/rentabilidad/cotizacion" class="filas" id="form-coti">
             <label class="campo"><span>Ruta</span><input name="ruta" required placeholder="Juliaca → Arequipa" /></label>
@@ -147,41 +192,7 @@ async function vista(c: C, d: Deps) {
             </table></div>
           ) : null}
         </Panel>
-
-        <div class="filas" style="gap:10px;min-width:0">
-          <Panel titulo="RENTABILIDAD · POR TRAILER, ESTE MES">
-            <div class="tabla-wrap"><table class="t">
-              <thead><tr><th>Unidad</th><th class="num">Viajes</th><th class="num">Ingresos</th><th class="num">Costos</th><th class="num">S/ por km</th><th style="width:30%">Margen</th></tr></thead>
-              <tbody>{rent.length === 0 ? <tr><td colspan={6}><Vacio>Sin unidades.</Vacio></td></tr> : rent.map((r) => (
-                <tr>
-                  <td><b>{r.unidad}</b></td><td class="num">{r.viajes}</td><td class="num">{soles(r.ingresos)}</td><td class="num">{soles(r.costos)}</td>
-                  <td class="num">{r.solesPorKm ?? "—"}</td>
-                  <td><div style="display:flex;gap:6px;align-items:center"><div style="flex:1"><Barra pct={Math.max(0, r.margenPct ?? 0)} color={(r.margenPct ?? 0) < 0 ? "var(--accent)" : "var(--ok)"} /></div><b class="mono-t" style="width:44px;text-align:right">{r.margenPct === null ? "—" : `${r.margenPct}%`}</b></div></td>
-                </tr>
-              ))}</tbody>
-            </table></div>
-          </Panel>
-          <div class="grid g-2">
-            <Panel titulo="PROYECCIÓN · 6 MESES" der={<span class="leyenda"><span><i style="background:#2D5B7A"></i>INGRESOS</span><span><i style="background:#B8236E"></i>COSTOS</span><span>CLARO = PROYECTADO</span></span>}>
-              <GraficoProyeccion meses={proy.meses} />
-              <span class="muted" style="font-size:12px">Se proyecta con {proy.base.viajesMes} viajes/mes, flete promedio {soles(proy.base.fletePromedio)}, {proy.base.kmPorViaje} km/viaje a S/ {(proy.base.costoPorKm / 100).toFixed(2)} por km (sin repuestos) más los cambios de repuestos que ya vienen en camino según los contadores de desgaste.</span>
-            </Panel>
-            <Panel titulo="PRESUPUESTO VS REAL · MES" der={edita ? <a class="lbl-12" href="#presupuesto">EDITAR</a> : null}>
-              {pvr.length === 0 ? <Vacio>Sin gastos ni presupuesto este mes.</Vacio> : (
-                <div class="filas">
-                  {pvr.map((b) => (
-                    <div>
-                      <div style="display:flex;justify-content:space-between;font-size:12px"><span>{b.nombre}</span><span class={b.pct !== null && b.pct > 100 ? "t-cambiar" : ""}><b>{b.pct === null ? "sin presupuesto" : `${b.pct}%`}</b> <span class="muted">{soles(b.real)} / {soles(b.presupuesto)}</span></span></div>
-                      <Barra pct={((b.pct ?? 0) / maxPvr) * 100} color={b.pct !== null && b.pct > 100 ? "var(--accent)" : b.pct !== null && b.pct >= 90 ? "var(--amber-bar)" : "var(--ok)"} linea100={(100 / maxPvr) * 100} />
-                    </div>
-                  ))}
-                  <span class="lbl">LÍNEA NEGRA = 100% DEL PRESUPUESTO</span>
-                </div>
-              )}
-            </Panel>
-          </div>
-          {edita ? (
-            <div class="grid g-2">
+      {edita ? (
               <Panel titulo="PARÁMETROS DEL COTIZADOR">
                 <form method="post" action="/rentabilidad/parametros" class="form-grid">
                   <label class="campo"><span>S/ por galón</span><input name="precioGal" inputmode="decimal" value={params.precioGal} /></label>
@@ -192,18 +203,16 @@ async function vista(c: C, d: Deps) {
                   <button class="btn" type="submit">GUARDAR</button>
                 </form>
               </Panel>
-              <Panel titulo="PRESUPUESTO MENSUAL POR CATEGORÍA" id="presupuesto">
-                <form method="post" action="/rentabilidad/presupuesto" class="form-grid">
-                  {categorias.map(({ clave: k, nombre }) => (
-                    <label class="campo"><span>{nombre}</span><input name={k} inputmode="decimal" value={presupuesto[k] !== undefined ? String(presupuesto[k]! / 100) : ""} /></label>
-                  ))}
-                  <button class="btn" type="submit">GUARDAR</button>
-                </form>
-              </Panel>
-            </div>
-          ) : null}
-        </div>
-      </div>
+      ) : null}
+    </>
+  );
+  return pagina(c, d, {
+    titulo: parte === "cotizar" ? "Cotizar un viaje" : "Rentabilidad detallada", seccion: "rentabilidad",
+    scripts: parte === "cotizar" ? ["/static/cotizador.js"] : undefined,
+  }, (
+    <>
+      <Cabecera volver="/numeros" titulo={parte === "cotizar" ? "Cotizar un viaje" : "Rentabilidad detallada"} />
+      <div class="filas">{parte === "cotizar" ? bloqueCotizar : bloqueRentabilidad}</div>
     </>
   ));
 }
@@ -216,10 +225,12 @@ const dec = (v: string | undefined, nombre: string, def?: number): number => {
 };
 
 export function rutasRentabilidad(app: App, d: Deps): void {
-  app.get("/rentabilidad", (c) => vista(c, d));
+  app.get("/numeros/rentabilidad", (c) => vista(c as C, d, "rentabilidad"));
+  app.get("/numeros/cotizar", (c) => vista(c as C, d, "cotizar"));
+  redirigir(app, "/rentabilidad", (c) => (c.req.query("pdf") ? "/numeros/cotizar" : "/numeros/rentabilidad"), ["vista", "unidad", "desde", "hasta", "pdf"]);
   app.post("/rentabilidad/cotizacion", async (c) => {
     const f = await formulario(c);
-    return accion(c, "/rentabilidad", async () => {
+    return accion(c, "/numeros/cotizar", async () => {
       const { id, resultado } = await guardarCotizacion(d.ctx, {
         ruta: f.ruta ?? "", vehiculoId: f.vehiculoId ? Number(f.vehiculoId) : null, usuarioId: c.get("usuario").id,
         entrada: {
@@ -234,7 +245,7 @@ export function rutasRentabilidad(app: App, d: Deps): void {
         await marcarCotizacionEnviada(d.ctx, id);
         return `Presupuesto P-${String(id).padStart(4, "0")} enviado por Telegram · flete ${soles2(Math.round(resultado.flete * 100))}`;
       }
-      return { ok: `Presupuesto P-${String(id).padStart(4, "0")} guardado`, ruta: `/rentabilidad?pdf=${id}` };
+      return { ok: `Presupuesto P-${String(id).padStart(4, "0")} guardado`, ruta: `/numeros/cotizar?pdf=${id}` };
     });
   });
   app.get("/cotizacion/:archivo", async (c) => {
@@ -244,7 +255,7 @@ export function rutasRentabilidad(app: App, d: Deps): void {
   });
   app.post("/rentabilidad/parametros", async (c) => {
     const f = await formulario(c);
-    return accion(c, "/rentabilidad", async () => {
+    return accion(c, "/numeros/cotizar", async () => {
       await guardarParametrosCotizador(d.ctx, {
         precioGal: dec(f.precioGal, "Precio"), rendimientoKmGal: dec(f.rendimiento, "Rendimiento"), viaticosDia: dec(f.viaticos, "Viáticos", 0),
         desgasteSolesKm: f.desgaste ? dec(f.desgaste, "Desgaste") : null, margenPct: dec(f.margen, "Margen"),
@@ -254,7 +265,7 @@ export function rutasRentabilidad(app: App, d: Deps): void {
   });
   app.post("/rentabilidad/presupuesto", async (c) => {
     const f = await formulario(c);
-    return accion(c, "/rentabilidad", async () => {
+    return accion(c, "/numeros/rentabilidad", async () => {
       const p: Partial<Record<string, number>> = {};
       for (const { clave: k, nombre } of await listarCategorias(d.ctx, { soloActivas: true })) {
         if (!f[k]) continue;

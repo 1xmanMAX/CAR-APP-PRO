@@ -444,7 +444,7 @@ describe("web", () => {
     it("las categorías propias aparecen en el formulario de gasto, en rutas y en el presupuesto", async () => {
       const cookie = await entrar();
       await crearCategoria(ctx, { nombre: "Guardianía", tipo: "variable" });
-      for (const ruta of ["/finanzas", "/rutas", "/rentabilidad"]) {
+      for (const ruta of ["/anotar?tipo=gaste", "/rutas", "/numeros/rentabilidad"]) {
         expect(await (await app.request(ruta, { headers: { cookie } })).text(), ruta).toContain("Guardianía");
       }
     });
@@ -453,11 +453,11 @@ describe("web", () => {
       const cookie = await entrar();
       const v = await registrarViajeFlota(ctx, { vehiculoId: 1, origenLugar: "Juliaca", destinoLugar: "Arequipa", estado: "cerrado", km: 300, flete: 500000, origen: "web" });
       await registrarGasto(ctx, { viajeId: v.id, categoria: "combustible", monto: 150000, origen: "web" });
-      let html = await (await app.request("/rentabilidad?vista=viaje", { headers: { cookie } })).text();
+      let html = await (await app.request("/numeros/rentabilidad?vista=viaje", { headers: { cookie } })).text();
       expect(html).toContain("POR VIAJE");
       expect(html).toContain(v.codigo);
       expect(html).toContain("PROVISIONAL");
-      html = await (await app.request("/rentabilidad?vista=mes", { headers: { cookie } })).text();
+      html = await (await app.request("/numeros/rentabilidad?vista=mes", { headers: { cookie } })).text();
       expect(html).toContain("GANANCIA NETA");
       html = await (await app.request(`/viajes/${v.id}`, { headers: { cookie } })).text();
       expect(html).toContain("Fijo asignado");
@@ -478,7 +478,7 @@ describe("web", () => {
 
     it("todas las pantallas cargan", async () => {
       const cookie = await entrar();
-      for (const ruta of ["/", "/camiones/1", "/camiones/1?tab=historial", "/camiones/1?tab=repuestos", "/camiones/1?tab=datos", "/camiones/nuevo", "/viajes", "/finanzas", "/rentabilidad", "/telegram", "/ajustes", "/api/feed"]) {
+      for (const ruta of ["/", "/camiones/1", "/camiones/1?tab=historial", "/camiones/1?tab=repuestos", "/camiones/1?tab=datos", "/camiones/nuevo", "/viajes", "/numeros", "/numeros?periodo=anio", "/numeros/caja", "/numeros/prestamos", "/numeros/cotizar", "/numeros/rentabilidad", "/numeros/graficos", "/telegram", "/ajustes", "/api/feed"]) {
         const r = await app.request(ruta, { headers: { cookie } });
         expect(r.status, ruta).toBe(200);
       }
@@ -638,7 +638,7 @@ describe("web", () => {
       const cookie = await entrar();
       const v = await registrarViajeFlota(ctx, { vehiculoId: 1, origenLugar: "Juliaca", destinoLugar: "Arequipa", estado: "cerrado", km: 300, flete: 150000, fecha: "2026-09-10", origen: "web" });
       await registrarGasto(ctx, { viajeId: v.id, categoria: "combustible", monto: 45000, proveedorNombre: "GRIFO PRIMAX", fecha: "2026-09-10", origen: "web" });
-      const html = await (await app.request("/estadisticas?desde=2026-08-01&hasta=2026-09-30", { headers: { cookie } })).text();
+      const html = await (await app.request("/numeros/graficos?desde=2026-08-01&hasta=2026-09-30", { headers: { cookie } })).text();
       expect(html).toContain("GRIFO PRIMAX");
       expect(html).toContain("Juliaca → Arequipa");
       expect(html).toContain("<svg");
@@ -761,9 +761,34 @@ describe("web", () => {
     it("el contador no ve la flota ni edita inventario", async () => {
       await guardarUsuario(ctx, { nombre: "Conta", email: "conta@demo.pe", rol: "contador", clave: "clave-segura" });
       const cookie = await entrar("conta@demo.pe");
-      expect((await app.request("/finanzas", { headers: { cookie } })).status).toBe(200);
+      expect((await app.request("/numeros", { headers: { cookie } })).status).toBe(200);
       expect((await app.request("/flota", { headers: { cookie } })).headers.get("location")).toContain("/?error=");
       expect((await post(cookie, "/inventario/repuesto", { nombre: "X", categoria: "Frenos" })).status).toBe(403);
+    });
+
+    it("números: qué viaje dejó más, en qué se va la plata y ver más; rutas viejas redirigen", async () => {
+      const cookie = await entrar();
+      const v = await registrarViajeFlota(ctx, { vehiculoId: 1, origenLugar: "Yura", destinoLugar: "Puno", estado: "cerrado", km: 300, flete: 350000, origen: "web" });
+      await registrarGasto(ctx, { viajeId: v.id, categoria: "combustible", monto: 64000, origen: "web" });
+      const html = await (await app.request("/numeros", { headers: { cookie } })).text();
+      for (const t of ["Este mes", "Mes pasado", "Año", "¿Qué viaje dejó más?", "Yura → Puno", "S/\u00a02,860", "¿En qué se va la plata?", "Combustible", "Caja (entradas y salidas)", "Préstamos y cuotas", "Cotizar un viaje", "Gráficos y Excel para el contador"]) {
+        expect(html, t).toContain(t);
+      }
+      const viejas: Record<string, string> = {
+        "/finanzas?mes=2026-08": "/numeros/caja?mes=2026-08", "/rentabilidad?vista=mes": "/numeros/rentabilidad?vista=mes",
+        "/rentabilidad?pdf=3": "/numeros/cotizar?pdf=3", "/estadisticas?desde=2026-08-01&hasta=2026-09-30": "/numeros/graficos?desde=2026-08-01&hasta=2026-09-30",
+      };
+      for (const [de, a] of Object.entries(viejas)) {
+        const x = await app.request(de, { headers: { cookie } });
+        expect(x.status, de).toBe(302);
+        expect(x.headers.get("location"), de).toBe(a);
+      }
+    });
+
+    it("el taller no entra a Números", async () => {
+      await guardarUsuario(ctx, { nombre: "Taller", email: "taller@demo.pe", rol: "taller", clave: "clave-segura" });
+      const taller = await entrar("taller@demo.pe");
+      expect((await app.request("/numeros", { headers: { cookie: taller } })).headers.get("location")).toContain("/?error=");
     });
 
     it("el cotizador genera el PDF del presupuesto", async () => {

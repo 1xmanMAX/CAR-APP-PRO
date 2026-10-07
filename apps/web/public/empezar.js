@@ -33,7 +33,7 @@
       } else {
         lista.innerHTML = j.vecinos.map(function (v) {
           return '<form method="post" action="/empezar/con" class="fila-flota" style="grid-template-columns:minmax(0,1fr) auto">' +
-            '<div><b>' + esc(v.nombre) + '</b> <span class="chip ok">' + esc(v.codigo) + '</span><div class="muted" style="font-size:11px">' + esc(v.direccion) + '</div></div>' +
+            '<div><b>' + esc(v.nombre) + '</b> <span class="chip ok">' + esc(v.codigo) + '</span><div class="muted" style="font-size:12px">' + esc(v.direccion) + '</div></div>' +
             '<input type="hidden" name="destino" value="' + esc(v.direccion + ":" + v.puerto) + '">' +
             '<button class="btn primario chico" type="submit"' + (e && e.enCurso ? " disabled" : "") + '>TRAER DATOS</button></form>';
         }).join("");

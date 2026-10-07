@@ -20,7 +20,7 @@ function pintarVecinos(vecinos, ocupado) {
   }
   lista.innerHTML = vecinos.map(function (v) {
     return '<form method="post" action="/sincronizar/con" class="fila-flota" style="grid-template-columns:minmax(0,1fr) auto">' +
-      '<div><b>' + esc(v.nombre) + '</b> <span class="chip ok">' + esc(v.codigo) + '</span><div class="muted" style="font-size:11px">' + esc(v.direccion) + ' · en línea</div></div>' +
+      '<div><b>' + esc(v.nombre) + '</b> <span class="chip ok">' + esc(v.codigo) + '</span><div class="muted" style="font-size:12px">' + esc(v.direccion) + ' · en línea</div></div>' +
       '<input type="hidden" name="destino" value="' + esc(v.direccion + ":" + v.puerto) + '">' +
       '<button class="btn primario chico" type="submit"' + (ocupado ? " disabled" : "") + '>SINCRONIZAR</button></form>';
   }).join("");

@@ -175,7 +175,7 @@ function mostrarPanel(id) {
     el("div", { className: "linea", style: "justify-content:space-between" },
       el("b", { textContent: h.fecha }), el("span", { className: "chip neutro", textContent: h.tipo })),
     el("span", { textContent: h.trabajo }),
-    el("span", { className: "muted", style: "font-size:11px", textContent: [h.km ? `${h.km} km` : null, h.costo, h.taller].filter(Boolean).join(" · ") }),
+    el("span", { className: "muted", style: "font-size:12px", textContent: [h.km ? `${h.km} km` : null, h.costo, h.taller].filter(Boolean).join(" · ") }),
   )) : [el("span", { className: "muted", style: "font-size:12px", textContent: "Todavía no hay nada registrado en esta pieza." })]));
 
   if (panel.id) panel.id.value = id;

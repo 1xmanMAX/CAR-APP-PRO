@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -29,6 +29,7 @@ import { tiposAnotar } from "../src/lugares";
 import { atenciones, elegirAvisos, enOracion, textoGanancia } from "../src/paginas/dashboard";
 import { AsiQuedaBloque } from "../src/paginas/anotar";
 import { conParametros } from "../src/redirecciones";
+import { nDias } from "../src/ui";
 
 let ctx: Contexto;
 let cerrar: () => Promise<void>;
@@ -59,6 +60,14 @@ async function post(cookie: string, ruta: string, datos: Record<string, string>,
 }
 
 describe("web", () => {
+  it("no queda la interfaz vieja: sin cabecera ni menú de pestañas en el CSS, caché renovado", async () => {
+    const css = readFileSync(new URL("../public/app.css", import.meta.url), "utf8");
+    for (const viejo of [".header .datos", ".nav a.activo", ".g-main", ".carril", ".datos-visor", ".usuario-menu", ".bot-estado"]) expect(css, viejo).not.toContain(viejo);
+    const sw = await (await app.request("/sw.js")).text();
+    expect(sw).toContain('const VERSION = "flota-v3"');
+    expect((await app.request("/static/reparaciones.js")).status).toBe(404);
+  });
+
   it("es instalable: manifiesto y service worker públicos", async () => {
     const m = await app.request("/manifest.webmanifest");
     expect(m.headers.get("content-type")).toBe("application/manifest+json");
@@ -116,6 +125,24 @@ describe("web", () => {
   describe("con el dueño configurado", () => {
     beforeEach(async () => {
       await guardarUsuario(ctx, { id: 1, nombre: "Dueño", email: "dueno@demo.pe", rol: "dueno", clave: "clave-segura" });
+    });
+
+    it("detalles finales: meses en castellano, «1 día», Gasté sin cuotas, /ajustes/ y Rutas sin títulos en mayúsculas", async () => {
+      expect(nDias(1)).toBe("1 día");
+      expect(nDias(3)).toBe("3 días");
+      const cookie = await entrar();
+      for (const ruta of ["/viajes", "/numeros/caja", "/numeros/rentabilidad"]) {
+        const html = await (await app.request(ruta, { headers: { cookie } })).text();
+        expect(html, ruta).not.toContain('type="month"');
+        expect(html, ruta).toMatch(/<option value="\d{4}-\d{2}" selected="?"?>(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre) \d{4}</);
+      }
+      // Gasté solo ofrece gastos variables del viaje: la cuota de un préstamo va por «Préstamo o cuota».
+      expect(await (await app.request("/anotar?tipo=gaste", { headers: { cookie } })).text()).not.toContain("cuota_prestamo");
+      const r = await app.request("/ajustes/", { headers: { cookie } });
+      expect([200, 301, 302]).toContain(r.status);
+      const rutas = await (await app.request("/rutas", { headers: { cookie } })).text();
+      for (const viejo of ["VALOR REFERENCIAL", "NUEVA RUTA", "CREAR RUTA", "GUARDAR VALOR"]) expect(rutas, viejo).not.toContain(viejo);
+      expect(rutas).toContain("Valor referencial MTC (factura con detracción)");
     });
 
     it("menú: lateral en la PC, barra abajo en el celular y solo los lugares del rol", async () => {
@@ -405,7 +432,7 @@ describe("web", () => {
         const html = await (await app.request(`/anotar?tipo=repare&vehiculoId=${t01.id}&pieza=${idPieza}`, { headers: { cookie } })).text();
         expect(html).toMatch(new RegExp(`<option value="${p!.id}" selected`));
         // La casilla se ve y empieza sin marcar: un arreglo en la pieza no reinicia el contador a escondidas.
-        expect(html).toContain(`Cambié la pieza por una nueva (reinicia el contador de ${p!.nombre})`);
+        expect(html).toContain("Cambié la pieza por una nueva (reinicia el contador de la parte elegida)");
         expect(html).toMatch(/<input type="checkbox" name="reinicia" value="1"\s*\/?>/);
         const base = { tipo: "repare", volver: "/", vehiculoId: String(t01.id), componente: idPieza!, parteId: String(p!.id), casillaReinicia: "1", trabajo: "Revisión" };
         expect(aviso(await enviar(cookie, base))).toContain("ok=");
@@ -432,11 +459,17 @@ describe("web", () => {
       const html = await (await app.request("/anotar", { headers: { cookie } })).text();
       expect(html).toContain("Se pone solo");
       const fd = new FormData();
+      fd.set("tipo", "gaste");
       fd.set("categoria", "peaje");
       fd.set("monto", "28.50");
       fd.set("vehiculoId", "1");
-      const r = await app.request("/finanzas/gasto", { method: "POST", headers: { cookie, origin: ORIGEN }, body: fd });
+      const r = await app.request("/anotar", { method: "POST", headers: { cookie, origin: ORIGEN }, body: fd });
       expect(r.status).toBe(303);
+      expect(aviso(r)).toContain("ok=");
+      // Los formularios viejos de Finanzas ya no existen: todo se anota en /anotar.
+      for (const viejo of ["/finanzas/gasto", "/finanzas/ingreso", "/finanzas/reinversion", "/finanzas/prestamo"]) {
+        expect((await post(cookie, viejo, { monto: "1" })).status, viejo).toBe(404);
+      }
       const [g] = await ctx.db.select().from(gasto);
       expect(g).toMatchObject({ categoria: "peaje", monto: 2850, medioPago: "efectivo_chofer" });
       expect(g!.viajeId).not.toBeNull();
@@ -873,6 +906,9 @@ describe("web", () => {
       expect(hist).toContain(`/camiones/${t01.id}?tab=historial&amp;todos=1`);
       const todos = await (await app.request(`/camiones/${t01.id}?tab=historial&todos=1`, { headers: { cookie } })).text();
       expect(todos).toContain("Todos los camiones");
+      // Todos los camiones: cada arreglo dice la placa (no el código interno); el título también.
+      expect(todos).toContain(`<b>${t01.placa} · `);
+      expect(todos).toContain(`<title>Camión ${t01.placa}`);
       const reps = await (await app.request(`/camiones/${t01.id}?tab=repuestos`, { headers: { cookie } })).text();
       for (const t of ["Plata por categoría", "Compras por Telegram"]) expect(reps, t).toContain(t);
       // Desde la pieza del 3D, al guardar se vuelve al camión con la pieza elegida.
@@ -929,6 +965,11 @@ describe("web", () => {
       await guardarUsuario(ctx, { nombre: "Taller", email: "taller@demo.pe", rol: "taller", clave: "clave-segura" });
       const taller = await entrar("taller@demo.pe");
       expect((await app.request("/numeros", { headers: { cookie: taller } })).headers.get("location")).toContain("/?error=");
+      // Tampoco abre la foto de un gasto adivinando el número (el contador sí).
+      const g = await registrarGasto(ctx, { categoria: "peaje", monto: 1000, origen: "web" });
+      expect((await app.request(`/archivo/gasto/${g.id}`, { headers: { cookie: taller } })).status).toBe(403);
+      await guardarUsuario(ctx, { nombre: "Conta", email: "conta2@demo.pe", rol: "contador", clave: "clave-segura" });
+      expect((await app.request(`/archivo/gasto/${g.id}`, { headers: { cookie: await entrar("conta2@demo.pe") } })).status).not.toBe(403);
     });
 
     it("el cotizador genera el PDF del presupuesto", async () => {

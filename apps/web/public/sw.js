@@ -2,7 +2,7 @@
 // Las páginas siempre se piden a la red (los datos deben estar al día); si no hay red se muestra
 // la última versión guardada de esa página o el aviso "sin conexión". Los archivos estáticos
 // (CSS, JS, íconos, Three.js, fuentes) se sirven del caché y se renuevan en segundo plano.
-const VERSION = "flota-v2";
+const VERSION = "flota-v3";
 const PRECARGA = ["/sin-conexion", "/static/iconos/icono-192.png", "/manifest.webmanifest"];
 
 self.addEventListener("install", (e) => {

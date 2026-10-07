@@ -476,6 +476,15 @@ describe("web", () => {
       expect(await (await app.request("/revisar", { headers: { cookie } })).text()).toContain("SIN GUÍA");
     });
 
+    it("los avisos enlazan a Rutas y a Camiones; Nueva ruta pliega el presupuesto", async () => {
+      const cookie = await entrar();
+      const aviso = "Falta el valor referencial — complétalo en Ajustes › Rutas y presupuestos (valor referencial) o en Camiones › Datos (carga útil)";
+      const html = await (await app.request(`/viajes?error=${encodeURIComponent(aviso)}`, { headers: { cookie } })).text();
+      expect(html).toMatch(/class="aviso error"[^>]*>[^]*?<a href="\/rutas">Ajustes › Rutas y presupuestos<\/a>[^]*?<a href="\/camiones">Camiones › Datos<\/a>/);
+      const rutas = await (await app.request("/rutas", { headers: { cookie } })).text();
+      expect(rutas).toMatch(/<summary>[^<]*<span[^>]*>Poner cuánto debería costar \(opcional\)/);
+    });
+
     it("ajustes: hub con tarjetas según el rol", async () => {
       const cookie = await entrar();
       const html = await (await app.request("/ajustes", { headers: { cookie } })).text();
@@ -903,6 +912,25 @@ describe("web", () => {
       app = crearWeb(ctx, { servicios });
     });
     const claves = { SUNAT_SOL_USUARIO: "MODDATOS", SUNAT_SOL_CLAVE: "x", SUNAT_GRE_CLIENT_ID: "id", SUNAT_GRE_CLIENT_SECRET: "sec", SUNAT_CERT_PASSWORD: "c" };
+
+    it("las claves guardadas no muestran ni un carácter", async () => {
+      app = crearWeb(ctx, { servicios: { ...servicios, ajustes: () => ({
+        SUNAT_SOL_CLAVE: "clave-sol-QX7Z", SUNAT_GRE_CLIENT_SECRET: "secreto-WK4P", SUNAT_CERT_PASSWORD: "cert-JM2V",
+        TELEGRAM_BOT_TOKEN: "123456:AAAAAAAAAAAAAAAAAAAAAAAAAAAAHB8N", DEEPSEEK_API_KEY: "sk-abcdefRT5Y",
+      }) } });
+      const html = await (await app.request("/ajustes/dispositivo", { headers: { cookie: await entrar() } })).text();
+      for (const fin of ["QX7Z", "WK4P", "JM2V", "HB8N", "RT5Y", "••••"]) expect(html, fin).not.toContain(fin);
+      expect(html).toContain("guardada");
+    });
+
+    it("taller y contador no pueden cambiar la empresa ni el dispositivo", async () => {
+      for (const [email, rol] of [["taller@demo.pe", "taller"], ["conta@demo.pe", "contador"]] as const) {
+        await guardarUsuario(ctx, { nombre: rol, email, rol, clave: "clave-segura" });
+        const cookie = await entrar(email);
+        expect((await post(cookie, "/ajustes/empresa", { ruc: "20606433094", razonSocial: "X", direccion: "Y", ubigeo: "150101", registroMtc: "M" })).status, rol).toBe(403);
+        expect((await postForm(cookie, "/ajustes/dispositivo", { SUNAT_MODO: "simulado" })).status, rol).toBe(403);
+      }
+    });
 
     it("probar conexión sin certificado pide subirlo", async () => {
       const cookie = await entrar();

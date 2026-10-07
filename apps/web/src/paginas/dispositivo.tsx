@@ -18,9 +18,9 @@ const NOMBRE: Record<(typeof OBLIGATORIOS_REAL)[number], string> = {
   SUNAT_SOL_CLAVE: "la clave SOL", SUNAT_GRE_CLIENT_ID: "el client_id de la GRE", SUNAT_GRE_CLIENT_SECRET: "el client_secret de la GRE",
 };
 
-/** «••••1234»: se ve que hay algo guardado sin mostrarlo. */
-function oculto(v: string | undefined): string {
-  return v ? `guardado ••••${v.slice(-4)}` : "sin guardar";
+/** Solo dice si hay algo guardado: de un secreto no se muestra ni un carácter. */
+function oculto(v: string | undefined, guardado = "guardada"): string {
+  return v ? guardado : "sin guardar";
 }
 
 function EstadoBot(p: { e: EstadoServicios["bot"] }) {
@@ -71,12 +71,9 @@ async function vista(c: C, d: Deps, resultado?: ResultadoPruebaSunat, nota?: str
   const facturaAuto = await facturaAutomaticaActiva(d.ctx);
   return pagina(c, d, { titulo: "Este dispositivo", seccion: "ajustes" }, (
     <>
-      <Cabecera titulo="Este dispositivo y SUNAT" volver="/ajustes" />
-      <section class="panel oscuro" style="gap:6px">
-        <b class="mono-t" style="font-size:16px;color:var(--accent-on-dark)">AJUSTES DE ESTE DISPOSITIVO · {e.plataforma === "android" ? "CELULAR" : "PC"}</b>
-        <span style="font-size:12px">Son solo de este equipo y no se sincronizan (así el token del bot y las claves SUNAT viven en uno solo). Al guardar se aplican al momento, sin cerrar la app.
-          Se guardan en <code>{e.archivoAjustes}</code>.</span>
-      </section>
+      <Cabecera titulo="Este dispositivo y SUNAT" volver="/ajustes" sub={e.plataforma === "android" ? "Solo de este celular" : "Solo de esta PC"} />
+      <p class="muted" style="font-size:12px;margin:0">Son solo de este equipo y no se sincronizan (así el token del bot y las claves SUNAT viven en uno solo). Al guardar se aplican al momento, sin cerrar la app.
+        Se guardan en <code>{e.archivoAjustes}</code>.</p>
       <form method="post" action="/ajustes/dispositivo" enctype="multipart/form-data">
         <div class="grid g-lado" style="align-items:start">
           <div class="filas" style="gap:10px;min-width:0">
@@ -110,7 +107,7 @@ async function vista(c: C, d: Deps, resultado?: ResultadoPruebaSunat, nota?: str
               </div>
               <div class="linea">
                 <label class="campo" style="flex:1"><span>GRE client_id</span><input name="SUNAT_GRE_CLIENT_ID" value={a.SUNAT_GRE_CLIENT_ID ?? ""} autocomplete="off" /></label>
-                <label class="campo" style="flex:1"><span>GRE client_secret ({oculto(a.SUNAT_GRE_CLIENT_SECRET)})</span><input name="SUNAT_GRE_CLIENT_SECRET" type="password" autocomplete="off" /></label>
+                <label class="campo" style="flex:1"><span>GRE client_secret ({oculto(a.SUNAT_GRE_CLIENT_SECRET, "guardado")})</span><input name="SUNAT_GRE_CLIENT_SECRET" type="password" autocomplete="off" /></label>
               </div>
               <label class="campo"><span>Certificado digital .pfx ({a.SUNAT_CERT_PATH ? "cargado" : "sin cargar"})</span><input name="certificado" type="file" accept=".pfx,.p12,application/x-pkcs12" /></label>
               <label class="campo"><span>Clave del certificado ({oculto(a.SUNAT_CERT_PASSWORD)})</span><input name="SUNAT_CERT_PASSWORD" type="password" autocomplete="off" /></label>
@@ -144,7 +141,7 @@ async function vista(c: C, d: Deps, resultado?: ResultadoPruebaSunat, nota?: str
               {e.codigoRegistro && e.bot.estado === "en_linea" ? (
                 <div class="aviso info">Para registrarte como dueño en el bot, envíale este código desde tu Telegram: <b class="mono-t" style="font-size:18px">{e.codigoRegistro}</b></div>
               ) : null}
-              <label class="campo"><span>Token del bot ({oculto(a.TELEGRAM_BOT_TOKEN)}) · te lo da @BotFather</span>
+              <label class="campo"><span>Token del bot ({oculto(a.TELEGRAM_BOT_TOKEN, "guardado")}) · te lo da @BotFather</span>
                 <input name="TELEGRAM_BOT_TOKEN" type="password" autocomplete="off" placeholder={a.TELEGRAM_BOT_TOKEN ? "déjalo vacío para no cambiarlo" : "123456789:AA…"} />
               </label>
               {a.TELEGRAM_BOT_TOKEN ? (

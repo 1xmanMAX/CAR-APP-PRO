@@ -135,6 +135,32 @@ export interface PropsLayout {
   sinNavInferior?: boolean;
 }
 
+/** Lugares que un aviso puede nombrar («complétalo en Camiones › Datos»): se vuelven enlaces. */
+const LUGARES_AVISO: Array<[string, string]> = [
+  ["Ajustes › Rutas y presupuestos", "/rutas"],
+  ["Ajustes › Este dispositivo y SUNAT", "/ajustes/dispositivo"],
+  ["Camiones › Datos", "/camiones"],
+];
+
+/** El texto de un aviso con los lugares conocidos como enlaces (el resto va escapado, como siempre). */
+export function conEnlaces(texto: string): Child[] {
+  const partes: Child[] = [];
+  let resto = texto;
+  for (;;) {
+    let mejor: { i: number; nombre: string; href: string } | null = null;
+    for (const [nombre, href] of LUGARES_AVISO) {
+      const i = resto.indexOf(nombre);
+      if (i >= 0 && (!mejor || i < mejor.i)) mejor = { i, nombre, href };
+    }
+    if (!mejor) break;
+    if (mejor.i > 0) partes.push(resto.slice(0, mejor.i));
+    partes.push(<a href={mejor.href}>{mejor.nombre}</a>);
+    resto = resto.slice(mejor.i + mejor.nombre.length);
+  }
+  if (resto) partes.push(resto);
+  return partes;
+}
+
 export const Layout: FC<PropsWithChildren<PropsLayout>> = (p) => {
   const menu = menuDe(p.usuario.rol);
   const anota = tiposAnotar(p.usuario.rol).length > 0;
@@ -178,8 +204,8 @@ export const Layout: FC<PropsWithChildren<PropsLayout>> = (p) => {
             </div>
           </nav>
           <main class="contenido" id="contenido">
-            {p.ok ? <div class="aviso ok" role="status">{p.ok}</div> : null}
-            {p.error ? <div class="aviso error" role="alert">{p.error}</div> : null}
+            {p.ok ? <div class="aviso ok" role="status">{conEnlaces(p.ok)}</div> : null}
+            {p.error ? <div class="aviso error" role="alert">{conEnlaces(p.error)}</div> : null}
             {p.children}
           </main>
         </div>

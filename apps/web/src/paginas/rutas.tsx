@@ -102,7 +102,10 @@ async function vista(c: C, d: Deps) {
               <label class="campo" style="flex:1"><span>Destino *</span><input name="destino" required placeholder="Arequipa" /></label>
               <label class="campo" style="flex:1"><span>Sentido</span><select name="sentido"><option value="→">Solo ida (→)</option><option value="⇄">Ida y vuelta (⇄)</option></select></label>
             </div>
-            <CamposPlantilla categorias={categorias} valores={new Map()} />
+            <details class="plegable">
+              <summary><span class="btn chico fantasma">Poner cuánto debería costar (opcional)</span></summary>
+              <div style="margin-top:8px"><CamposPlantilla categorias={categorias} valores={new Map()} /></div>
+            </details>
             <button class="btn primario" type="submit">CREAR RUTA</button>
           </form>
         </Panel>

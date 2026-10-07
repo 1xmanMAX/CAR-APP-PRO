@@ -1,5 +1,5 @@
 /** @jsxRuntime automatic @jsxImportSource hono/jsx */
-import { chatAlertas, estadoBot, listarEventos, listarUnidades, partesConDesgaste } from "@sunatapp/core";
+import { chatAlertas, estadoBot, listarEventos, listarUnidades, partesConDesgaste, puedeVer } from "@sunatapp/core";
 import { pagina, type App, type C, type Deps } from "../base";
 import { FeedTelegram } from "./dashboard";
 import { Cabecera, Panel } from "../ui";
@@ -54,7 +54,7 @@ async function vista(c: C, d: Deps) {
               <span class="muted" style="font-size:12px">{bot.ultimo ? `Último latido: ${new Date(bot.ultimo).toLocaleString("es-PE", { timeZone: "America/Lima" })}` : "El bot todavía no se ha conectado."}</span>
             </div>
             {!bot.enLinea ? (
-              <div class="aviso info">Para encenderlo pon <b>TELEGRAM_BOT_TOKEN</b> en el archivo <code>.env</code> y ejecuta <code>pnpm app</code>. Las alertas y avisos que se generen mientras tanto quedan en cola y se envían al conectarse.</div>
+              <div class="aviso info">Para encender el bot, pon su token en {puedeVer(c.get("usuario").rol, "ajustes") ? <a href="/ajustes/dispositivo">Ajustes › Este dispositivo y SUNAT</a> : "Ajustes › Este dispositivo y SUNAT (lo hace el dueño)"}. Las alertas y avisos de mientras tanto quedan en cola y se envían al conectarse.</div>
             ) : null}
             <span class="muted" style="font-size:12px">Alertas al {chat ? <>grupo <code>{chat}</code></> : "dueño por mensaje privado"}. {chat ? null : <>Para usar un grupo: agrega el bot al grupo del equipo y escribe <b>/grupo</b> allí.</>}</span>
           </Panel>

@@ -22,16 +22,16 @@ type DatosAjustes = Awaited<ReturnType<typeof cargar>>;
 function PanelUsuarios(x: DatosAjustes): Child {
   const { usuarios, yo } = x;
   return (
-    <Panel titulo="USUARIOS Y ROLES">
-      <div class="tabla-wrap"><table class="t">
+    <Panel>
+      <div class="tabla-wrap"><table class="t t-tarjetas">
         <thead><tr><th>Nombre</th><th>Correo</th><th>Rol</th><th>Telegram</th><th>Web</th><th>Editar</th></tr></thead>
         <tbody>{usuarios.map((u) => (
           <tr>
             <td><b>{u.nombre}</b>{!u.activo ? <span class="chip neutro" style="margin-left:4px">INACTIVO</span> : null}</td>
-            <td>{u.email ?? "—"}</td><td>{NOMBRE_ROL[u.rol]}</td>
-            <td>{u.telegramId ? <span class="chip tg">{u.telegramNombre ?? u.telegramId}</span> : "—"}</td>
-            <td>{u.tieneClave ? "✓" : "—"}</td>
-            <td>
+            <td data-etq="Correo">{u.email ?? "—"}</td><td data-etq="Rol">{NOMBRE_ROL[u.rol]}</td>
+            <td data-etq="Telegram">{u.telegramId ? <span class="chip tg">{u.telegramNombre ?? u.telegramId}</span> : "—"}</td>
+            <td data-etq="Entra a la web">{u.tieneClave ? "✓" : "—"}</td>
+            <td class="t-acciones">
               <details class="plegable"><summary><span class="btn chico">EDITAR</span></summary>
                 <form method="post" action={`/ajustes/usuario/${u.id}`} class="filas" style="margin-top:6px;min-width:240px">
                   <label class="campo"><span>Nombre</span><input name="nombre" value={u.nombre} required /></label>
@@ -65,7 +65,7 @@ function PanelUsuarios(x: DatosAjustes): Child {
 function PanelEmpresa(x: DatosAjustes): Child {
   const { emp, d } = x;
   return (
-    <Panel titulo="EMPRESA" id="empresa" der={emp ? null : <span class="lbl">SE PIDE AL EMITIR GUÍAS Y FACTURAS</span>}>
+    <Panel id="empresa">
       {emp ? null : <span class="muted" style="font-size:12px">Todavía no hace falta: complétalo cuando vayas a emitir tu primera guía o factura. Queda guardado aquí.</span>}
       <form method="post" action="/ajustes/empresa" class="filas">
         <label class="campo"><span>RUC</span><input name="ruc" required inputmode="numeric" maxlength={11} pattern="\d{11}" value={emp?.ruc ?? ""} /></label>
@@ -89,16 +89,16 @@ function PanelEmpresa(x: DatosAjustes): Child {
 function PanelCostosFijos(x: DatosAjustes): Child {
   const { fijos, categorias, unidades } = x;
   return (
-    <Panel titulo="COSTOS FIJOS · SE CARGAN SOLOS CADA MES" der={<span class="lbl">EL ANUAL SE REPARTE 1/12 POR MES · LAS CUOTAS DE PRÉSTAMO ENTRAN SOLAS</span>}>
+    <Panel>
       {fijos.length ? (
-        <div class="tabla-wrap"><table class="t">
+        <div class="tabla-wrap"><table class="t t-tarjetas">
           <thead><tr><th>Concepto</th><th>Categoría</th><th>Unidad</th><th class="num">Monto</th><th>Cada</th><th>Desde</th><th></th></tr></thead>
           <tbody>{fijos.map((f) => (
             <tr>
               <td><b>{f.concepto}</b>{!f.activo ? <span class="chip neutro" style="margin-left:4px">INACTIVO</span> : null}</td>
-              <td>{nombreCategoria(f.categoria, categorias)}</td><td>{f.unidad ?? "General"}</td><td class="num">{soles2(f.monto)}</td>
-              <td>{f.periodicidad === "anual" ? "año (1/12 por mes)" : "mes"}</td><td>{f.desde}</td>
-              <td><details class="plegable"><summary><span class="btn chico">EDITAR</span></summary>
+              <td data-etq="Categoría">{nombreCategoria(f.categoria, categorias)}</td><td data-etq="Unidad">{f.unidad ?? "General"}</td><td class="num" data-etq="Monto">{soles2(f.monto)}</td>
+              <td data-etq="Cada">{f.periodicidad === "anual" ? "año (1/12 por mes)" : "mes"}</td><td data-etq="Desde">{f.desde}</td>
+              <td class="t-acciones"><details class="plegable"><summary><span class="btn chico">EDITAR</span></summary>
                 <form method="post" action={`/ajustes/costo-fijo/${f.id}`} class="filas" style="margin-top:6px;min-width:200px">
                   <label class="campo"><span>Monto S/</span><input name="monto" inputmode="decimal" value={(f.monto / 100).toFixed(2)} /></label>
                   <label class="campo" style="flex-direction:row;gap:6px;align-items:center"><input type="checkbox" name="activo" value="1" checked={f.activo} style="width:auto;min-height:0" /><span style="text-transform:none">Activo</span></label>
@@ -124,7 +124,7 @@ function PanelCostosFijos(x: DatosAjustes): Child {
 function PanelCategorias(x: DatosAjustes): Child {
   const { categorias } = x;
   return (
-    <Panel titulo="CATEGORÍAS DE GASTO" der={<span class="lbl">VARIABLE = DEL VIAJE · FIJO = DEL MES</span>}>
+    <Panel>
       <div class="tabla-wrap"><table class="t">
         <thead><tr><th>Nombre</th><th>Tipo</th><th></th></tr></thead>
         <tbody>{categorias.map((k) => (
@@ -143,48 +143,43 @@ function PanelCategorias(x: DatosAjustes): Child {
     </Panel>
   );
 }
+/** Una parte del catálogo: en la PC una fila (con títulos arriba); en el celular una tarjeta con la etiqueta sobre cada casilla. */
+function FilaParte(p: { t?: DatosAjustes["tipos"][number] }) {
+  const t = p.t;
+  const zonas = Object.keys(ZONAS) as ZonaModelo[];
+  return (
+    <form method="post" action={t ? `/ajustes/parte/${t.id}` : "/ajustes/parte"} class={`fila-parte${t ? "" : " nueva"}`}>
+      <label class="campo c-nombre"><span>Parte</span><input name="nombre" value={t?.nombre ?? ""} required={!t} placeholder={t ? undefined : "Nombre de la parte"} /></label>
+      <label class="campo c-zona"><span>Zona del modelo 3D</span><select name="zona">{zonas.map((z) => <option value={z} selected={z === t?.zona}>{ZONAS[z]}</option>)}</select></label>
+      <label class="campo"><span>Km</span><input name="vidaKm" value={t?.vidaKm ?? ""} inputmode="numeric" /></label>
+      <label class="campo"><span>Viajes</span><input name="vidaViajes" value={t?.vidaViajes ?? ""} inputmode="numeric" /></label>
+      <label class="campo"><span>Días</span><input name="vidaDias" value={t?.vidaDias ?? ""} inputmode="numeric" /></label>
+      <button class={`btn chico${t ? "" : " primario"}`} type="submit">{t ? "GUARDAR" : "AGREGAR"}</button>
+    </form>
+  );
+}
 function PanelPartes(x: DatosAjustes): Child {
   const { tipos } = x;
   return (
-    <Panel titulo="CATÁLOGO DE PARTES · VIDA ÚTIL POR DEFECTO" der={<span class="lbl">MANDA EL CONTADOR QUE SE CUMPLA PRIMERO · VACÍO = NO APLICA</span>}>
-      <div class="tabla-wrap"><table class="t">
-        <thead><tr><th>Parte</th><th>Zona del modelo 3D</th><th class="num">Km</th><th class="num">Viajes</th><th class="num">Días</th><th></th></tr></thead>
-        <tbody>{tipos.map((t) => (
-          <tr>
-            <td colspan={6} style="padding:4px 8px">
-              <form method="post" action={`/ajustes/parte/${t.id}`} class="linea" style="align-items:center">
-                <input name="nombre" value={t.nombre} aria-label="Nombre" style="flex:3;min-width:180px" />
-                <select name="zona" aria-label="Zona" style="flex:2;min-width:150px">{(Object.keys(ZONAS) as ZonaModelo[]).map((z) => <option value={z} selected={z === t.zona}>{ZONAS[z]}</option>)}</select>
-                <input name="vidaKm" value={t.vidaKm ?? ""} inputmode="numeric" aria-label="Vida en km" placeholder="km" style="flex:1;min-width:90px" />
-                <input name="vidaViajes" value={t.vidaViajes ?? ""} inputmode="numeric" aria-label="Vida en viajes" placeholder="viajes" style="flex:1;min-width:70px" />
-                <input name="vidaDias" value={t.vidaDias ?? ""} inputmode="numeric" aria-label="Vida en días" placeholder="días" style="flex:1;min-width:70px" />
-                <button class="btn chico" type="submit">GUARDAR</button>
-              </form>
-            </td>
-          </tr>
-        ))}</tbody>
-      </table></div>
+    <Panel>
+      <div class="lista-partes">
+        <div class="fila-parte cab" aria-hidden="true"><span>Parte</span><span>Zona del modelo 3D</span><span>Km</span><span>Viajes</span><span>Días</span><span></span></div>
+        {tipos.map((t) => <FilaParte t={t} />)}
+      </div>
       <details class="plegable"><summary><span class="btn chico fantasma">+ NUEVA PARTE</span></summary>
-        <form method="post" action="/ajustes/parte" class="linea" style="margin-top:8px">
-          <input name="nombre" required placeholder="Nombre de la parte" aria-label="Nombre" style="flex:3" />
-          <select name="zona" aria-label="Zona" style="flex:2">{(Object.keys(ZONAS) as ZonaModelo[]).map((z) => <option value={z}>{ZONAS[z]}</option>)}</select>
-          <input name="vidaKm" inputmode="numeric" placeholder="km" aria-label="Vida en km" style="flex:1" />
-          <input name="vidaViajes" inputmode="numeric" placeholder="viajes" aria-label="Vida en viajes" style="flex:1" />
-          <input name="vidaDias" inputmode="numeric" placeholder="días" aria-label="Vida en días" style="flex:1" />
-          <button class="btn primario chico" type="submit">AGREGAR</button>
-        </form>
+        <div style="margin-top:8px"><FilaParte /></div>
       </details>
       <span class="muted" style="font-size:12px">Ejemplo actual: frenos del semirremolque {miles(tipos.find((t) => t.codigo === "frenos_sr")?.vidaKm)} km. Los valores iniciales son de ejemplo: ajústalos a tu experiencia. Cada parte instalada puede tener su propia vida útil (desde Trailer 3D).</span>
     </Panel>
   );
 }
 
-const SUBPAGINAS: Record<string, { titulo: string; panel: (x: DatosAjustes) => Child; angosto?: boolean }> = {
-  empresa: { titulo: "Empresa", panel: PanelEmpresa, angosto: true },
+const SUBPAGINAS: Record<string, { titulo: string; panel: (x: DatosAjustes) => Child; angosto?: boolean; sub?: string }> = {
+  empresa: { titulo: "Empresa", panel: PanelEmpresa, angosto: true, sub: "Se pide al emitir guías y facturas" },
   usuarios: { titulo: "Usuarios", panel: PanelUsuarios },
-  "costos-fijos": { titulo: "Costos fijos", panel: PanelCostosFijos },
-  categorias: { titulo: "Categorías de gasto", panel: PanelCategorias, angosto: true },
-  partes: { titulo: "Catálogo de partes", panel: PanelPartes },
+  "costos-fijos": { titulo: "Costos fijos", panel: PanelCostosFijos, sub: "Se cargan solos cada mes. El anual se reparte 1/12 por mes; las cuotas de préstamo entran solas." },
+  categorias: { titulo: "Categorías de gasto", panel: PanelCategorias, angosto: true, sub: "Variable = del viaje · Fijo = del mes" },
+  partes: { titulo: "Catálogo de partes", panel: PanelPartes, sub: "Vida útil por defecto. Manda el contador que se cumpla primero; vacío = no aplica." },
 };
 type Sub = "empresa" | "usuarios" | "costos-fijos" | "categorias" | "partes";
 
@@ -192,7 +187,7 @@ async function subpagina(c: C, d: Deps, sub: Sub) {
   const s = SUBPAGINAS[sub]!;
   return pagina(c, d, { titulo: s.titulo, seccion: "ajustes" }, (
     <>
-      <Cabecera titulo={s.titulo} volver="/ajustes" />
+      <Cabecera titulo={s.titulo} volver="/ajustes" sub={s.sub} />
       {s.angosto ? <div class="ajustes-angosto">{s.panel(await cargar(c, d))}</div> : s.panel(await cargar(c, d))}
     </>
   ));
@@ -222,7 +217,7 @@ async function hub(c: C, d: Deps) {
       <div class="hub">
         {tarjetas.map((t) => <a class="tarjeta-hub" href={t.href}><b>{t.titulo}</b><span class="muted">{t.sub}</span><span class="flecha" aria-hidden="true">›</span></a>)}
       </div>
-      <section class="panel">
+      <section class="panel solo-movil">
         <div class="fila-sep">
           <span>Entraste como <b>{u.nombre}</b> · {NOMBRE_ROL[u.rol]}</span>
           <div class="acciones">

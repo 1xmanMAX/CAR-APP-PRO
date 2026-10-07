@@ -550,6 +550,29 @@ a.fila-toca:hover { background: var(--accent-softer); }
 .sin-gap .tarjeta-hub > * + * { margin-top: 4px; }
 /* Formularios cortos (Empresa, Categorías): en la PC no se estiran a todo el ancho. */
 .ajustes-angosto { max-width: 760px; }
+/* Catálogo de partes: fila en la PC, tarjeta con etiquetas en el celular. */
+.lista-partes { border: 1px solid var(--divider); border-radius: 4px; }
+.fila-parte { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr) repeat(3, minmax(0, 1fr)) auto; gap: 8px; align-items: end; padding: 6px 8px; border-bottom: 1px solid var(--divider); }
+.lista-partes > .fila-parte:last-child { border-bottom: 0; }
+.fila-parte.nueva { border: 0; padding: 0; }
+.fila-parte:not(.nueva) .campo > span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.fila-parte.cab { background: var(--panel-alt); padding: 8px; }
+.fila-parte.cab span { font-size: 12px; letter-spacing: .06em; color: var(--muted); font-weight: 600; text-transform: uppercase; }
+/* Tablas que en el celular se vuelven tarjetas (Usuarios, Costos fijos): cada dato con su etiqueta y el botón a la vista. */
+@media (max-width: 599.98px) {
+  table.t-tarjetas thead { display: none; }
+  table.t-tarjetas, table.t-tarjetas tbody, table.t-tarjetas tr, table.t-tarjetas td { display: block; width: 100%; }
+  table.t-tarjetas tr { padding: 10px 12px; border-bottom: 1px solid var(--divider); }
+  table.t-tarjetas tr:last-child { border-bottom: 0; }
+  table.t-tarjetas td, table.t-tarjetas td.num { border: 0; padding: 2px 0; text-align: left; }
+  table.t-tarjetas td[data-etq]::before { content: attr(data-etq) ": "; color: var(--muted); font-size: 12px; }
+  table.t-tarjetas td.t-acciones { padding-top: 8px; }
+  table.t-tarjetas td.t-acciones form { min-width: 0 !important; }
+  .fila-parte { grid-template-columns: repeat(3, minmax(0, 1fr)); padding: 10px 12px; gap: 6px 8px; }
+  .fila-parte .c-nombre, .fila-parte .c-zona, .fila-parte .btn { grid-column: 1 / -1; }
+  .fila-parte:not(.nueva) .campo > span { position: static; width: auto; height: auto; overflow: visible; clip: auto; white-space: normal; }
+  .fila-parte.cab { display: none; }
+}
 .sin-gap .pagina > * + *, .sin-gap .panel > * + *, .sin-gap .filas > * + * { margin-top: 10px; }
 .sin-gap .header > * + *, .sin-gap .header .datos > * + *, .sin-gap .acciones > * + *, .sin-gap .nav a + a,
 .sin-gap .form-grid > *, .sin-gap form.linea > * + *, .sin-gap .usuario-menu > * + * { margin-left: 12px; }

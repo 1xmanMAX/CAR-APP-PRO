@@ -65,6 +65,10 @@ async function vista(c: C, d: Deps) {
   // Lo mismo que «Dejó» en la lista: flete − gastos del viaje. Los fijos del mes van en «Ver más».
   const deja = l.ganancia;
   const margen = l.margenPct;
+  // «Flete − gastos» tiene que dar la cifra grande: si en soles enteros no cuadra por el redondeo, van con céntimos.
+  const enteros = (x: number) => Math.round(x / 100);
+  const cuadra = deja === null || enteros(l.flete) - enteros(l.gastado) === enteros(deja);
+  const plata = cuadra ? soles : soles2;
   const porCobrar = cobros.filas.filter((f) => fila?.facturas.includes(f.serieNumero));
   const top = [...l.lineas].sort((a, b) => b.real - a.real).slice(0, 3);
   const maxLinea = Math.max(1, ...top.map((x) => Math.max(x.real, x.presupuesto)));
@@ -87,7 +91,7 @@ async function vista(c: C, d: Deps) {
             ) : (
               <>
                 <b class={`cifra-grande${deja < 0 ? " neg" : ""}`}>{soles(deja)}</b>
-                <span class="sub">Flete {soles(l.flete)} − gastos {soles(l.gastado)}{margen !== null ? <span class="nowrap"> · margen {margen}%</span> : null}</span>
+                <span class="sub">Flete {plata(l.flete)} − gastos {plata(l.gastado)}{margen !== null ? <span class="nowrap"> · margen {margen}%</span> : null}</span>
               </>
             )}
           </section>

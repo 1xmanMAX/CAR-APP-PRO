@@ -709,6 +709,20 @@ describe("web", () => {
       expect(datos.repuestosPieza["retrovisor-der"]).toEqual([expect.objectContaining({ id, stock: 0 })]);
     });
 
+    it("detalle del viaje: «Flete − gastos» cuadra con lo que deja (con céntimos si el redondeo no cuadra)", async () => {
+      const cookie = await entrar();
+      const v = await registrarViajeFlota(ctx, { vehiculoId: 1, origenLugar: "Yura", destinoLugar: "Puno", estado: "cerrado", km: 300, flete: 350040, origen: "web" });
+      await registrarGasto(ctx, { viajeId: v.id, categoria: "combustible", monto: 64055, origen: "web" });
+      let html = await (await app.request(`/viajes/${v.id}`, { headers: { cookie } })).text();
+      expect(html).toContain("S/ 2,860</b>");
+      expect(html).toContain("Flete S/ 3,500.40 − gastos S/ 640.55");
+      // Si en soles enteros ya cuadra, se queda sin céntimos.
+      const w = await registrarViajeFlota(ctx, { vehiculoId: 1, origenLugar: "Yura", destinoLugar: "Cusco", estado: "cerrado", km: 300, flete: 350000, origen: "web" });
+      await registrarGasto(ctx, { viajeId: w.id, categoria: "combustible", monto: 64000, origen: "web" });
+      html = await (await app.request(`/viajes/${w.id}`, { headers: { cookie } })).text();
+      expect(html).toContain("Flete S/ 3,500 − gastos S/ 640");
+    });
+
     it("viajes: en ruta arriba, lista del mes y el detalle con todo del viaje", async () => {
       const cookie = await entrar();
       const cerrado = await registrarViajeFlota(ctx, { vehiculoId: 1, origenLugar: "Arequipa", destinoLugar: "Juliaca", estado: "cerrado", km: 300, flete: 320000, origen: "web" });

@@ -110,7 +110,7 @@ export async function editarGasto(
   const [antes] = await ctx.db.select().from(gasto).where(eq(gasto.id, id));
   if (!antes) throw new ErrorNegocio("El gasto no existe");
   const [r] = await ctx.db.select({ id: reparacion.id }).from(reparacion).where(eq(reparacion.gastoId, id));
-  if (r && (e.monto !== undefined || e.categoria !== undefined)) throw new ErrorNegocio("Este gasto viene de un cambio de parte: corrígelo en Reparaciones");
+  if (r && (e.monto !== undefined || e.categoria !== undefined)) throw new ErrorNegocio("Este gasto viene de un cambio de parte: su monto se ve y se anota en Camiones › Historial");
   await ctx.db.update(gasto).set({ ...e, editadoEn: ctx.reloj() }).where(eq(gasto.id, id));
   await registrarAuditoria(ctx.db, { usuarioId, accion: "gasto_editado", entidad: "gasto", entidadId: id, detalle: { antes, cambios: e } });
 }

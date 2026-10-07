@@ -404,7 +404,7 @@ async function terminarCambio(c: ContextoBot, deps: Dependencias, texto: string)
 
 // ── /compra ──────────────────────────────────────────────────────────────────
 
-const USO_COMPRA = "Uso: /compra REP-014 6 180 [proveedor]\n(código del repuesto, cantidad, costo unitario en soles). Los códigos están en Inventario de la web.";
+const USO_COMPRA = "Uso: /compra REP-014 6 180 [proveedor]\n(código del repuesto, cantidad, costo unitario en soles). Los códigos están en la web, en Camiones › Repuestos.";
 
 async function comandoCompra(c: ContextoBot, deps: Dependencias, texto: string): Promise<void> {
   const [codigo, cant, costo, ...prov] = texto.trim().split(/\s+/);
@@ -416,7 +416,7 @@ async function comandoCompra(c: ContextoBot, deps: Dependencias, texto: string):
   }
   const rep = await buscarRepuestoPorCodigo(deps.ctx, codigo);
   if (!rep) {
-    await c.reply(`No encontré el repuesto ${codigo}. Créalo primero en Inventario (web).`);
+    await c.reply(`No encontré el repuesto ${codigo}. Créalo primero en la web, en Camiones › Repuestos.`);
     return;
   }
   try {

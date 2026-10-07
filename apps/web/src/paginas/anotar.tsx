@@ -361,7 +361,8 @@ async function parteRepare(c: C, d: Deps, q: Q): Promise<PartesForm> {
   if (!unidad) return { modos, campos: null, soloMensaje: <div class="lista-filas"><Vacio>Primero agrega un camión.</Vacio></div> };
   const partes = await partesDeUnidad(ctx, unidad.id);
   const piezas = piezasDeSemirremolque(unidad.semirremolque);
-  // Si llegó una pieza (desde el 3D) y el camión tiene una parte instalada ahí, su contador se reinicia solo.
+  // Si llegó una pieza (desde el 3D) y el camión tiene una parte instalada ahí, queda elegida; su contador
+  // solo se reinicia si se marca «Cambié la pieza por una nueva» (un arreglo no la vuelve nueva).
   const piezaPedida = pieza(q.pieza);
   const parteSel = num(q.parteId) ?? (piezaPedida ? partesDePieza(piezaPedida, partes)[0]?.id ?? null : null);
   const parteReinicia = partes.find((p) => p.id === parteSel);
@@ -388,14 +389,20 @@ async function parteRepare(c: C, d: Deps, q: Q): Promise<PartesForm> {
         </label>
         <label class="campo"><span>¿Qué se hizo?</span><input name="trabajo" maxlength={200} placeholder="Parchado, cambio…" /></label>
         <CampoPlata nombre="manoObra" etiqueta="Mano de obra (si hubo)" />
+        <input type="hidden" name="casillaReinicia" value="1" />
+        {partes.length ? (
+          <label class="opcion-fila"><input type="checkbox" name="reinicia" value="1" /><span>{parteReinicia
+            ? `Cambié la pieza por una nueva (reinicia el contador de ${parteReinicia.nombre})`
+            : "Cambié una parte por una nueva (elige cuál en «cambiar»; su contador vuelve a 0)"}</span></label>
+        ) : null}
       </>
     ),
     solo: {
-      texto: unir([unidad.codigo, `hoy ${ahora(d)}`, `${miles(unidad.odometroKm)} km`, parteReinicia && `Se reinicia el contador de ${parteReinicia.nombre}`]),
+      texto: unir([unidad.codigo, `hoy ${ahora(d)}`, `${miles(unidad.odometroKm)} km`]),
       cambiar: (
         <>
-          <label class="campo"><span>¿Reinicia el contador de una parte?</span>
-            <select name="parteId"><option value="">— no —</option>{partes.map((p) => <option value={p.id} selected={p.id === parteSel}>{p.nombre} · {p.pct}% (vuelve a 0)</option>)}</select>
+          <label class="campo"><span>Si la cambiaste por una nueva, ¿qué parte era?</span>
+            <select name="parteId"><option value="">— ninguna —</option>{partes.map((p) => <option value={p.id} selected={p.id === parteSel}>{p.nombre} · {p.pct}% (vuelve a 0)</option>)}</select>
           </label>
           <label class="campo"><span>Repuesto del stock</span>
             <select name="repuestoId"><option value="">— ninguno —</option>{repuestos.filter((r) => r.stock > 0).map((r) => <option value={r.id}>{r.codigo} · {r.nombre} (hay {r.stock})</option>)}</select>
@@ -577,7 +584,9 @@ async function guardarAnotacion(d: Deps, u: UsuarioWeb, tipo: TipoAnotar, f: Cam
         if (!puedeEditar(u.rol, "inventario")) throw new ErrorNegocio("Tu rol no puede registrar compras");
         return guardarCompra(d, u.id, f);
       }
-      return (await guardarCambio(d, u.id, f, f.tipoReparacion, { algo: true })).ok;
+      // Con la casilla en el formulario, la parte solo se reinicia si se marcó «Cambié la pieza por una nueva».
+      const campos = f.casillaReinicia === "1" && f.reinicia !== "1" ? { ...f, parteId: "" } : f;
+      return (await guardarCambio(d, u.id, campos, f.tipoReparacion, { algo: true })).ok;
     }
     case "empresa":
       return guardarGastoEmpresa(d, u.id, f, archivos.foto);

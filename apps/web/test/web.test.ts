@@ -403,7 +403,17 @@ describe("web", () => {
         const [idPieza] = piezasDeTipo(aceite);
         const html = await (await app.request(`/anotar?tipo=repare&vehiculoId=${t01.id}&pieza=${idPieza}`, { headers: { cookie } })).text();
         expect(html).toMatch(new RegExp(`<option value="${p!.id}" selected`));
-        expect(html).toContain(`Se reinicia el contador de ${p!.nombre}`);
+        // La casilla se ve y empieza sin marcar: un arreglo en la pieza no reinicia el contador a escondidas.
+        expect(html).toContain(`Cambié la pieza por una nueva (reinicia el contador de ${p!.nombre})`);
+        expect(html).toMatch(/<input type="checkbox" name="reinicia" value="1"\s*\/?>/);
+        const base = { tipo: "repare", volver: "/", vehiculoId: String(t01.id), componente: idPieza!, parteId: String(p!.id), casillaReinicia: "1", trabajo: "Revisión" };
+        expect(aviso(await enviar(cookie, base))).toContain("ok=");
+        let [rep] = await listarReparaciones(ctx, { vehiculoId: t01.id });
+        expect(rep).toMatchObject({ parte: null, desgastePct: null });
+        expect(aviso(await enviar(cookie, { ...base, reinicia: "1", trabajo: "Cambio" }))).toContain("ok=");
+        [rep] = await listarReparaciones(ctx, { vehiculoId: t01.id });
+        expect(rep!.parte).not.toBeNull();
+        expect(rep!.desgastePct).not.toBeNull();
       });
 
       it("una cuota vencida se ve en rojo con los días", async () => {
@@ -714,6 +724,26 @@ describe("web", () => {
         expect(x.status, de).toBe(302);
         expect(x.headers.get("location"), de).toBe(a);
       }
+    });
+
+    it("camiones: historial dice si se cambió a tiempo y deja ver todos; repuestos guarda lo de inventario", async () => {
+      const cookie = await entrar();
+      const t01 = (await buscarUnidad(ctx, "T-01"))!;
+      const aceite = (await listarTiposParte(ctx)).find((t) => t.codigo === "aceite")!;
+      await instalarParte(ctx, { vehiculoId: t01.id, tipoParteId: aceite.id });
+      const [p] = await partesDeUnidad(ctx, t01.id);
+      await post(cookie, "/reparaciones", { vehiculoId: String(t01.id), parteId: String(p!.id), tipo: "preventivo", manoObra: "150" });
+      const hist = await (await app.request(`/camiones/${t01.id}?tab=historial`, { headers: { cookie } })).text();
+      expect(hist).toMatch(/Cambiada al \d+%/);
+      expect(hist).toContain("entre 80% y 95%");
+      expect(hist).toContain(`/camiones/${t01.id}?tab=historial&amp;todos=1`);
+      const todos = await (await app.request(`/camiones/${t01.id}?tab=historial&todos=1`, { headers: { cookie } })).text();
+      expect(todos).toContain("Todos los camiones");
+      const reps = await (await app.request(`/camiones/${t01.id}?tab=repuestos`, { headers: { cookie } })).text();
+      for (const t of ["Plata por categoría", "Compras por Telegram"]) expect(reps, t).toContain(t);
+      // Desde la pieza del 3D, al guardar se vuelve al camión con la pieza elegida.
+      const pz = await (await app.request(`/camiones/${t01.id}?pieza=faro-der`, { headers: { cookie } })).text();
+      expect(pz).toContain(`name="volver" id="pieza-volver" value="/camiones/${t01.id}?pieza=faro-der"`);
     });
 
     it("el contador no entra a Camiones", async () => {

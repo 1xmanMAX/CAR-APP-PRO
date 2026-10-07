@@ -2,7 +2,7 @@
 import type { FC } from "hono/jsx";
 import { raw } from "hono/html";
 import {
-  CATEGORIAS_REPUESTO, datosSunatVehiculo, GRUPOS_PIEZA, listarCompras, listarReparaciones, listarRepuestos, listarTiposParte, listarUnidades,
+  CATEGORIAS_REPUESTO, datosSunatVehiculo, etiquetaCambio, GRUPOS_PIEZA, listarCompras, listarReparaciones, listarRepuestos, listarTiposParte, listarUnidades,
   partesDePieza, partesDeUnidad, piezasDeSemirremolque, puedeEditar, repuestosDePieza, resumirInventario, TIPOS_REPARACION, TIPOS_SEMIRREMOLQUE, ZONAS,
   type EstadoUnidad, type GrupoPieza, type ParteConDesgaste, type TipoSemirremolque, type Unidad,
 } from "@sunatapp/core";
@@ -35,9 +35,9 @@ function Contador(p: { etiqueta: string; uso: number; vida: number | null; unida
 /** El visor 3D de siempre (mismos ids que espera public/trailer3d.js). */
 const Visor: FC<{ unidad: Unidad; piezas: number; sel: ParteConDesgaste | null }> = ({ unidad, piezas, sel }) => (
   <div class="visor" id="visor">
-    <canvas role="img" aria-label={`Modelo 3D de ${unidad.codigo}: cada pieza va por separado y su color es el desgaste. Arrastra para girar, pellizca para acercar, toca una pieza para ver su historial.`}></canvas>
+    <canvas role="img" aria-label={`Modelo 3D de ${unidad.placa}: cada pieza va por separado y su color es el desgaste. Arrastra para girar, pellizca para acercar, toca una pieza para ver su historial.`}></canvas>
     <div class="cab">
-      <span class="visor-titulo">{unidad.codigo} · {TIPOS_SEMIRREMOLQUE[unidad.semirremolque]} · {piezas} piezas</span>
+      <span class="visor-titulo">{unidad.placa} <span class="visor-sub">{unidad.codigo} · {TIPOS_SEMIRREMOLQUE[unidad.semirremolque]} · {piezas} piezas</span></span>
       <div class="der">
         <button class="btn chico solo-pc" id="btn-izq" type="button" aria-label="Girar a la izquierda">&lt;</button>
         <button class="btn chico solo-pc" id="btn-der" type="button" aria-label="Girar a la derecha">&gt;</button>
@@ -78,10 +78,13 @@ async function vista(c: C, d: Deps) {
   const editaFlota = puedeEditar(u.rol, "flota");
   const editaInv = puedeEditar(u.rol, "inventario");
   const aqui = `/camiones/${unidad.id}`;
-  const [partes, historial, repuestos, tipos, sunat, compras] = await Promise.all([
+  const todos = c.req.query("todos") === "1";
+  const [partes, historial, repuestos, tipos, sunat, compras, comprasTg, deTodos] = await Promise.all([
     partesDeUnidad(ctx, unidad.id), listarReparaciones(ctx, { vehiculoId: unidad.id, limite: 400 }), listarRepuestos(ctx), listarTiposParte(ctx),
-    datosSunatVehiculo(ctx, unidad.id), listarCompras(ctx, { limite: 8 }),
+    datosSunatVehiculo(ctx, unidad.id), listarCompras(ctx, { limite: 8 }), listarCompras(ctx, { origen: "telegram", limite: 6 }),
+    todos && tab === "historial" ? listarReparaciones(ctx, { limite: 60 }) : Promise.resolve(null),
   ]);
+  const historialVer = deTodos ?? historial;
   const PIEZAS = piezasDeSemirremolque(unidad.semirremolque);
   const piezaSel = PIEZAS.find((p) => p.id === c.req.query("pieza")) ?? null;
   const parteSel = partes.find((p) => p.id === Number(c.req.query("parte"))) ?? null;
@@ -115,6 +118,7 @@ async function vista(c: C, d: Deps) {
   const deFrente = ordenadas.slice(0, PARTES_DE_FRENTE);
   const resto = ordenadas.slice(PARTES_DE_FRENTE);
   const inventario = resumirInventario(repuestos);
+  const maxCategoria = Math.max(1, ...inventario.porCategoria.map((x) => x.monto));
 
   const tabToca = (
     <div class="col">
@@ -169,22 +173,38 @@ async function vista(c: C, d: Deps) {
 
   const tabHistorial = (
     <div class="col">
+      <nav class="segmentos chicos" aria-label="De qué camión">
+        <a href={`${aqui}?tab=historial`} class={todos ? undefined : "activo"} aria-current={todos ? undefined : "page"}>Este camión</a>
+        <a href={`${aqui}?tab=historial&todos=1`} class={todos ? "activo" : undefined} aria-current={todos ? "page" : undefined}>Todos los camiones</a>
+      </nav>
+      <span class="muted">Al cambiar una parte, lo ideal es que tenga entre 80% y 95% de desgaste.</span>
       <div class="lista-filas">
-        {historial.length === 0 ? <Vacio>Todavía no hay arreglos de este camión.</Vacio> : historial.slice(0, 60).map((h) => (
-          <div class="fila-historial">
-            <div class="fila-sep"><b>{fechaMedia(h.fecha)}</b><span>{h.costoTotal ? soles2(h.costoTotal) : "sin costo"}</span></div>
-            <span>{h.trabajo}</span>
-            <span class="muted">{[TIPOS_REPARACION[h.tipo], h.pieza, h.parte, h.taller, h.odometro ? `${miles(h.odometro)} km` : null].filter(Boolean).join(" · ")}</span>
-            {h.componente ? <a class="ver-mas" href={`${aqui}?pieza=${h.componente}`}>Ver en el 3D</a> : null}
-          </div>
-        ))}
+        {historialVer.length === 0 ? <Vacio>Todavía no hay arreglos{todos ? "" : " de este camión"}.</Vacio> : historialVer.slice(0, 60).map((h) => {
+          const e = h.desgastePct === null ? null : etiquetaCambio(h.desgastePct);
+          const clase = e === "A TIEMPO" ? "ok" : e === "TARDE" ? "cambiar" : "proximo";
+          return (
+            <div class="fila-historial">
+              <div class="fila-sep"><b>{todos ? `${h.unidad} · ` : ""}{fechaMedia(h.fecha)}</b><span>{h.costoTotal ? soles2(h.costoTotal) : "sin costo"}</span></div>
+              <span>{h.trabajo}</span>
+              <span class="muted">{[TIPOS_REPARACION[h.tipo], h.pieza, h.parte, h.taller, h.odometro ? `${miles(h.odometro)} km` : null].filter(Boolean).join(" · ")}</span>
+              {e ? (
+                <div class="a-tiempo">
+                  <span class={`t-${clase}`}>Cambiada al {h.desgastePct}% · {e.toLowerCase()}</span>
+                  <Barra pct={Math.min(100, h.desgastePct!)} estado={clase} meta={[80, 95]} />
+                </div>
+              ) : null}
+              {h.componente ? <a class="ver-mas" href={`/camiones/${h.vehiculoId}?pieza=${h.componente}`}>Ver en el 3D</a> : null}
+            </div>
+          );
+        })}
       </div>
-      {historial.length > 60 ? <span class="muted">Se ven los 60 más recientes.</span> : null}
-      <span class="muted">Total en arreglos: {soles(historial.reduce((s, h) => s + h.costoTotal, 0))}</span>
+      {historialVer.length > 60 ? <span class="muted">Se ven los 60 más recientes.</span> : null}
+      {todos ? null : <span class="muted">Total en arreglos: {soles(historial.reduce((s, h) => s + h.costoTotal, 0))}</span>}
       {editaTaller ? <a class="btn primario grande" href={anotarCambio("", `${aqui}?tab=historial`)} data-abrir-panel="">Registrar un cambio</a> : null}
     </div>
   );
 
+  const volverRep = `${aqui}?tab=repuestos`;
   const tabRepuestos = (
     <div class="col">
       <form method="get" action={aqui} class="linea filtro">
@@ -195,21 +215,27 @@ async function vista(c: C, d: Deps) {
       <span class="muted">En el almacén: {soles(inventario.enAlmacen)} · puesto en los camiones: {soles(inventario.instalado)}{inventario.stockBajo ? ` · ${inventario.stockBajo} con pocos` : ""}</span>
       <div class="lista-filas">
         {filas.length === 0 ? <Vacio>No hay repuestos{q ? " con esa búsqueda" : ""}.</Vacio> : filas.map((r) => (
-          <div class="fila-historial">
-            <div class="fila-sep"><b>{r.codigo} · {r.nombre}</b><span class={`chip ${CHIP_REPUESTO[r.estado]}`}>{TEXTO_REPUESTO[r.estado] ?? r.estado}</span></div>
-            <span class="muted">Hay {r.stock}{r.stockMinimo ? ` (avisar bajo ${r.stockMinimo})` : ""} · {soles2(r.costoUnitario)} c/u · {textoPiezas(r.piezas)}</span>
-            <div class="acciones">
-              {r.piezas.length ? <a class="btn chico" href={`${aqui}?repuesto=${r.id}`}>Ver en el 3D</a> : null}
-              {editaInv ? <a class="btn chico" href={`/anotar?tipo=repare&modo=compra&repuestoId=${r.id}&volver=${encodeURIComponent(`${aqui}?tab=repuestos`)}`} data-abrir-panel="">Compré más</a> : null}
+          <details class="fila-repuesto">
+            <summary>
+              <span class="rep-nombre"><b>{r.nombre}</b><span class="muted">{r.codigo} · hay {r.stock} · {r.piezas.length ? `${r.piezas.length} ${r.piezas.length === 1 ? "pieza" : "piezas"}` : "sin pieza"}</span></span>
+              <span class={`chip ${CHIP_REPUESTO[r.estado]}`}>{TEXTO_REPUESTO[r.estado] ?? r.estado}</span>
+            </summary>
+            <div class="filas rep-detalle">
+              <span class="muted">{soles2(r.costoUnitario)} c/u{r.stockMinimo ? ` · avisar si quedan menos de ${r.stockMinimo}` : ""}{r.proveedor ? ` · ${r.proveedor}` : ""}</span>
+              <span class="muted">{textoPiezas(r.piezas)}</span>
+              <div class="acciones">
+                {r.piezas.length ? <a class="btn chico" href={`${aqui}?repuesto=${r.id}`}>Ver en el 3D</a> : null}
+                {editaInv ? <a class="btn chico" href={`/anotar?tipo=repare&modo=compra&repuestoId=${r.id}&volver=${encodeURIComponent(volverRep)}`} data-abrir-panel="">Compré más</a> : null}
+              </div>
               {editaInv ? (
-                <details class="plegable"><summary class="btn chico fantasma">Editar</summary>
+                <details class="plegable"><summary class="ver-mas">Editar</summary>
                   <form method="post" action={`/inventario/repuesto/${r.id}`} class="linea sub-form">
-                    <input type="hidden" name="volver" value={`${aqui}?tab=repuestos`} />
+                    <input type="hidden" name="volver" value={volverRep} />
                     <label class="campo"><span>Avisar si quedan menos de</span><input name="stockMinimo" inputmode="numeric" value={r.stockMinimo} /></label>
                     <button class="btn chico" type="submit">Guardar</button>
                   </form>
                   <form method="post" action={`/inventario/repuesto/${r.id}/piezas`} class="filas sub-form">
-                    <input type="hidden" name="volver" value={`${aqui}?tab=repuestos`} />
+                    <input type="hidden" name="volver" value={volverRep} />
                     <label class="campo"><span>¿En qué piezas va?</span><SelectPiezas elegidas={r.piezasElegidas ? r.piezas : []} /></label>
                     <span class="muted">Sin elegir ninguna, va donde va su tipo de parte.</span>
                     <button class="btn chico" type="submit">Guardar piezas</button>
@@ -217,30 +243,45 @@ async function vista(c: C, d: Deps) {
                 </details>
               ) : null}
             </div>
-          </div>
+          </details>
         ))}
       </div>
-      {compras.length ? (
-        <details class="plegable panel"><summary class="ver-mas">Últimas compras ({compras.length})</summary>
-          <div class="filas">{compras.map((x) => <div class="fila-sep"><span>{fechaCorta(x.fecha)} · {x.codigo} · {x.nombre} · +{x.cantidad}</span><b>{soles2(x.total)}</b></div>)}</div>
-        </details>
-      ) : null}
-      {editaInv ? (
-        <details class="plegable panel" id="nuevo-repuesto"><summary class="ver-mas">Ver más · repuesto nuevo</summary>
-          <form method="post" action="/inventario/repuesto" class="filas">
-            <input type="hidden" name="volver" value={`${aqui}?tab=repuestos`} />
-            <label class="campo"><span>Nombre *</span><input name="nombre" required placeholder="Pastillas de freno" /></label>
-            <label class="campo"><span>Categoría</span><select name="categoria">{CATEGORIAS_REPUESTO.map((k) => <option value={k}>{k}</option>)}</select></label>
-            <label class="campo"><span>Avisar si quedan menos de</span><input name="stockMinimo" inputmode="numeric" placeholder="0" /></label>
-            <label class="campo"><span>Parte que reemplaza</span><select name="tipoParteId"><option value="">— ninguna —</option>{tipos.map((t) => <option value={t.id}>{t.nombre}</option>)}</select></label>
-            <label class="campo"><span>¿En qué piezas va? (si no eliges, las de la parte)</span><SelectPiezas /></label>
-            <label class="campo"><span>Proveedor</span><input name="proveedor" /></label>
-            <label class="campo"><span>Código</span><input name="codigo" placeholder="se pone solo" /></label>
-            <button class="btn primario" type="submit">Crear repuesto</button>
-            <span class="muted">Después anota la compra con «Compré más» para subir lo que hay.</span>
-          </form>
-        </details>
-      ) : null}
+      <details class="plegable panel" id="ver-mas-repuestos"><summary class="ver-mas">Ver más: plata por categoría, compras{editaInv ? " y repuesto nuevo" : ""}</summary>
+        <div class="filas">
+          <h3 class="titulo-seccion">Plata por categoría</h3>
+          {inventario.porCategoria.length === 0 ? <span class="muted">Todavía no hay plata en repuestos.</span> : inventario.porCategoria.map((x) => (
+            <div>
+              <div class="fila-sep"><span>{x.categoria}</span><b>{soles(x.monto)}</b></div>
+              <Barra pct={(x.monto / maxCategoria) * 100} color="var(--accent)" />
+            </div>
+          ))}
+          <h3 class="titulo-seccion">Compras por Telegram</h3>
+          {comprasTg.length === 0 ? <span class="muted">El chofer o el taller pueden anotar compras en Telegram con /compra.</span> : comprasTg.map((x) => (
+            <div class="fila-sep"><span>{fechaCorta(x.fecha)} · {x.cantidad} × {x.nombre}{x.quien ? ` · ${x.quien}` : ""}</span><b>{soles2(x.total)}</b></div>
+          ))}
+          <h3 class="titulo-seccion">Últimas compras</h3>
+          {compras.length === 0 ? <span class="muted">Sin compras.</span> : compras.map((x) => (
+            <div class="fila-sep"><span>{fechaCorta(x.fecha)} · {x.codigo} · {x.nombre} · +{x.cantidad}</span><b>{soles2(x.total)}</b></div>
+          ))}
+          {editaInv ? (
+            <>
+              <h3 class="titulo-seccion" id="nuevo-repuesto">Repuesto nuevo</h3>
+              <form method="post" action="/inventario/repuesto" class="filas">
+                <input type="hidden" name="volver" value={volverRep} />
+                <label class="campo"><span>Nombre *</span><input name="nombre" required placeholder="Pastillas de freno" /></label>
+                <label class="campo"><span>Categoría</span><select name="categoria">{CATEGORIAS_REPUESTO.map((k) => <option value={k}>{k}</option>)}</select></label>
+                <label class="campo"><span>Avisar si quedan menos de</span><input name="stockMinimo" inputmode="numeric" placeholder="0" /></label>
+                <label class="campo"><span>Parte que reemplaza</span><select name="tipoParteId"><option value="">— ninguna —</option>{tipos.map((t) => <option value={t.id}>{t.nombre}</option>)}</select></label>
+                <label class="campo"><span>¿En qué piezas va? (si no eliges, las de la parte)</span><SelectPiezas /></label>
+                <label class="campo"><span>Proveedor</span><input name="proveedor" /></label>
+                <label class="campo"><span>Código</span><input name="codigo" placeholder="se pone solo" /></label>
+                <button class="btn primario" type="submit">Crear repuesto</button>
+                <span class="muted">Después anota la compra con «Compré más» para subir lo que hay.</span>
+              </form>
+            </>
+          ) : null}
+        </div>
+      </details>
     </div>
   );
 
@@ -253,8 +294,8 @@ async function vista(c: C, d: Deps) {
         <div><dt>Estado</dt><dd><span class={`chip ${CHIP_UNIDAD[unidad.estado]}`}>{ESTADO_UNIDAD[unidad.estado]}</span></dd></div>
         <div><dt>Odómetro</dt><dd>{miles(unidad.odometroKm)} km</dd></div>
         <div><dt>Viajes hechos</dt><dd>{miles(unidad.viajesTotales)}</dd></div>
-        <div><dt>Configuración vehicular</dt><dd>{sunat.configuracionVehicular ?? "falta"}</dd></div>
-        <div><dt>Carga útil</dt><dd>{sunat.cargaUtilTm !== null ? `${sunat.cargaUtilTm} t` : "falta"}</dd></div>
+        <div><dt>Configuración vehicular</dt><dd>{sunat.configuracionVehicular ?? <span class="chip proximo">falta</span>}</dd></div>
+        <div><dt>Carga útil</dt><dd>{sunat.cargaUtilTm !== null ? `${sunat.cargaUtilTm} t` : <span class="chip proximo">falta</span>}</dd></div>
         <div><dt>Rendimiento</dt><dd>{unidad.rendimientoKmGal ? `${unidad.rendimientoKmGal} km/gal` : "—"}</dd></div>
         <div><dt>Semirremolque</dt><dd>{TIPOS_SEMIRREMOLQUE[unidad.semirremolque]}</dd></div>
       </dl>
@@ -292,7 +333,7 @@ async function vista(c: C, d: Deps) {
     <>
       <Datos id="datos-visor" valor={datosVisor} />
       <Cabecera titulo="Mis camiones" sub={`${unidad.placa}${unidad.carreta ? ` + ${unidad.carreta.placa}` : ""} · ${[unidad.marca, unidad.modelo].filter(Boolean).join(" ") || "—"}`} />
-      <nav class="segmentos" aria-label="Elige el camión">
+      <nav class="segmentos chips-camion" aria-label="Elige el camión">
         {unidades.map((x) => <a href={`/camiones/${x.id}`} class={x.id === unidad.id ? "activo" : undefined} aria-current={x.id === unidad.id ? "page" : undefined}>{x.placa}</a>)}
         {editaFlota ? <a href="/camiones/nuevo" class="nuevo">+ Nuevo</a> : null}
       </nav>
@@ -320,7 +361,7 @@ async function vista(c: C, d: Deps) {
                   <input type="hidden" name="tipo" value="repare" />
                   <input type="hidden" name="vehiculoId" value={unidad.id} />
                   <input type="hidden" name="pieza" id="pieza-id" value={piezaSel?.id ?? ""} />
-                  <input type="hidden" name="volver" value={aqui} />
+                  <input type="hidden" name="volver" id="pieza-volver" value={piezaSel ? `${aqui}?pieza=${piezaSel.id}` : aqui} />
                   <button class="btn primario grande" type="submit">Registrar un cambio</button>
                 </form>
               ) : null}

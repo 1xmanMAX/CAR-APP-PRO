@@ -86,7 +86,7 @@ export async function transporteHabitual(ctx: Contexto): Promise<TransporteGuia>
   const vehiculos = await ctx.db.select().from(vehiculo).where(eq(vehiculo.activo, true)).orderBy(vehiculo.id).limit(2);
   const [cond] = await ctx.db.select().from(conductor).where(eq(conductor.activo, true)).orderBy(conductor.id).limit(1);
   if (!emp) throw new ErrorNegocio(FALTA_EMPRESA);
-  if (!vehiculos[0]) throw new ErrorNegocio("Falta registrar la unidad (tracto): agrégala en la app, en Flota.");
+  if (!vehiculos[0]) throw new ErrorNegocio("Falta registrar la unidad (tracto): agrégala en la app, en Camiones.");
   if (!cond) throw new ErrorNegocio("Falta el chofer: envía la guía del remitente con sus datos y el bot lo registra.");
   return {
     rucTransportista: emp.ruc,

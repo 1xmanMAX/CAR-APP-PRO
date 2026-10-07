@@ -460,6 +460,18 @@ details.panel[open] > summary { margin-bottom: 8px; }
 .camion-cols { display: flex; flex-direction: column; gap: 12px; }
 .segmentos a.nuevo { border-style: dashed; color: var(--accent); }
 .visor .visor-titulo { font-size: 12px; font-weight: 600; color: var(--dark-text); }
+.visor .visor-sub { font-weight: 400; color: var(--dark-muted); }
+.segmentos.chicos a { min-height: 44px; font-size: 12px; }
+.a-tiempo { display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
+details.fila-repuesto { border-bottom: 1px solid var(--divider); }
+details.fila-repuesto:last-child { border-bottom: 0; }
+details.fila-repuesto > summary { list-style: none; cursor: pointer; display: grid; grid-template-columns: minmax(0, 1fr) 104px; gap: 10px; align-items: center; min-height: 44px; padding: 10px 14px; }
+details.fila-repuesto > summary::-webkit-details-marker { display: none; }
+details.fila-repuesto > summary .chip { justify-self: end; }
+details.fila-repuesto[open] > summary { background: var(--accent-softer); }
+.rep-nombre { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.rep-nombre .muted { font-size: 12px; }
+.rep-detalle { padding: 4px 14px 14px; }
 .pestanas { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; background: var(--panel); }
 .pestanas a { display: flex; align-items: center; justify-content: center; min-height: 44px; padding: 0 4px; font-size: 13px; color: var(--text); text-decoration: none; text-align: center; border-right: 1px solid var(--divider); }
 .pestanas a:last-child { border-right: 0; }
@@ -482,6 +494,8 @@ a.fila-toca:hover { background: var(--accent-softer); }
   .visor, .visor canvas { min-height: 300px; height: 300px; }
   .visor .btn, .visor .btn.chico { min-height: 44px; }
   .pestanas a { font-size: 12px; }
+  .chips-camion { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 0 -16px; padding: 0 16px 2px; scrollbar-width: none; }
+  .chips-camion a { flex-shrink: 0; }
 }
 @media (min-width: 900px) {
   .camion-cols { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 16px; align-items: start; }

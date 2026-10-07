@@ -179,6 +179,9 @@ function mostrarPanel(id) {
   )) : [el("span", { className: "muted", style: "font-size:12px", textContent: "Todavía no hay nada registrado en esta pieza." })]));
 
   if (panel.id) panel.id.value = id;
+  // Al guardar en Anotar se vuelve al camión con esta pieza elegida.
+  const volverPieza = document.getElementById("pieza-volver");
+  if (volverPieza) volverPieza.value = `${location.pathname}?pieza=${encodeURIComponent(id)}`;
   if (panel.parte) {
     panel.parte.replaceChildren(el("option", { value: "", textContent: "— no reinicia ningún contador —" }),
       ...partes.map((x) => el("option", { value: String(x.id), textContent: `${x.nombre} · ${x.pct}% (vuelve a 0)` })));

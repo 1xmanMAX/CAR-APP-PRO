@@ -369,6 +369,9 @@ body.sin-inferior .contenido { padding-bottom: 24px; }
 .campo-monto .monto-caja { display: flex; align-items: center; gap: 8px; border: 2px solid var(--text); border-radius: 8px; background: var(--white); padding: 0 14px; }
 .campo-monto .monto-caja > span { font-family: var(--f-title); font-size: 24px; color: var(--muted); }
 .campo-monto input { border: 0; font-family: var(--f-title); font-size: 32px; min-height: 64px; padding: 0; background: transparent; }
+/* El foco se ve en todo el recuadro (no un contorno dentro del recuadro) */
+.campo-monto input:focus { outline: none; }
+.campo-monto .monto-caja:focus-within { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
 .opciones-icono { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); grid-auto-rows: 1fr; gap: 8px; }
 .opciones-icono .opcion { min-height: 76px; justify-content: flex-start; padding: 12px 2px 8px; }
 .opciones-icono .opcion span { line-height: 1.25; overflow-wrap: break-word; }
@@ -395,6 +398,25 @@ body.sin-inferior .contenido { padding-bottom: 24px; }
 .btn.guardar { min-height: 56px; width: 100%; font-family: var(--f-title); font-size: 18px; }
 .fila-aviso.sel { background: var(--accent-softer); box-shadow: inset 3px 0 0 var(--accent); }
 .lateral .anotar-lateral { justify-content: flex-start; margin: 10px 0; }
+/* ── Panel lateral de Anotar (PC) y «Así queda» ── */
+.panel-anotar { display: none; }
+.asi-queda { background: var(--ok-bg); color: var(--ok); border-radius: 8px; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+.asi-queda .lbl { color: var(--ok); font-weight: 700; }
+.asi-queda ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; }
+.asi-queda .antes { opacity: .8; }
+.asi-queda .t-cambiar { color: var(--accent); font-weight: 600; }
+@media (min-width: 900px) {
+  .panel-anotar:not([hidden]) { display: block; position: fixed; top: 0; right: 0; bottom: 0; width: 400px; z-index: 30; overflow-y: auto; background: var(--panel); border-left: 1px solid var(--border); box-shadow: -8px 0 24px rgba(18, 23, 25, .12); padding: 20px; }
+  body.con-panel .marco { margin-right: 400px; }
+  .panel-anotar .anotar { width: auto; max-width: none; }
+  /* «Volver» se vuelve la × de cerrar, a la derecha del título */
+  .panel-anotar .cab-pagina [data-cerrar-panel] { order: 2; margin-left: auto; background: var(--white); }
+  .panel-anotar .cab-pagina [data-cerrar-panel] svg { display: none; }
+  .panel-anotar .cab-pagina [data-cerrar-panel]::before { content: "×"; font-size: 24px; line-height: 1; }
+  .panel-anotar .tipos-anotar a { min-height: 64px; }
+  .panel-anotar .opciones-icono { gap: 6px; }
+  .panel-anotar .opcion, .panel-anotar .foto-opcional { background: var(--white); }
+}
 .inferior .mas { display: flex; align-items: center; justify-content: center; }
 .inferior .mas span { width: 58px; height: 58px; border-radius: 50%; background: var(--accent); color: var(--white); display: flex; align-items: center; justify-content: center; margin-top: -26px; border: 4px solid var(--bg); }
 

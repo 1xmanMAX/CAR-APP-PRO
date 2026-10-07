@@ -17,6 +17,8 @@ export interface LugarCaptura {
 export const LUGARES: LugarCaptura[] = [
   { nombre: "inicio", ruta: "/" },
   { nombre: "anotar", ruta: "/anotar" },
+  { nombre: "inicio-con-panel", ruta: "/", clic: "[data-abrir-panel]", esperar: "#panel-anotar form", espera: 600, solo: "pc" },
+  { nombre: "anotar-asi-queda", ruta: "/anotar?monto=350&categoria=combustible", solo: "pc" },
   { nombre: "anotar-chofer", ruta: "/anotar?tipo=chofer" },
   { nombre: "anotar-cobro", ruta: "/anotar?tipo=cobro" },
   { nombre: "anotar-repare", ruta: "/anotar?tipo=repare" },

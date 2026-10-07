@@ -50,3 +50,4 @@ export * from "./viajes/revisar-viajes";
 export * from "./rentabilidad/por-viaje-mes";
 export * from "./sincro/index";
 export * from "./consultas/inicio";
+export * from "./consultas/asi-queda";

@@ -165,6 +165,7 @@ export const Layout: FC<PropsWithChildren<PropsLayout>> = (p) => {
             {p.children}
           </main>
         </div>
+        {anota && p.lugar !== "anotar" ? <aside class="panel-anotar" id="panel-anotar" hidden aria-label="Anotar"></aside> : null}
         {p.sinNavInferior ? null : (
           <nav class="inferior" aria-label="Lugares" style={`--n:${menu.length + (anota ? 1 : 0)}`}>
             {menu.slice(0, 2).map(enlace)}
@@ -173,6 +174,7 @@ export const Layout: FC<PropsWithChildren<PropsLayout>> = (p) => {
           </nav>
         )}
         <script src={`/static/app.js?v=${V}`} defer></script>
+        {anota ? <script src={`/static/anotar.js?v=${V}`} defer></script> : null}
         {(p.scripts ?? []).map((s) => <script type="module" src={`${s}?v=${V}`}></script>)}
       </body>
     </html>

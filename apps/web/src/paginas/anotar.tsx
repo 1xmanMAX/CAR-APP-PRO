@@ -1,10 +1,10 @@
 /** @jsxRuntime automatic @jsxImportSource hono/jsx */
 import type { Child, FC, PropsWithChildren } from "hono/jsx";
 import {
-  capturarContexto, categoriasMasUsadas, ErrorNegocio, fechaHoraLima, GRUPOS_PIEZA, hoy, listarCategorias, listarCobrosPendientes, listarPrestamos,
+  asiQueda, capturarContexto, categoriasMasUsadas, ErrorNegocio, fechaHoraLima, GRUPOS_PIEZA, hoy, listarCategorias, listarCobrosPendientes, listarPrestamos,
   listarRepuestos, liquidacionViaje, listarUnidades, listarViajesFlota, MEDIOS_ENTREGA, NOMBRE_MEDIO_PAGO, nombreCategoria, partesDePieza, partesDeUnidad,
-  pieza, piezasDeSemirremolque, puedeEditar, TIPOS_REPARACION, ultimaUnidadDeUsuario, viajesEnRuta,
-  type FilaCobro, type GrupoPieza, type TipoReparacion, type UsuarioWeb, type ViajeEnRuta,
+  parsearMonto, pieza, piezasDeSemirremolque, puedeEditar, TIPOS_REPARACION, ultimaUnidadDeUsuario, viajesEnRuta,
+  type AsiQueda, type FilaCobro, type GrupoPieza, type TipoReparacion, type UsuarioWeb, type ViajeEnRuta,
 } from "@sunatapp/core";
 import { accion, formularioMultiparte, pagina, volverA, type App, type C, type Deps } from "../base";
 import {
@@ -12,7 +12,7 @@ import {
   CATEGORIA_CUOTA, pagarCuotaDe, type Campos,
 } from "../acciones";
 import { TIPOS_ANOTAR, tiposAnotar, type TipoAnotar } from "../lugares";
-import { Cabecera, diasEntre, fechaCorta, Icono, miles, soles2, Vacio, type NombreIcono } from "../ui";
+import { Cabecera, diasEntre, fechaCorta, Icono, miles, soles, soles2, Vacio, type NombreIcono } from "../ui";
 
 /** `monto` y `categoria` solo vuelven en la URL cuando no se pudo guardar (así no se pierde lo escrito). */
 const CLAVES_Q = ["tipo", "modo", "volver", "viajeId", "vehiculoId", "facturaId", "prestamoId", "pieza", "parteId", "repuestoId", "monto", "categoria"] as const;
@@ -140,6 +140,40 @@ async function datosViaje(d: Deps, enRuta: ViajeEnRuta[], viajeId: number): Prom
   return { unidad: l?.viaje.unidad ?? null, ruta: l?.viaje.ruta ?? null, chofer: null };
 }
 
+// ── «Así queda después de guardar» ───────────────────────────────────────────
+
+/** «Así queda después de guardar» (solo en la PC: en el celular satura). Solo cuentas que ya se pueden calcular. */
+export const AsiQuedaBloque: FC<{ r: AsiQueda | null; sinViaje?: boolean }> = ({ r, sinViaje }) => (
+  <div class="asi-queda solo-pc" id="asi-queda" aria-live="polite">
+    <b class="lbl">Así queda después de guardar</b>
+    {!r ? (
+      <span>{sinViaje ? "Sin viaje: no cambia las cuentas de ningún viaje." : "Escribe el monto y verás cómo quedan las cuentas del viaje."}</span>
+    ) : (
+      <ul>
+        {r.chofer ? (
+          <li>{r.chofer.quedaDespues >= 0
+            ? `A ${r.chofer.nombre} le quedan ${soles(r.chofer.quedaDespues)} de ${soles(r.chofer.entregado)}`
+            : `Le debes ${soles(-r.chofer.quedaDespues)} a ${r.chofer.nombre}`}</li>
+        ) : null}
+        {r.viaje ? <li>El viaje deja {soles(r.viaje.dejaDespues)} <span class="antes">(antes {soles(r.viaje.dejaAntes)})</span></li> : null}
+        {r.categoria ? (
+          <li class={r.categoria.presupuesto > 0 && r.categoria.realDespues > r.categoria.presupuesto ? "t-cambiar" : undefined}>
+            {r.categoria.nombre} del viaje: {soles(r.categoria.realDespues)}{r.categoria.presupuesto > 0 ? ` · presupuesto ${soles(r.categoria.presupuesto)}` : " · sin presupuesto"}
+          </li>
+        ) : null}
+      </ul>
+    )}
+  </div>
+);
+
+/** null si falta el monto o el viaje (o el viaje no existe). */
+async function calcularAsiQueda(d: Deps, tipo: string, monto: string, viajeId: string, categoria: string): Promise<AsiQueda | null> {
+  const m = parsearMonto(monto);
+  const v = num(viajeId);
+  if (!m || v === null || (tipo !== "gaste" && tipo !== "chofer")) return null;
+  return asiQueda(d.ctx, { tipo: tipo === "gaste" ? "gasto" : "entrega", monto: m, viajeId: v, categoria: categoria || null }).catch(() => null);
+}
+
 // ── Cada tipo ────────────────────────────────────────────────────────────────
 
 async function parteGaste(c: C, d: Deps, q: Q): Promise<PartesForm> {
@@ -158,6 +192,9 @@ async function parteGaste(c: C, d: Deps, q: Q): Promise<PartesForm> {
     : g.viajeId !== null
       ? unir([g.unidad && `Camión ${g.unidad}`, ruta ? `viaje ${ruta}` : "con viaje", `hoy ${ahora(d)}`, km(g.km)])
       : unir([g.unidad ? `Camión ${g.unidad}` : "De la empresa", "sin viaje", `hoy ${ahora(d)}`]);
+  // Si vuelve con lo escrito (no se pudo guardar), «Así queda» ya sale calculado.
+  const viajeInicial = elegirViaje ? enRuta[0]!.viajeId : g.viajeId;
+  const inicial = await calcularAsiQueda(d, "gaste", q.monto, String(viajeInicial ?? ""), q.categoria || botones[0] || "");
   return {
     campos: (
       <>
@@ -189,6 +226,7 @@ async function parteGaste(c: C, d: Deps, q: Q): Promise<PartesForm> {
         </>
       ),
     },
+    abajo: <AsiQuedaBloque r={inicial} sinViaje={viajeInicial === null && !!q.monto} />,
   };
 }
 
@@ -199,6 +237,8 @@ async function parteChofer(_c: C, d: Deps, q: Q): Promise<PartesForm> {
   const recientes = viajeId === null && enRuta.length === 0 ? await listarViajesFlota(ctx, { limite: 10 }) : [];
   const g = viajeId !== null ? await capturarContexto(ctx, { viajeId }) : null;
   const elegido = viajeId !== null ? await datosViaje(d, enRuta, viajeId) : null;
+  const viajeInicial = viajeId ?? (enRuta.length > 1 ? enRuta[0]!.viajeId : null);
+  const inicial = await calcularAsiQueda(d, "chofer", q.monto, String(viajeInicial ?? ""), "");
   return {
     campos: (
       <>
@@ -224,6 +264,7 @@ async function parteChofer(_c: C, d: Deps, q: Q): Promise<PartesForm> {
         </>
       ),
     } : undefined,
+    abajo: <AsiQuedaBloque r={inicial} />,
   };
 }
 
@@ -541,6 +582,12 @@ async function guardarAnotacion(d: Deps, u: UsuarioWeb, tipo: TipoAnotar, f: Cam
 
 export function rutasAnotar(app: App, d: Deps): void {
   app.get("/anotar", (c) => vista(c as C, d));
+  app.get("/anotar/asi-queda", async (c) => {
+    if (!tiposAnotar(c.get("usuario").rol).some((t) => t === "gaste" || t === "chofer")) return c.text("Tu rol no anota plata", 403);
+    const tipo = c.req.query("tipo") ?? "", monto = c.req.query("monto") ?? "", viajeId = c.req.query("viajeId") ?? "";
+    const r = await calcularAsiQueda(d, tipo, monto, viajeId, c.req.query("categoria") ?? "");
+    return c.html((<AsiQuedaBloque r={r} sinViaje={tipo === "gaste" && !viajeId && parsearMonto(monto) !== null} />).toString());
+  });
   app.post("/anotar", async (c) => {
     const { campos: f, archivos } = await formularioMultiparte(c as C);
     const u = c.get("usuario");

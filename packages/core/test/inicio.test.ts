@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { eq, guiaTransportista } from "@sunatapp/db";
 import {
-  categoriasMasUsadas, choferDeViaje, emitirGuia, prepararFactura, primerNombre, registrarEntrega, registrarGasto, registrarGuiaBorrador, registrarIngreso,
+  actualizarPresupuestoViaje, asiQueda, categoriasMasUsadas, choferDeViaje, emitirGuia, prepararFactura, primerNombre, registrarEntrega, registrarGasto, registrarGuiaBorrador, registrarIngreso,
   registrarViajeFlota, resumenInicio, viajeDeFactura, viajesEnRuta,
   type Contexto,
 } from "../src";
@@ -50,5 +50,20 @@ describe("consultas de Inicio", () => {
     expect(await categoriasMasUsadas(ctx, 3)).toEqual(["peaje", "combustible"]);
     expect(primerNombre("JHON LARRY")).toBe("Jhon");
     expect(primerNombre("  ")).toBe("el chofer");
+  });
+
+  it("así queda: saldo del chofer, lo que deja el viaje y el presupuesto de la categoría", async () => {
+    const v = await registrarViajeFlota(ctx, { vehiculoId: 1, origenLugar: "Yura", destinoLugar: "Puno", estado: "en_curso", flete: 350000, origen: "web" });
+    await registrarEntrega(ctx, { viajeId: v.id, monto: 120000, medio: "efectivo" });
+    await registrarGasto(ctx, { viajeId: v.id, categoria: "combustible", monto: 42000, origen: "web" });
+    await actualizarPresupuestoViaje(ctx, v.id, [{ categoria: "combustible", monto: 80000 }]);
+    const r = await asiQueda(ctx, { tipo: "gasto", monto: 35000, viajeId: v.id, categoria: "combustible" });
+    expect(r.chofer).toEqual({ nombre: "Jhon", entregado: 120000, quedaAntes: 78000, quedaDespues: 43000 });
+    expect(r.viaje).toEqual({ codigo: v.codigo, dejaAntes: 308000, dejaDespues: 273000 });
+    expect(r.categoria).toEqual({ nombre: "Combustible", realDespues: 77000, presupuesto: 80000 });
+    const e = await asiQueda(ctx, { tipo: "entrega", monto: 10000, viajeId: v.id });
+    expect(e.chofer).toMatchObject({ entregado: 130000, quedaDespues: 88000 });
+    expect(e.viaje).toBeNull();
+    expect(e.categoria).toBeNull();
   });
 });

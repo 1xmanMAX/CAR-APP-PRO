@@ -154,6 +154,28 @@ describe("web", () => {
         return app.request("/anotar", { method: "POST", headers: { cookie, origin: ORIGEN }, body: fd });
       };
 
+      it("PC: Anotar se abre como panel (fragmento) y muestra cómo queda", async () => {
+        const cookie = await entrar();
+        const v = await registrarViajeFlota(ctx, { vehiculoId: 1, origenLugar: "Yura", destinoLugar: "Puno", estado: "en_curso", flete: 350000, origen: "web" });
+        const pag = await (await app.request("/viajes", { headers: { cookie } })).text();
+        expect(pag).toContain('<aside class="panel-anotar" id="panel-anotar" hidden');
+        expect(pag).toContain("data-abrir-panel");
+        expect(pag).toContain("/static/anotar.js");
+        const frag = await (await app.request(`/anotar?parcial=1&viajeId=${v.id}`, { headers: { cookie } })).text();
+        expect(frag).not.toContain("<html");
+        expect(frag).toContain('id="asi-queda"');
+        const q = await (await app.request(`/anotar/asi-queda?tipo=gaste&monto=350&viajeId=${v.id}&categoria=combustible`, { headers: { cookie } })).text();
+        expect(q).toContain("Así queda después de guardar");
+        expect(q).toContain("El viaje deja S/ 3,150");
+        expect(q).toContain("Combustible del viaje: S/ 350");
+        // Plata al chofer: solo cuánto le queda; sin monto, solo la explicación.
+        const e = await (await app.request(`/anotar/asi-queda?tipo=chofer&monto=100&viajeId=${v.id}`, { headers: { cookie } })).text();
+        expect(e).toContain("le quedan S/ 100 de S/ 100");
+        expect(e).not.toContain("El viaje deja");
+        const vacio = await (await app.request(`/anotar/asi-queda?tipo=gaste&monto=&viajeId=${v.id}`, { headers: { cookie } })).text();
+        expect(vacio).toContain("Escribe el monto");
+      });
+
       it("Gasté: se pide monto y en qué; viaje, camión y fecha se ponen solos; vuelve a donde estaba", async () => {
         const cookie = await entrar();
         const v = await registrarViajeFlota(ctx, { vehiculoId: 1, origenLugar: "Yura", destinoLugar: "Puno", estado: "en_curso", origen: "web" });

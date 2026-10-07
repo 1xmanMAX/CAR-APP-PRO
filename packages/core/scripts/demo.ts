@@ -1,6 +1,7 @@
 import { empresa } from "@sunatapp/db";
 import {
-  cargarConfig, cargarEnv, crearContexto, emitirFactura, emitirGuia, formatearSoles, listarCobrosPendientes,
+  actualizarUnidad, buscarUnidad, cargarConfig, cargarEnv, crearContexto, emitirFactura, emitirGuia, formatearSoles,
+  guardarValorReferencial, listarCobrosPendientes,
   prepararFactura, registrarCobro, registrarGuiaBorrador, sembrarDatosIniciales,
 } from "../src/index";
 
@@ -18,6 +19,10 @@ try {
       usuario: { nombre: "Demo", email: "demo@demo.pe" },
     });
   }
+  // Datos de transporte que pide la factura 1004 (en la app real se piden una sola vez).
+  const unidad = await buscarUnidad(ctx, "ABC-123");
+  if (unidad) await actualizarUnidad(ctx, unidad.id, { configuracionVehicular: "T3S3", cargaUtilTm: 30 });
+  await guardarValorReferencial(ctx, { partidaUbigeo: "150115", llegadaUbigeo: "250101", vrPorTmCentimos: 8550, fuente: "demo" });
   console.log(`Modo SUNAT: ${config.sunatModo}`);
 
   const guiaId = await registrarGuiaBorrador(ctx, {

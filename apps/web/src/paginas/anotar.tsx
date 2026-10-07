@@ -218,7 +218,7 @@ async function parteGaste(c: C, d: Deps, q: Q): Promise<PartesForm> {
             {botones.map((k, i) => <OpcionIcono nombre="categoria" valor={k} icono={iconoCategoria(k)} texto={nombreCategoria(k, categorias)} marcado={q.categoria ? k === q.categoria : i === 0} />)}
             <OpcionIcono nombre="categoria" valor="otro" icono="otro" texto="Otro" marcado={!!q.categoria && !botones.includes(q.categoria)} />
           </div>
-          <label class="campo otro-cual"><span>¿Cuál?</span><select name="categoriaOtra">{categorias.map((k) => <option value={k.clave} selected={k.clave === q.categoria}>{k.nombre}</option>)}</select></label>
+          <label class="campo otro-cual"><span>¿Cuál?</span><select name="categoriaOtra"><option value="">Elige…</option>{categorias.map((k) => <option value={k.clave} selected={k.clave === q.categoria}>{k.nombre}</option>)}</select></label>
         </fieldset>
         {elegirViaje ? <ViajesRadios viajes={enRuta} /> : null}
         {/* Lo que vino puesto: si se cambia el camión y el viaje quedó como venía, el servidor suelta el viaje. */}
@@ -702,6 +702,7 @@ async function viajeDelCamion(d: Deps, f: Campos): Promise<string> {
 async function guardarAnotacion(d: Deps, u: UsuarioWeb, tipo: TipoAnotar, f: Campos, archivos: Record<string, File>): Promise<string> {
   switch (tipo) {
     case "gaste": {
+      if (f.categoria === "otro" && !f.categoriaOtra) throw new ErrorNegocio("Elige cuál en «¿Cuál?»");
       const categoria = f.categoria === "otro" ? (f.categoriaOtra ?? "") : (f.categoria ?? "");
       if (!categoria) throw new ErrorNegocio("Elige en qué se gastó");
       return guardarGasto(d, u.id, { ...f, categoria, viajeId: await viajeDelCamion(d, f) }, archivos.foto);
@@ -757,7 +758,7 @@ export function rutasAnotar(app: App, d: Deps): void {
     if (tipo === "empresa" && f.mensual === "1" && !puedeEditar(u.rol, "ajustes")) return c.text("Tu rol no crea gastos de cada mes", 403);
     const destino = volverA(f.volver, "/");
     // Si no se pudo guardar, vuelve al formulario con lo escrito (en «Otro», la categoría elegida en la lista).
-    const categoria = tipo === "gaste" && f.categoria === "otro" ? f.categoriaOtra : f.categoria;
+    const categoria = tipo === "gaste" && f.categoria === "otro" ? (f.categoriaOtra || "otro") : f.categoria;
     return accion(c as C, urlAnotar({ ...f, categoria, volver: destino }), async () => ({ ok: await guardarAnotacion(d, u, tipo, f, archivos), ruta: destino }));
   });
 }

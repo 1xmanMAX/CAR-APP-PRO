@@ -363,6 +363,17 @@ describe("web", () => {
         expect(html2).toMatch(/<option value="balanza" selected/);
       });
 
+      it("Gasté «Otro» sin elegir cuál no se guarda (y «¿Cuál?» se ve aunque el navegador no tenga :has)", async () => {
+        const cookie = await entrar();
+        const css = readFileSync(new URL("../public/app.css", import.meta.url), "utf8");
+        expect(css).toMatch(/@supports not selector\(:has\(\*\)\) \{\s*\.otro-cual \{ display: flex; \}/);
+        expect(await (await app.request("/anotar?tipo=gaste", { headers: { cookie } })).text()).toContain('<select name="categoriaOtra"><option value="">Elige…</option>');
+        const r = await enviar(cookie, { tipo: "gaste", volver: "/", monto: "20", categoria: "otro", categoriaOtra: "", vehiculoId: "1" });
+        expect(aviso(r)).toContain("error=Elige cuál en «¿Cuál?»");
+        expect(await ctx.db.select().from(gasto)).toHaveLength(0);
+        expect(await (await app.request(r.headers.get("location")!, { headers: { cookie } })).text()).toMatch(/value="otro" checked/);
+      });
+
       it("una factura que ya no se debe no se cambia sola por otra", async () => {
         const cookie = await entrar();
         const html = await (await app.request("/anotar?tipo=cobro&facturaId=999", { headers: { cookie } })).text();

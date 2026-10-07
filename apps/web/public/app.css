@@ -345,6 +345,10 @@ body.sin-inferior .contenido { padding-bottom: 24px; }
 .opcion-fila input { width: 20px; height: 20px; min-height: 20px; accent-color: var(--accent); flex-shrink: 0; }
 .otro-cual { display: none; }
 .grupo:has(input[value="otro"]:checked) .otro-cual { display: flex; }
+/* Sin :has (navegadores viejos) «¿Cuál?» queda siempre a la vista: si no, se elegiría a ciegas. */
+@supports not selector(:has(*)) {
+  .otro-cual { display: flex; }
+}
 .foto-opcional { position: relative; display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 48px; padding: 10px; border: 1px dashed var(--muted); border-radius: 8px; background: var(--panel); cursor: pointer; font-size: 13px; }
 .foto-opcional input { position: absolute; opacity: 0; width: 1px; height: 1px; min-height: 0; }
 .foto-opcional:has(input:focus-visible) { outline: 2px solid var(--accent); }

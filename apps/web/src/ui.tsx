@@ -35,6 +35,8 @@ export function fechaMedia(f: string | null | undefined): string {
   return `${d} ${MESES[Number(m) - 1]} ${y!.slice(2)}`;
 }
 export const nombreMes = (mes: string) => `${MESES[Number(mes.slice(5, 7)) - 1]} ${mes.slice(2, 4)}`;
+/** "2026-05" → "may 26" (en minúsculas, para tablas y gráficos). */
+export const mesCorto = (mes: string) => nombreMes(mes).toLowerCase();
 const MESES_LARGOS = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
 /** "2026-10" → "octubre". */
 export const mesLargo = (mes: string) => MESES_LARGOS[Number(mes.slice(5, 7)) - 1] ?? mes;
@@ -43,6 +45,10 @@ export function diasEntre(a: string, b: string): number {
   return Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86_400_000);
 }
 export const pct = (n: number | null | undefined) => (n === null || n === undefined ? "—" : `${n}%`);
+/** Un margen en palabras de la calle: 45 (%) → "S/ 45" (de cada S/ 100 te quedan S/ 45). */
+export const deCada100 = (margenPct: number | null | undefined) => (margenPct === null || margenPct === undefined ? "—" : soles(margenPct * 100));
+/** Envoltorio de un gráfico SVG: en el celular conserva su ancho natural (letra de 12 px de verdad) y se desliza de lado. */
+export const GrafScroll: FC<PropsWithChildren<{ ancho: number }>> = (p) => <div class="graf-scroll" style={`--graf-w:${Math.round(p.ancho)}px`}>{p.children}</div>;
 
 export const ETIQUETA_ESTADO: Record<EstadoDesgaste, string> = { ok: "OK", proximo: "PRÓXIMO", cambiar: "CAMBIAR YA" };
 export const ESTADO_UNIDAD: Record<string, string> = { en_ruta: "EN RUTA", en_base: "EN BASE", en_taller: "EN TALLER", inactivo: "INACTIVO" };

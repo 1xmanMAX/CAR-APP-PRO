@@ -329,6 +329,8 @@ export interface Movimiento {
   monto: number;
   origen: OrigenRegistro;
   ref: { entidad: string; id: number };
+  /** Hay foto del voucher guardada (solo gastos). */
+  conFoto?: boolean;
 }
 
 export async function listarMovimientos(ctx: Contexto, desde: string, hasta: string, limite = 100): Promise<Movimiento[]> {
@@ -344,7 +346,7 @@ export async function listarMovimientos(ctx: Contexto, desde: string, hasta: str
   }
   // Los gastos que genera una cuota no se listan: la cuota aparece como CUOTA al pagarse.
   for (const g of await ctx.db.select().from(gasto).where(and(rango(gasto.fecha), isNull(gasto.cuotaId)))) {
-    r.push({ fecha: g.fecha, tipo: "GASTO", detalle: `${nombreCategoria(g.categoria)}${g.nota ? ` · ${g.nota}` : ""}`, unidad: u(g.vehiculoId), monto: -g.monto, origen: g.origen, ref: { entidad: "gasto", id: g.id } });
+    r.push({ fecha: g.fecha, tipo: "GASTO", detalle: `${nombreCategoria(g.categoria)}${g.nota ? ` · ${g.nota}` : ""}`, unidad: u(g.vehiculoId), monto: -g.monto, origen: g.origen, ref: { entidad: "gasto", id: g.id }, conFoto: !!g.rutaFoto });
   }
   for (const x of await ctx.db.select().from(reinversion).where(rango(reinversion.fecha))) {
     r.push({ fecha: x.fecha, tipo: "REINVERSIÓN", detalle: x.concepto, unidad: u(x.vehiculoId), monto: -x.monto, origen: x.origen, ref: { entidad: "reinversion", id: x.id } });

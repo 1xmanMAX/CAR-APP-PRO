@@ -1,5 +1,5 @@
 /** @jsxRuntime automatic @jsxImportSource hono/jsx */
-import { gastosPorCategoria, hoy, listarViajesFlota, mesAnterior, rangoMes } from "@sunatapp/core";
+import { gastosPorCategoria, hoy, listarViajesFlota, mesAnterior, rangoMes, type FilaViajeFlota } from "@sunatapp/core";
 import { pagina, type App, type C, type Deps } from "../base";
 import { Barra, Cabecera, fechaDia, soles, Vacio } from "../ui";
 
@@ -13,6 +13,14 @@ const VER_MAS = [
   { href: "/numeros/rentabilidad", texto: "Rentabilidad detallada (por viaje, por mes, por camión)" },
   { href: "/numeros/graficos", texto: "Gráficos y Excel para el contador" },
 ];
+
+/** Un viaje del ranking: ruta y día; lo que dejó (flete − gastos, igual que en Viajes). */
+const FilaRanking = ({ v }: { v: FilaViajeFlota & { dejo: number } }) => (
+  <a class="fila-aviso" href={`/viajes/${v.id}`} title={`${v.ruta} · ${v.unidad}`}>
+    <span class="txt">{v.ruta} <span class="muted">· {fechaDia(v.fecha)}</span></span>
+    <b class={`nowrap ${v.dejo < 0 ? "t-cambiar" : "t-ok"}`}>{soles(v.dejo)}</b>
+  </a>
+);
 
 async function vista(c: C, d: Deps) {
   const ctx = d.ctx;
@@ -36,21 +44,24 @@ async function vista(c: C, d: Deps) {
         <section class="col">
           <h2 class="titulo-seccion">¿Qué viaje dejó más?</h2>
           <div class="lista-filas">
-            {ranking.length === 0 ? <Vacio>No hay viajes con flete en este periodo.</Vacio> : ranking.slice(0, 6).map((v) => (
-              <a class="fila-aviso" href={`/viajes/${v.id}`}>
-                <span class="txt">{v.ruta} <span class="muted">· {fechaDia(v.fecha)} · {v.unidad}</span></span>
-                <b class={v.dejo < 0 ? "t-cambiar" : "t-ok"}>{soles(v.dejo)}</b>
-              </a>
-            ))}
+            {ranking.length === 0 ? <Vacio>No hay viajes con flete en este periodo.</Vacio> : ranking.slice(0, 6).map((v) => <FilaRanking v={v} />)}
           </div>
-          {ranking.length > 6 ? <a class="ver-mas" href={`/numeros/rentabilidad?vista=viaje&desde=${rango.desde.slice(0, 7)}&hasta=${rango.hasta.slice(0, 7)}`}>Ver los {ranking.length} viajes</a> : null}
+          {ranking.length > 6 ? (
+            // Mes: la lista de Viajes de ese mes (mismo «Dejó»). Año: el resto del ranking aquí mismo.
+            periodo === "anio" ? (
+              <details class="plegable">
+                <summary class="ver-mas">Ver los {ranking.length} viajes</summary>
+                <div class="lista-filas">{ranking.slice(6).map((v) => <FilaRanking v={v} />)}</div>
+              </details>
+            ) : <a class="ver-mas" href={`/viajes?mes=${rango.desde.slice(0, 7)}`}>Ver los {ranking.length} viajes</a>
+          ) : null}
         </section>
         <section class="col">
           <h2 class="titulo-seccion">¿En qué se va la plata?</h2>
           <div class="lista-filas barras-gasto">
             {gastos.length === 0 ? <Vacio>Sin gastos en este periodo.</Vacio> : gastos.slice(0, 6).map((g) => (
               <div class="fila-barra">
-                <div class="fila-sep"><span>{g.nombre}</span><b>{soles(g.monto)}</b></div>
+                <div class="fila-monto"><span class="nombre" title={g.nombre}>{g.nombre}</span><b>{soles(g.monto)}</b></div>
                 <Barra pct={(g.monto / maxGasto) * 100} color="var(--accent)" />
               </div>
             ))}

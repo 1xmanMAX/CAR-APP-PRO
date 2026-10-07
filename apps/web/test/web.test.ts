@@ -454,11 +454,11 @@ describe("web", () => {
       const v = await registrarViajeFlota(ctx, { vehiculoId: 1, origenLugar: "Juliaca", destinoLugar: "Arequipa", estado: "cerrado", km: 300, flete: 500000, origen: "web" });
       await registrarGasto(ctx, { viajeId: v.id, categoria: "combustible", monto: 150000, origen: "web" });
       let html = await (await app.request("/numeros/rentabilidad?vista=viaje", { headers: { cookie } })).text();
-      expect(html).toContain("POR VIAJE");
+      expect(html).toContain("Por viaje");
       expect(html).toContain(v.codigo);
-      expect(html).toContain("PROVISIONAL");
+      expect(html).toContain("aún puede cambiar");
       html = await (await app.request("/numeros/rentabilidad?vista=mes", { headers: { cookie } })).text();
-      expect(html).toContain("GANANCIA NETA");
+      expect(html).toContain("Te quedó");
       html = await (await app.request(`/viajes/${v.id}`, { headers: { cookie } })).text();
       expect(html).toContain("Fijo asignado");
       const x = await app.request("/estadisticas.xlsx?desde=2026-09-01&hasta=2026-09-30", { headers: { cookie } });
@@ -762,6 +762,9 @@ describe("web", () => {
       await guardarUsuario(ctx, { nombre: "Conta", email: "conta@demo.pe", rol: "contador", clave: "clave-segura" });
       const cookie = await entrar("conta@demo.pe");
       expect((await app.request("/numeros", { headers: { cookie } })).status).toBe(200);
+      const coti = await (await app.request("/numeros/cotizar", { headers: { cookie } })).text();
+      expect(coti).toContain("Solo el dueño guarda y manda presupuestos");
+      expect(coti).not.toContain("Sacar presupuesto en PDF");
       expect((await app.request("/flota", { headers: { cookie } })).headers.get("location")).toContain("/?error=");
       expect((await post(cookie, "/inventario/repuesto", { nombre: "X", categoria: "Frenos" })).status).toBe(403);
     });
@@ -771,6 +774,9 @@ describe("web", () => {
       const v = await registrarViajeFlota(ctx, { vehiculoId: 1, origenLugar: "Yura", destinoLugar: "Puno", estado: "cerrado", km: 300, flete: 350000, origen: "web" });
       await registrarGasto(ctx, { viajeId: v.id, categoria: "combustible", monto: 64000, origen: "web" });
       const html = await (await app.request("/numeros", { headers: { cookie } })).text();
+      const caja = await (await app.request("/numeros/caja", { headers: { cookie } })).text();
+      expect(caja).toContain("+ Me pagaron");
+      expect(caja).not.toContain("/archivo/gasto/");
       for (const t of ["Este mes", "Mes pasado", "Año", "¿Qué viaje dejó más?", "Yura → Puno", "S/\u00a02,860", "¿En qué se va la plata?", "Combustible", "Caja (entradas y salidas)", "Préstamos y cuotas", "Cotizar un viaje", "Gráficos y Excel para el contador"]) {
         expect(html, t).toContain(t);
       }

@@ -5,7 +5,7 @@ import {
 } from "@sunatapp/core";
 import { pagina, type App, type C, type Deps } from "../base";
 import { redirigir } from "../redirecciones";
-import { Barra, Cabecera, Kpi, Panel, soles, soles2, Vacio } from "../ui";
+import { Barra, Cabecera, GrafScroll, Kpi, mesCorto, Panel, soles, soles2, Vacio } from "../ui";
 
 const FECHA = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -22,7 +22,8 @@ function BarrasMeses(p: { meses: Estadisticas["meses"] }) {
   const ancho = 36, sep = 16, alto = 150;
   const w = p.meses.length * (ancho * 3 + sep) + sep;
   return (
-    <svg viewBox={`0 0 ${w} ${alto + 34}`} role="img" aria-label="Ingresos, gastos y ganancia por mes" style="width:100%;max-height:230px">
+    <GrafScroll ancho={w}>
+    <svg class="graf" viewBox={`0 0 ${w} ${alto + 34}`} role="img" aria-label="Entró, salió y te quedó por mes" style="max-height:230px">
       {p.meses.map((m, i) => {
         const x = sep + i * (ancho * 3 + sep);
         const barra = (v: number, k: number, color: string) => {
@@ -32,12 +33,13 @@ function BarrasMeses(p: { meses: Estadisticas["meses"] }) {
         return (
           <g>
             {barra(m.ingresos, 0, "var(--ok)")}{barra(m.gastos, 1, "var(--accent)")}{barra(m.ganancia, 2, m.ganancia >= 0 ? "var(--amber-bar)" : "#B00020")}
-            <text x={x + ancho * 1.5} y={alto + 16} text-anchor="middle" font-size="12" fill="currentColor">{m.mes}</text>
-            <text x={x + ancho * 1.5} y={alto + 30} text-anchor="middle" font-size="12" fill="currentColor" opacity=".7">{m.viajes} viajes</text>
+            <text x={x + ancho * 1.5} y={alto + 16} text-anchor="middle" font-size="12" fill="currentColor">{mesCorto(m.mes)}</text>
+            <text x={x + ancho * 1.5} y={alto + 30} text-anchor="middle" font-size="12" fill="#6B6254">{m.viajes} {m.viajes === 1 ? "viaje" : "viajes"}</text>
           </g>
         );
       })}
     </svg>
+    </GrafScroll>
   );
 }
 
@@ -57,30 +59,30 @@ async function vista(c: C, d: Deps) {
         </form>
       } />
       <section class="kpis">
-        <Kpi oscuro etiqueta="GANANCIA DEL PERIODO" valor={soles(e.totales.ganancia)} negativo={e.totales.ganancia < 0} />
-        <Kpi etiqueta="INGRESOS" valor={soles(e.totales.ingresos)} />
-        <Kpi etiqueta="GASTOS" valor={soles(e.totales.gastos)} />
-        <Kpi etiqueta="VIAJES" valor={e.totales.viajes} />
+        <Kpi oscuro etiqueta="Te quedó" valor={soles(e.totales.ganancia)} negativo={e.totales.ganancia < 0} />
+        <Kpi etiqueta="Entró" valor={soles(e.totales.ingresos)} />
+        <Kpi etiqueta="Salió" valor={soles(e.totales.gastos)} />
+        <Kpi etiqueta="Viajes" valor={e.totales.viajes} />
       </section>
-      <Panel titulo="INGRESOS · GASTOS · GANANCIA POR MES" der={<span class="leyenda"><span><i style="background:var(--ok)"></i>ingresos</span><span><i style="background:var(--accent)"></i>gastos</span><span><i style="background:var(--amber-bar)"></i>ganancia</span></span>}>
+      <Panel titulo="Entró, salió y te quedó, por mes" der={<span class="leyenda"><span><i style="background:var(--ok)"></i>entró</span><span><i style="background:var(--accent)"></i>salió</span><span><i style="background:var(--amber-bar)"></i>te quedó</span></span>}>
         {e.meses.length === 0 ? <Vacio>Sin datos.</Vacio> : <BarrasMeses meses={e.meses} />}
       </Panel>
       <div class="grid g-2">
-        <Panel titulo="GASTO POR CATEGORÍA">
+        <Panel titulo="En qué se fue la plata">
           {e.porCategoria.length === 0 ? <Vacio>Sin gastos en el periodo.</Vacio> : e.porCategoria.map((x) => (
-            <div><div style="display:flex;justify-content:space-between;font-size:12px"><span>{x.nombre}</span><b>{soles(x.monto)}</b></div><Barra pct={(x.monto / maxCat) * 100} color="var(--accent)" /></div>
+            <div><div class="fila-monto"><span class="nombre" title={x.nombre}>{x.nombre}</span><b>{soles(x.monto)}</b></div><Barra pct={(x.monto / maxCat) * 100} color="var(--accent)" /></div>
           ))}
         </Panel>
-        <Panel titulo="COMBUSTIBLE POR GRIFO">
+        <Panel titulo="Combustible por grifo">
           {e.combustiblePorGrifo.length === 0 ? <Vacio>Sin combustible registrado.</Vacio> : e.combustiblePorGrifo.map((x) => (
-            <div><div style="display:flex;justify-content:space-between;font-size:12px"><span>{x.grifo} <span class="muted">· {x.veces} veces</span></span><b>{soles(x.monto)}</b></div><Barra pct={(x.monto / maxGrifo) * 100} color="var(--ok)" /></div>
+            <div><div class="fila-monto"><span class="nombre">{x.grifo} <span class="muted">· {x.veces} veces</span></span><b>{soles(x.monto)}</b></div><Barra pct={(x.monto / maxGrifo) * 100} color="var(--ok)" /></div>
           ))}
         </Panel>
       </div>
-      <Panel titulo="POR RUTA · PROMEDIO POR VIAJE" der={<span class="lbl">DESVÍO = GASTO PROMEDIO CONTRA LA PLANTILLA DE LA RUTA</span>}>
+      <Panel titulo="Por ruta · promedio de un viaje" der={<span class="muted" style="font-size:12px">Desvío: cuánto más (o menos) gastaste de lo planeado para la ruta</span>}>
         {e.porRuta.length === 0 ? <Vacio>Sin viajes cerrados en el periodo.</Vacio> : (
           <div class="tabla-wrap"><table class="t">
-            <thead><tr><th>Ruta</th><th class="num">Viajes</th><th class="num">Flete prom.</th><th class="num">Gasto prom.</th><th class="num">Ganancia prom.</th><th class="num">Plantilla</th><th class="num">Desvío</th></tr></thead>
+            <thead><tr><th>Ruta</th><th class="num">Viajes</th><th class="num">Flete</th><th class="num">Gastos</th><th class="num">Te quedó</th><th class="num">Planeado</th><th class="num">Desvío</th></tr></thead>
             <tbody>{e.porRuta.map((r) => (
               <tr><td><b>{r.ruta}</b></td><td class="num">{r.viajes}</td><td class="num">{soles(r.flete)}</td><td class="num">{soles(r.gasto)}</td>
                 <td class={`num ${r.ganancia < 0 ? "t-cambiar" : ""}`}>{soles(r.ganancia)}</td><td class="num">{r.presupuesto === null ? "—" : soles(r.presupuesto)}</td>
@@ -90,13 +92,13 @@ async function vista(c: C, d: Deps) {
         )}
       </Panel>
       <div class="grid g-2">
-        <Panel titulo="COMBUSTIBLE POR VIAJE">
+        <Panel titulo="Combustible por viaje">
           {e.combustiblePorViaje.length === 0 ? <Vacio>Sin datos.</Vacio> : (
             <div class="tabla-wrap"><table class="t"><thead><tr><th>Viaje</th><th>Ruta</th><th class="num">Km</th><th class="num">Combustible</th><th class="num">S/ por km</th></tr></thead>
               <tbody>{e.combustiblePorViaje.map((x) => <tr><td>{x.codigo}</td><td>{x.ruta}</td><td class="num">{x.km ?? "—"}</td><td class="num">{soles2(x.monto)}</td><td class="num">{x.solesPorKm === null ? "—" : x.solesPorKm.toFixed(2)}</td></tr>)}</tbody></table></div>
           )}
         </Panel>
-        <Panel titulo="GASTO POR PROVEEDOR">
+        <Panel titulo="Gasto por proveedor">
           {e.porProveedor.length === 0 ? <Vacio>Los gastos leídos de boletas traen el proveedor.</Vacio> : (
             <div class="tabla-wrap"><table class="t"><tbody>{e.porProveedor.map((x) => <tr><td>{x.proveedor}</td><td class="num">{x.veces}</td><td class="num">{soles2(x.monto)}</td></tr>)}</tbody></table></div>
           )}

@@ -509,6 +509,29 @@ a.fila-toca:hover { background: var(--accent-softer); }
   .cab-pagina:has(.filtro) { flex-wrap: wrap; }
   .cab-pagina:has(.filtro) .der { flex-basis: 100%; margin-left: 0; justify-content: flex-start; }
 }
+/* Monto a la derecha en la misma línea; el nombre se corta con «…». */
+.fila-monto { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.fila-monto .nombre { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fila-monto b { white-space: nowrap; }
+/* Gráficos: en el celular conservan su ancho natural (letra de 12 px reales) y se deslizan de lado. */
+.graf-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+@media (max-width: 599.98px) {
+  .graf-scroll > svg { min-width: var(--graf-w); max-height: none !important; }
+  .ocultar-movil { display: none; }
+  /* Caja: Entró y Salió lado a lado; Te quedó abajo a lo ancho (el monto no se parte). */
+  .caja-cifras { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .caja-cifras > .cifra:last-child { grid-column: 1 / -1; }
+}
+.caja-cifras .cifra b { white-space: nowrap; overflow-wrap: normal; }
+/* Caja en el celular: tarjetas (fecha · qué / detalle / monto). */
+.lista-movs { display: flex; flex-direction: column; }
+.fila-mov { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 10px; padding: 10px 0; border-bottom: 1px solid var(--divider); align-items: start; }
+.fila-mov:last-child { border-bottom: 0; }
+.fila-mov .acciones-mov { grid-column: 2; grid-row: 2; justify-self: end; }
+.fila-mov .txt { grid-row: 1 / span 2; }
+.acciones-mov { display: inline-flex; gap: 4px; }
+/* Campos en rejilla: las cajas quedan alineadas aunque una etiqueta ocupe dos líneas. */
+.form-grid.alinear .campo { justify-content: flex-end; }
 @media (min-width: 900px) {
   .numeros-cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }
 }

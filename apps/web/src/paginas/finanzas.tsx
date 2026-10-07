@@ -1,12 +1,12 @@
 /** @jsxRuntime automatic @jsxImportSource hono/jsx */
 import {
   borrarGasto, deudaPrestamos, flujoCaja, hoy, listarMovimientos, listarPrestamos, listarReinversiones, obtenerGasto, puedeEditar, rangoMes,
-  reinvertidoEnAnio, resumenFinanciero,
+  reinvertidoEnAnio, resumenFinanciero, type Movimiento,
 } from "@sunatapp/core";
 import { accion, formulario, formularioMultiparte, pagina, servirDeAlmacen, type App, type C, type Deps } from "../base";
 import { guardarGasto, guardarIngreso, guardarPrestamo, guardarReinversion, pagarCuotaDe } from "../acciones";
 import { redirigir } from "../redirecciones";
-import { Cabecera, Cifra, fechaDia, fechaMedia, mesLargo, Origen, Panel, soles, soles2, Vacio } from "../ui";
+import { Cabecera, Cifra, deCada100, fechaDia, fechaMedia, GrafScroll, mesLargo, Origen, Panel, soles, soles2, Vacio } from "../ui";
 
 const CHIP_MOV: Record<string, string> = { INGRESO: "ok", GASTO: "cambiar", "REINVERSIÓN": "proximo", CUOTA: "oscuro", COMPRA: "neutro" };
 
@@ -14,6 +14,7 @@ function GraficoFlujo({ semanas }: { semanas: Array<{ desde: string; entra: numb
   const W = 720, H = 200, medio = H / 2, ancho = W / semanas.length;
   const max = Math.max(1, ...semanas.flatMap((s) => [s.entra, s.sale]));
   return (
+    <GrafScroll ancho={W}>
     <svg class="graf" viewBox={`0 0 ${W} ${H + 18}`} role="img" aria-label="Flujo de caja semanal: barras hacia arriba entran, hacia abajo salen">
       <line x1="0" x2={W} y1={medio} y2={medio} stroke="#CDBFA5" />
       {semanas.map((s, i) => {
@@ -29,8 +30,21 @@ function GraficoFlujo({ semanas }: { semanas: Array<{ desde: string; entra: numb
         );
       })}
     </svg>
+    </GrafScroll>
   );
 }
+
+const TIPO_CORTO: Record<string, string> = { INGRESO: "entró", GASTO: "gasto", "REINVERSIÓN": "reinversión", CUOTA: "cuota", COMPRA: "compra" };
+
+/** Foto del voucher (solo si hay) y borrar, para un gasto de la lista. */
+const AccionesGasto = ({ m }: { m: Movimiento }) => (
+  <span class="acciones-mov">
+    {m.conFoto ? <a class="btn chico" href={`/archivo/gasto/${m.ref.id}`} title="Ver la foto del voucher">Foto</a> : null}
+    <form method="post" action={`/finanzas/gasto/${m.ref.id}/borrar`} style="display:inline" data-confirmar="¿Borrar este gasto?">
+      <button class="btn chico" type="submit" aria-label="Borrar gasto">×</button>
+    </form>
+  </span>
+);
 
 async function vistaCaja(c: C, d: Deps) {
   const ctx = d.ctx;
@@ -43,18 +57,30 @@ async function vistaCaja(c: C, d: Deps) {
   return pagina(c, d, { titulo: "Caja", seccion: "finanzas" }, (
     <>
       <Cabecera volver="/numeros" titulo="Caja" sub={`Entradas y salidas de ${mesLargo(mes)}`} der={
-        <form method="get" action="/numeros/caja" class="linea filtro"><input type="month" name="mes" value={mes} aria-label="Mes" /><button class="btn chico" type="submit">Ver</button></form>
+        <>
+          <form method="get" action="/numeros/caja" class="linea filtro"><input type="month" name="mes" value={mes} aria-label="Mes" /><button class="btn chico" type="submit">Ver</button></form>
+          {edita ? <a class="btn chico" href="/anotar?tipo=cobro&modo=otro&volver=%2Fnumeros%2Fcaja" data-abrir-panel="">+ Me pagaron</a> : null}
+        </>
       } />
-      <div class="tres-cifras">
+      <div class="tres-cifras caja-cifras">
         <Cifra etiqueta="Entró" valor={soles(fin.ingresos)} tono="ok" />
         <Cifra etiqueta="Salió" valor={soles(fin.gastos)} sub={`del viaje ${soles(fin.gastosVariables)} · del mes ${soles(fin.gastosFijos)}`} />
-        <Cifra etiqueta="Te quedó" valor={soles(fin.ganancia)} tono={fin.ganancia < 0 ? "cambiar" : undefined} sub={fin.margenPct !== null ? `margen ${fin.margenPct}%` : undefined} />
+        <Cifra etiqueta="Te quedó" valor={soles(fin.ganancia)} tono={fin.ganancia < 0 ? "cambiar" : undefined} sub={fin.margenPct === null ? undefined : fin.margenPct < 0 ? `pierdes ${deCada100(-fin.margenPct)} de cada S/ 100` : `te quedan ${deCada100(fin.margenPct)} de cada S/ 100`} />
       </div>
       <Panel titulo="Flujo de caja · 12 semanas" der={<span class="leyenda"><span><i style="background:#2D5B7A"></i>arriba entra</span><span><i style="background:#B8236E"></i>abajo sale</span></span>}>
         <GraficoFlujo semanas={flujo} />
       </Panel>
-      <Panel titulo={`Movimientos · ${movs.length}`} der={edita ? <a class="btn chico" href="/anotar?tipo=gaste&volver=%2Fnumeros%2Fcaja" data-abrir-panel="">+ Anotar</a> : null}>
-        <div class="tabla-wrap">
+      <Panel titulo={`Movimientos · ${movs.length}`} der={edita ? <a class="btn chico" href="/anotar?tipo=gaste&volver=%2Fnumeros%2Fcaja" data-abrir-panel="">+ Gasté</a> : null}>
+        <div class="lista-movs solo-movil">
+          {movs.length === 0 ? <Vacio>Sin movimientos en {mesLargo(mes)}.</Vacio> : movs.map((m) => (
+            <div class="fila-mov">
+              <span class="txt"><span class="muted">{fechaDia(m.fecha)} · {TIPO_CORTO[m.tipo] ?? m.tipo}{m.unidad !== "—" ? ` · ${m.unidad}` : ""}</span><br />{m.detalle}</span>
+              <b class={`num ${m.monto < 0 ? "t-cambiar" : "t-ok"}`}>{m.monto < 0 ? "−" : "+"}{soles2(Math.abs(m.monto))}</b>
+              {edita && m.ref.entidad === "gasto" ? <AccionesGasto m={m} /> : null}
+            </div>
+          ))}
+        </div>
+        <div class="tabla-wrap solo-pc">
           <table class="t">
             <thead><tr><th>Fecha</th><th>Qué</th><th>Detalle</th><th>Camión</th><th class="num">Monto</th><th>De</th>{edita ? <th></th> : null}</tr></thead>
             <tbody>
@@ -65,16 +91,7 @@ async function vistaCaja(c: C, d: Deps) {
                   <td>{m.detalle}</td><td>{m.unidad}</td>
                   <td class={`num ${m.monto < 0 ? "t-cambiar" : "t-ok"}`}>{m.monto < 0 ? "−" : "+"}{soles2(Math.abs(m.monto))}</td>
                   <td><Origen origen={m.origen} /></td>
-                  {edita ? (
-                    <td class="nowrap">
-                      {m.ref.entidad === "gasto" ? <a class="btn chico" href={`/archivo/gasto/${m.ref.id}`} title="Ver la foto del voucher">Foto</a> : null}
-                      {m.ref.entidad === "gasto" ? (
-                        <form method="post" action={`/finanzas/gasto/${m.ref.id}/borrar`} style="display:inline;margin-left:4px" data-confirmar="¿Borrar este gasto?">
-                          <button class="btn chico" type="submit" aria-label="Borrar gasto">×</button>
-                        </form>
-                      ) : null}
-                    </td>
-                  ) : null}
+                  {edita ? <td class="nowrap">{m.ref.entidad === "gasto" ? <AccionesGasto m={m} /> : null}</td> : null}
                 </tr>
               ))}
             </tbody>
@@ -87,7 +104,8 @@ async function vistaCaja(c: C, d: Deps) {
 
 async function vistaPrestamos(c: C, d: Deps) {
   const ctx = d.ctx;
-  const anio = hoy(ctx).slice(0, 4);
+  const h = hoy(ctx);
+  const anio = h.slice(0, 4);
   const [deuda, prestamos, reinv, reinversiones] = await Promise.all([deudaPrestamos(ctx), listarPrestamos(ctx), reinvertidoEnAnio(ctx, anio), listarReinversiones(ctx, anio)]);
   const edita = puedeEditar(c.get("usuario").rol, "finanzas");
   return pagina(c, d, { titulo: "Préstamos y cuotas", seccion: "finanzas" }, (
@@ -100,10 +118,12 @@ async function vistaPrestamos(c: C, d: Deps) {
       <Panel titulo="Préstamos">
         {prestamos.length === 0 ? <Vacio>Sin préstamos activos.</Vacio> : prestamos.map((p) => (
           <div class="filas" style="border-bottom:1px solid var(--divider);padding-bottom:10px">
-            <div class="fila-sep"><b>{p.entidad}</b><span class="muted">TEA {p.tasaAnual}%</span></div>
+            <div class="fila-sep"><b>{p.entidad}</b><span class="muted">interés al año {p.tasaAnual}%</span></div>
             <div><b class="mono-t" style="font-size:18px">{soles(p.saldo)}</b> <span class="lbl">por pagar</span></div>
             <div class="tira" aria-label={`${p.pagadas} de ${p.total} cuotas pagadas`}>{p.cuotas.map((q) => <i style={`width:8px;height:14px;background:${q.pagada ? "var(--accent)" : "var(--divider)"}`} title={`Cuota ${q.numero} · ${q.vencimiento} · ${soles2(q.monto)}`}></i>)}</div>
-            <div class="fila-sep"><span>{p.pagadas} de {p.total} cuotas</span><span>Próxima {p.proxima ? `${fechaMedia(p.proxima.vencimiento).toLowerCase()} · ${soles2(p.proxima.monto)}` : "—"}</span></div>
+            <div class="fila-sep"><span>{p.pagadas} de {p.total} cuotas</span>{p.proxima && p.proxima.vencimiento < h
+                ? <b class="t-cambiar">Vencida {fechaMedia(p.proxima.vencimiento).toLowerCase()} · {soles2(p.proxima.monto)}</b>
+                : <span>Próxima {p.proxima ? `${fechaMedia(p.proxima.vencimiento).toLowerCase()} · ${soles2(p.proxima.monto)}` : "—"}</span>}</div>
             {edita && p.proxima ? (
               <form method="post" action={`/finanzas/prestamo/${p.id}/pagar`} data-confirmar={`¿Registrar el pago de la cuota de ${soles2(p.proxima.monto)}?`}>
                 <button class="btn chico" type="submit">Pagar cuota</button>

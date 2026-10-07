@@ -938,7 +938,7 @@ describe("web", () => {
         const { facturaId } = await facturaPorVerificar();
         const cookie = await entrar();
         await post(cookie, `/facturas/${facturaId}/en-sol`, { enSol: "no" });
-        expect(await estadoFactura(facturaId)).toMatchObject({ estadoSunat: "rechazada", codigoRespuesta: "1033" });
+        expect(await estadoFactura(facturaId)).toMatchObject({ estadoSunat: "rechazada", codigoRespuesta: "NO_EN_SOL" });
         expect(await (await app.request("/viajes", { headers: { cookie } })).text()).toContain("VOLVER A EMITIR");
         const r = await post(cookie, `/facturas/${facturaId}/reemitir`, {});
         expect(texto(r)).toContain("F001-2");

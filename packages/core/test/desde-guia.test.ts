@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { eq, guiaTransportista, viaje } from "@sunatapp/db";
+import { auditoria, eq, guiaTransportista, viaje } from "@sunatapp/db";
 import { alRegistrarGuia, avisoViajeDeGuia, ciudadDeUbigeo, editarViajeFlota, obtenerUnidad, registrarGasto, registrarGuiaBorrador, registrarViajeFlota, viajesPorRevisar, type Contexto } from "../src/index";
 import { crearContextoPrueba, entradaGuia } from "./helpers";
 
@@ -61,7 +61,14 @@ describe("el viaje nace de la guía", () => {
     expect(await avisoViajeDeGuia(ctx, a)).toMatch(/^🚛 Viaje VJ-\d{4} abierto: Lima → Calleria/);
     const b = await guia("EG01-2");
     expect(await avisoViajeDeGuia(ctx, b)).toMatch(/^↩️ Guía de retorno de VJ-\d{4}/);
-    await guia("EG01-3").then(async (c) => expect(await avisoViajeDeGuia(ctx, c)).toMatch(/se cerró solo/));
+    await guia("EG01-3").then(async (c) => {
+      const t = await avisoViajeDeGuia(ctx, c);
+      expect(t).toMatch(/se cerró solo; revisa su km y flete en «Necesita tu atención»/);
+      expect(t).not.toContain("Por revisar");
+    });
+    // Si no se pudo crear el viaje, el aviso usa las mismas palabras.
+    await ctx.db.insert(auditoria).values({ accion: "viaje_desde_guia_error", entidad: "guia_transportista", entidadId: "999", detalle: { mensaje: "sin camión" } });
+    expect(await avisoViajeDeGuia(ctx, 999)).toBe("⚠️ No pude crear el viaje de esta guía (sin camión). Queda en «Necesita tu atención».");
   });
 
   it("idempotencia: llamarla otra vez para la misma guía no crea otro viaje", async () => {

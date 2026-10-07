@@ -74,9 +74,9 @@ export async function avisoViajeDeGuia(ctx: Contexto, guiaId: number): Promise<s
     .orderBy(desc(auditoria.id)).limit(10)
     .then((fs) => fs.filter((f) => f.accion === "viaje_desde_guia" || f.accion === "viaje_desde_guia_error"));
   if (!a) return null;
-  if (a.accion === "viaje_desde_guia_error") return `⚠️ No pude crear el viaje de esta guía (${String((a.detalle as { mensaje?: string })?.mensaje ?? "error")}). Queda en Por revisar.`;
+  if (a.accion === "viaje_desde_guia_error") return `⚠️ No pude crear el viaje de esta guía (${String((a.detalle as { mensaje?: string })?.mensaje ?? "error")}). Queda en «Necesita tu atención».`;
   const r = a.detalle as ResultadoGuia;
   if (r.accion === "retorno") return `↩️ Guía de retorno de ${r.viajeCodigo} (${r.ruta}).`;
   const abierto = `🚛 Viaje ${r.viajeCodigo} abierto: ${r.ruta}. Los gastos que mandes van a este viaje.`;
-  return r.cerradoCodigo ? `${abierto}\n⚠️ ${r.cerradoCodigo} ya tenía ida y retorno: se cerró solo; revisa su km y flete en Por revisar.` : abierto;
+  return r.cerradoCodigo ? `${abierto}\n⚠️ ${r.cerradoCodigo} ya tenía ida y retorno: se cerró solo; revisa su km y flete en «Necesita tu atención».` : abierto;
 }

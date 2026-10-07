@@ -109,7 +109,7 @@ export async function registrarGuiaBorrador(ctx: Contexto, e: EntradaGuia, usuar
       await registrarAuditoria(tx, { usuarioId, accion: "guia_registrada", entidad: "guia_transportista", entidadId: guia!.id });
       return guia!.id;
     });
-    // El viaje nace de la guía (spec §5). Si falla, la guía queda sin viaje y sale en «Por revisar».
+    // El viaje nace de la guía (spec §5). Si falla, la guía queda sin viaje y sale en «Necesita tu atención».
     await alRegistrarGuia(ctx, id, usuarioId).catch((error: unknown) => registrarAuditoria(ctx.db, {
       usuarioId, accion: "viaje_desde_guia_error", entidad: "guia_transportista", entidadId: id,
       detalle: { mensaje: error instanceof Error ? error.message : String(error) },

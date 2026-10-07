@@ -151,7 +151,7 @@ export async function editarViajeFlota(
   if (e.origenLugar !== undefined) cambios.origenLugar = e.origenLugar;
   if (e.destinoLugar !== undefined) cambios.destinoLugar = e.destinoLugar;
   if (e.nota !== undefined) cambios.nota = e.nota;
-  // Corregido a mano: deja de estar «cerrado solo» en Por revisar.
+  // Corregido a mano: deja de estar «cerrado solo» en «Necesita tu atención».
   cambios.cierreAutomatico = false;
   const [f] = await ctx.db.update(viaje).set(cambios).where(eq(viaje.id, viajeId)).returning({ id: viaje.id });
   if (!f) throw new ErrorNegocio("El viaje no existe");

@@ -100,9 +100,9 @@ describe("el dueño resuelve una factura por verificar en SOL", () => {
     const { ctx, guiaId } = await ctxConGuia();
     const facturaId = await facturaPorVerificar(ctx, guiaId);
     const r = await confirmarFacturaEnSol(ctx, facturaId, false, 1);
-    expect(r).toMatchObject({ estado: "rechazada", codigo: "1033" });
+    expect(r).toMatchObject({ estado: "rechazada", codigo: "NO_EN_SOL" });
     expect(r.mensaje).toContain("vuelve a emitirla");
-    expect(await auditorias(ctx, "factura_no_esta_en_sol")).toHaveLength(1);
+    expect(await auditorias(ctx, "factura_no_esta_en_sol")).toEqual([expect.objectContaining({ detalle: expect.objectContaining({ codigo: "1033" }) })]);
     expect((await listarDocumentosAtascados(ctx)).facturas).toEqual([]);
     expect((await listarDocumentosAtascados(ctx)).porReemitir).toEqual([expect.objectContaining({ id: facturaId, serieNumero: "F001-1" })]);
     ahora = new Date(ahora.getTime() + 10 * 60_000);

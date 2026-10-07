@@ -47,6 +47,7 @@ async function vista(c: C, d: Deps) {
             {atascados.facturas.map((f) => (
               <form method="post" action={`/facturas/${f.id}/en-sol`} class="filas" style="gap:6px">
                 <span><b>Factura {f.serieNumero}</b>: SUNAT dice que ya la tiene, pero no mandó su constancia. Entra a SOL, busca esta factura y dinos qué ves.</span>
+                <span class="aviso info" style="font-size:12px">Si acabas de emitirla, espera unos minutos antes de responder: SOL puede tardar en mostrarla.</span>
                 <div class="linea">
                   <button class="btn primario chico" type="submit" name="enSol" value="si" style="min-height:44px">YA LA VERIFIQUÉ EN SOL: ESTÁ ACEPTADA</button>
                   <button class="btn chico" type="submit" name="enSol" value="no" style="min-height:44px">NO ESTÁ EN SOL</button>

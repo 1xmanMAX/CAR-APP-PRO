@@ -13,6 +13,8 @@ import type { Contexto } from "../infra/contexto";
  */
 export const MENSAJE_ACEPTADA_EN_SOL = "Aceptada: el dueño la verificó en SOL (no hay CDR guardado)";
 export const MENSAJE_NO_ESTA_EN_SOL = "No está en SOL: vuelve a emitirla (saldrá con otro número)";
+/** Código con el que queda la factura que el dueño marcó "no está en SOL" (no es de SUNAT; la reemisión toma otro número). */
+export const CODIGO_NO_EN_SOL = "NO_EN_SOL";
 const MENSAJE_RECONSULTAR = "Se volverá a consultar a SUNAT en unos minutos";
 
 export interface DocumentoAtascado { id: number; serieNumero: string; codigo: string | null; mensaje: string | null }
@@ -26,7 +28,7 @@ export async function listarDocumentosAtascados(ctx: Contexto): Promise<{ factur
     .where(and(eq(factura.estadoSunat, "pendiente_envio"), inArray(factura.codigoRespuesta, CODIGOS_VERIFICAR)));
   // Las que el dueño marcó "no está en SOL": esperan que las vuelva a emitir.
   const porReemitir = await ctx.db.select().from(factura)
-    .where(and(eq(factura.estadoSunat, "rechazada"), inArray(factura.codigoRespuesta, CODIGOS_VERIFICAR), eq(factura.mensajeRespuesta, MENSAJE_NO_ESTA_EN_SOL)));
+    .where(and(eq(factura.estadoSunat, "rechazada"), eq(factura.codigoRespuesta, CODIGO_NO_EN_SOL)));
   const guias = await ctx.db.select().from(guiaTransportista)
     .where(and(eq(guiaTransportista.estado, "enviada"), gte(guiaTransportista.intentos, MAX_INTENTOS)));
   return { facturas: facturas.map(fila), guias: guias.map(fila), porReemitir: porReemitir.map(fila) };
@@ -38,16 +40,17 @@ export async function listarDocumentosAtascados(ctx: Contexto): Promise<{ factur
  * al volver a emitirla toma un número nuevo).
  */
 export async function confirmarFacturaEnSol(ctx: Contexto, facturaId: number, enSol: boolean, usuarioId?: number): Promise<ResultadoEmision> {
+  const [previa] = await ctx.db.select({ codigo: factura.codigoRespuesta }).from(factura).where(eq(factura.id, facturaId));
   const cambios = enSol
     ? { estadoSunat: "aceptada" as const, mensajeRespuesta: MENSAJE_ACEPTADA_EN_SOL }
-    : { estadoSunat: "rechazada" as const, mensajeRespuesta: MENSAJE_NO_ESTA_EN_SOL };
+    : { estadoSunat: "rechazada" as const, codigoRespuesta: CODIGO_NO_EN_SOL, mensajeRespuesta: MENSAJE_NO_ESTA_EN_SOL };
   const hechas = await ctx.db.update(factura)
     .set({ ...cambios, intentos: 0, proximoIntentoEn: null, actualizadoEn: ctx.reloj() })
     .where(and(eq(factura.id, facturaId), eq(factura.estadoSunat, "pendiente_envio"), inArray(factura.codigoRespuesta, CODIGOS_VERIFICAR)))
-    .returning({ codigo: factura.codigoRespuesta });
+    .returning({ id: factura.id });
   if (hechas.length === 0) throw new ErrorNegocio("Esa factura no está esperando que la verifiques en SOL");
   await registrarAuditoria(ctx.db, {
-    usuarioId, accion: enSol ? "factura_confirmada_en_sol" : "factura_no_esta_en_sol", entidad: "factura", entidadId: facturaId, detalle: { codigo: hechas[0]!.codigo },
+    usuarioId, accion: enSol ? "factura_confirmada_en_sol" : "factura_no_esta_en_sol", entidad: "factura", entidadId: facturaId, detalle: { codigo: previa?.codigo ?? null },
   });
   return resultadoFactura(ctx, facturaId);
 }

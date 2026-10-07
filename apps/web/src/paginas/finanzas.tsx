@@ -1,12 +1,12 @@
 /** @jsxRuntime automatic @jsxImportSource hono/jsx */
 import {
-  borrarGasto, deudaPrestamos, flujoCaja, hoy, listarMovimientos, listarPrestamos, listarReinversiones, obtenerGasto, puedeEditar, rangoMes,
+  borrarGasto, deudaPrestamos, flujoCaja, hoy, listarMovimientos, listarPrestamos, listarReinversiones, obtenerGasto, puedeEditar, puedeVer, rangoMes,
   reinvertidoEnAnio, resumenFinanciero, type Movimiento,
 } from "@sunatapp/core";
-import { accion, formulario, formularioMultiparte, pagina, servirDeAlmacen, type App, type C, type Deps } from "../base";
-import { guardarGasto, guardarIngreso, guardarPrestamo, guardarReinversion, pagarCuotaDe } from "../acciones";
+import { accion, pagina, servirDeAlmacen, type App, type C, type Deps } from "../base";
+import { pagarCuotaDe } from "../acciones";
 import { redirigir } from "../redirecciones";
-import { Cabecera, Cifra, deCada100, fechaDia, fechaMedia, GrafScroll, mesLargo, Origen, Panel, soles, soles2, Vacio } from "../ui";
+import { Cabecera, Cifra, deCada100, fechaDia, fechaMedia, GrafScroll, mesLargo, Origen, Panel, SelectMes, soles, soles2, Vacio } from "../ui";
 
 const CHIP_MOV: Record<string, string> = { INGRESO: "ok", GASTO: "cambiar", "REINVERSIÓN": "proximo", CUOTA: "oscuro", COMPRA: "neutro" };
 
@@ -58,7 +58,7 @@ async function vistaCaja(c: C, d: Deps) {
     <>
       <Cabecera volver="/numeros" titulo="Caja" sub={`Entradas y salidas de ${mesLargo(mes)}`} der={
         <>
-          <form method="get" action="/numeros/caja" class="linea filtro"><input type="month" name="mes" value={mes} aria-label="Mes" /><button class="btn chico" type="submit">Ver</button></form>
+          <form method="get" action="/numeros/caja" class="linea filtro"><SelectMes nombre="mes" valor={mes} hasta={h.slice(0, 7)} etiqueta="Mes" /><button class="btn chico" type="submit">Ver</button></form>
           {edita ? <a class="btn chico" href="/anotar?tipo=cobro&modo=otro&volver=%2Fnumeros%2Fcaja" data-abrir-panel="">+ Me pagaron</a> : null}
         </>
       } />
@@ -145,28 +145,16 @@ export function rutasFinanzas(app: App, d: Deps): void {
   app.get("/numeros/caja", (c) => vistaCaja(c as C, d));
   app.get("/numeros/prestamos", (c) => vistaPrestamos(c as C, d));
   redirigir(app, "/finanzas", () => "/numeros/caja", ["mes"]);
-  app.post("/finanzas/gasto", async (c) => {
-    const { campos: f, archivos } = await formularioMultiparte(c);
-    return accion(c, "/numeros/caja", () => guardarGasto(d, c.get("usuario").id, f, archivos.foto));
-  });
+  // Gastos, ingresos, préstamos y reinversiones nuevos se anotan en POST /anotar; aquí quedan borrar y pagar cuota.
   app.post("/finanzas/gasto/:id/borrar", async (c) => accion(c, "/numeros/caja", async () => {
     await borrarGasto(d.ctx, Number(c.req.param("id")), c.get("usuario").id);
     return "Gasto borrado";
   }));
-  app.post("/finanzas/ingreso", async (c) => {
-    const f = await formulario(c);
-    return accion(c, "/numeros/caja", () => guardarIngreso(d, c.get("usuario").id, f));
-  });
-  app.post("/finanzas/reinversion", async (c) => {
-    const f = await formulario(c);
-    return accion(c, "/numeros/prestamos", () => guardarReinversion(d, c.get("usuario").id, f));
-  });
-  app.post("/finanzas/prestamo", async (c) => {
-    const f = await formulario(c);
-    return accion(c, "/numeros/prestamos", () => guardarPrestamo(d, c.get("usuario").id, f));
-  });
   app.post("/finanzas/prestamo/:id/pagar", async (c) => accion(c, "/numeros/prestamos", () => pagarCuotaDe(d, c.get("usuario").id, Number(c.req.param("id")))));
-  app.get("/archivo/gasto/:id", async (c) => {
+  app.get("/archivo/gasto/:id{[0-9]+}", async (c) => {
+    // La foto de un gasto es de Viajes o de Números: el taller no la abre aunque adivine el número.
+    const rol = c.get("usuario").rol;
+    if (!puedeVer(rol, "viajes") && !puedeVer(rol, "finanzas")) return c.text("Tu rol no ve las fotos de los gastos", 403);
     const g = await obtenerGasto(d.ctx, Number(c.req.param("id")));
     return servirDeAlmacen(c, d, g?.rutaFoto ?? null);
   });

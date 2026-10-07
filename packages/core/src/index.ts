@@ -54,3 +54,4 @@ export * from "./sincro/index";
 export * from "./sunat/probar";
 export * from "./facturas/automatica";
 export * from "./sunat/aplicar";
+export * from "./sunat/atascados";

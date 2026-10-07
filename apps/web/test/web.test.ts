@@ -18,12 +18,12 @@ vi.mock("@sunatapp/core", async (importOriginal) => {
   };
 });
 import {
-  AVISO_RETORNO_VACIO, emitirGuia, leerPausaSunat, pausarSunat, registrarGuiaBorrador,
+  AVISO_RETORNO_VACIO, emitirFactura, emitirGuia, leerPausaSunat, MAX_INTENTOS, MENSAJE_VERIFICAR_EN_SOL, pausarSunat, prepararFactura, registrarGuiaBorrador,
   buscarUnidad, listarValoresReferenciales, crearCategoria, crearEnlaceWeb, guardarUsuario, registrarGasto, registrarViajeFlota, listarEventos, listarUsuarios, listarViajesFlota, obtenerEmpresa, partesDeUnidad, instalarParte, listarTiposParte,
   type Contexto,
 } from "@sunatapp/core";
-import { crearDb, eq, gasto, guiaTransportista, vehiculo } from "../../../packages/db/src/index";
-import { crearContextoPrueba, entradaGuia } from "../../../packages/core/test/helpers";
+import { crearDb, eq, factura, gasto, guiaTransportista, vehiculo } from "../../../packages/db/src/index";
+import { crearContextoPrueba, entradaGuia, prepararDatosTransporte } from "../../../packages/core/test/helpers";
 import { crearWeb } from "../src/app";
 
 let ctx: Contexto;
@@ -467,10 +467,11 @@ describe("web", () => {
     });
 
     /** Servicios que guardan en memoria, como el `.env` real. */
-    function serviciosEnMemoria(guardado: Record<string, string>, error?: string) {
+    /** `modoConError`: hay un aviso de SUNAT pero el modo pedido sí está andando. */
+    function serviciosEnMemoria(guardado: Record<string, string>, error?: string, modoConError = false) {
       return {
         ...servicios,
-        estado: () => ({ ...servicios.estado(), sunat: { modo: (guardado.SUNAT_MODO ?? "simulado") as "simulado" | "beta" | "real", ...(error ? { error } : {}) } }),
+        estado: () => ({ ...servicios.estado(), sunat: { modo: (error && !modoConError ? "simulado" : guardado.SUNAT_MODO ?? "simulado") as "simulado" | "beta" | "real", ...(error ? { error } : {}) } }),
         ajustes: () => ({ ...guardado }),
         guardarAjustes: async (cambios: Record<string, string | null>) => {
           for (const [k, v] of Object.entries(cambios)) { if (v === null) delete guardado[k]; else guardado[k] = v; }
@@ -540,6 +541,82 @@ describe("web", () => {
       const r = await postForm(cookie, "/ajustes/dispositivo/reanudar", {});
       expect(texto(r)).toContain("Primero corrige los ajustes de SUNAT");
       expect(await leerPausaSunat(ctx)).not.toBeNull();
+    });
+
+    it("REINTENTAR AHORA sí reanuda una pausa por claves si el modo pedido está andando", async () => {
+      app = crearWeb(ctx, { servicios: serviciosEnMemoria({ SUNAT_MODO: "real" }, "aviso viejo de SUNAT", true) });
+      await pausarSunat(ctx, "SUNAT rechazó el usuario o la clave SOL");
+      const cookie = await entrar();
+      const r = await postForm(cookie, "/ajustes/dispositivo/reanudar", {});
+      expect(texto(r)).toContain("SUNAT reanudada");
+      expect(await leerPausaSunat(ctx)).toBeNull();
+    });
+
+    it("REINTENTAR AHORA no reanuda una pausa por claves si el modo pedido no carga (iría al simulador)", async () => {
+      app = crearWeb(ctx, { servicios: serviciosEnMemoria({ SUNAT_MODO: "real" }, "No se pudo usar SUNAT real: certificado") });
+      await pausarSunat(ctx, "SUNAT rechazó el usuario o la clave SOL");
+      const cookie = await entrar();
+      expect(texto(await postForm(cookie, "/ajustes/dispositivo/reanudar", {}))).toContain("Primero corrige los ajustes de SUNAT");
+      expect(await leerPausaSunat(ctx)).not.toBeNull();
+    });
+
+    describe("documentos atascados que esperan al dueño", () => {
+      async function facturaPorVerificar(): Promise<{ guiaId: number; facturaId: number }> {
+        await prepararDatosTransporte(ctx);
+        const guiaId = await registrarGuiaBorrador(ctx, entradaGuia());
+        await emitirGuia(ctx, guiaId);
+        const { facturaId } = await prepararFactura(ctx, { guiaId, montoCentimos: 50000, incluyeIgv: true, formaPago: "contado" });
+        await emitirFactura(ctx, facturaId);
+        await ctx.db.update(factura).set({ estadoSunat: "pendiente_envio", codigoRespuesta: "1033", mensajeRespuesta: MENSAJE_VERIFICAR_EN_SOL, proximoIntentoEn: null, rutaCdr: null })
+          .where(eq(factura.id, facturaId));
+        return { guiaId, facturaId };
+      }
+      const estadoFactura = async (id: number) => (await ctx.db.select().from(factura).where(eq(factura.id, id)))[0]!;
+
+      it("factura «verifícala en SOL»: no bloquea el cambio de modo y el dueño la confirma aceptada", async () => {
+        const guardado: Record<string, string> = { SUNAT_MODO: "simulado" };
+        app = crearWeb(ctx, { servicios: serviciosEnMemoria(guardado) });
+        const { facturaId } = await facturaPorVerificar();
+        const cookie = await entrar();
+        const html = await (await app.request("/viajes", { headers: { cookie } })).text();
+        expect(html).toContain("YA LA VERIFIQUÉ EN SOL: ESTÁ ACEPTADA");
+        expect(html).toContain("NO ESTÁ EN SOL");
+        expect(texto(await postForm(cookie, "/ajustes/dispositivo", { SUNAT_MODO: "beta" }))).toContain("Ajustes guardados");
+        expect(guardado.SUNAT_MODO).toBe("beta");
+        const r = await post(cookie, `/facturas/${facturaId}/en-sol`, { enSol: "si" });
+        expect(texto(r)).toContain("aceptada");
+        expect(await estadoFactura(facturaId)).toMatchObject({ estadoSunat: "aceptada", rutaCdr: null });
+      });
+
+      it("«no está en SOL» la rechaza y VOLVER A EMITIR la manda con otro número", async () => {
+        const { facturaId } = await facturaPorVerificar();
+        const cookie = await entrar();
+        await post(cookie, `/facturas/${facturaId}/en-sol`, { enSol: "no" });
+        expect(await estadoFactura(facturaId)).toMatchObject({ estadoSunat: "rechazada", codigoRespuesta: "1033" });
+        expect(await (await app.request("/viajes", { headers: { cookie } })).text()).toContain("VOLVER A EMITIR");
+        const r = await post(cookie, `/facturas/${facturaId}/reemitir`, {});
+        expect(texto(r)).toContain("F001-2");
+        expect(await estadoFactura(facturaId)).toMatchObject({ estadoSunat: "aceptada", numero: 2 });
+      });
+
+      it("guía sin respuesta: VOLVER A CONSULTAR reinicia los intentos", async () => {
+        const guiaId = await registrarGuiaBorrador(ctx, entradaGuia());
+        await emitirGuia(ctx, guiaId);
+        await ctx.db.update(guiaTransportista).set({ estado: "enviada", ticket: "T-1", intentos: MAX_INTENTOS }).where(eq(guiaTransportista.id, guiaId));
+        const cookie = await entrar();
+        expect(await (await app.request("/viajes", { headers: { cookie } })).text()).toContain("VOLVER A CONSULTAR");
+        expect(texto(await post(cookie, `/guias/${guiaId}/reconsultar`, {}))).toContain("Se volverá a consultar");
+        expect((await ctx.db.select().from(guiaTransportista).where(eq(guiaTransportista.id, guiaId)))[0]!.intentos).toBe(0);
+      });
+
+      it("solo el dueño: el contador no ve los botones ni puede usarlos", async () => {
+        const { facturaId } = await facturaPorVerificar();
+        await guardarUsuario(ctx, { nombre: "Conta", email: "conta@demo.pe", rol: "contador", clave: "clave-segura" });
+        const cookie = await entrar("conta@demo.pe");
+        expect(await (await app.request("/viajes", { headers: { cookie } })).text()).not.toContain("NO ESTÁ EN SOL");
+        expect(texto(await post(cookie, `/facturas/${facturaId}/en-sol`, { enSol: "si" }))).toContain("Solo el dueño");
+        expect(await estadoFactura(facturaId)).toMatchObject({ estadoSunat: "pendiente_envio" });
+      });
     });
 
     it("la guía para sacar tus accesos pide también el permiso de consulta del usuario SOL", async () => {

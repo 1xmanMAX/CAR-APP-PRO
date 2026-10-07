@@ -26,7 +26,7 @@ const MENSAJE_AGOTADO = "No se pudo enviar a SUNAT durante 24 horas. Revisa la c
  * pendiente con ese código y el fondo NO la reenvía; el dueño la verifica en SOL.
  */
 export const MENSAJE_VERIFICAR_EN_SOL = "SUNAT dice que ya tiene esta factura: verifícala en SOL antes de volver a emitir";
-const CODIGOS_VERIFICAR = ["1032", "1033"];
+export const CODIGOS_VERIFICAR = ["1032", "1033"];
 /** Códigos de "rechazada" que nunca llegaron a SUNAT: al reemitir se conserva el número. */
 const SIN_LLEGAR_A_SUNAT = ["XSD", "SIN_ENVIO"];
 

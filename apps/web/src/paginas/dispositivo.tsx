@@ -235,9 +235,14 @@ export function rutasDispositivo(app: App, d: Deps): void {
   });
   app.post("/ajustes/dispositivo/reanudar", async (c) => accion(c, "/ajustes/dispositivo", async () => {
     if (!d.servicios || c.get("usuario").rol !== "dueno") throw new ErrorNegocio("Solo el dueño puede reanudar SUNAT");
-    // Si la configuración pedida no carga, la app está en simulado: reanudar mandaría los pendientes al simulador.
-    const error = d.servicios.estado().sunat.error;
-    if (error) throw new ErrorNegocio(`Primero corrige los ajustes de SUNAT: ${error}`);
+    // Si la configuración pedida (Real/Beta) no carga, la app está en simulado: reanudar mandaría los
+    // pendientes al simulador. Se mira el modo que corre, no cualquier aviso: una pausa por claves con
+    // el modo pedido andando sí se puede reanudar.
+    const e = d.servicios.estado();
+    const pedido = d.servicios.ajustes().SUNAT_MODO?.trim() || "simulado";
+    if ((pedido === "real" || pedido === "beta") && e.sunat.modo !== pedido) {
+      throw new ErrorNegocio(`Primero corrige los ajustes de SUNAT${e.sunat.error ? `: ${e.sunat.error}` : ""}`);
+    }
     await reanudarSunat(d.ctx);
     return "SUNAT reanudada";
   }));

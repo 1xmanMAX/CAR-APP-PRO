@@ -13,7 +13,7 @@ import {
 } from "../acciones";
 import { TIPOS_ANOTAR, tiposAnotar, type TipoAnotar } from "../lugares";
 import { ESTADO_LECTURA, valoresLectura } from "./revisar";
-import { Cabecera, diasEntre, fechaCorta, Icono, miles, soles, soles2, Vacio, type NombreIcono } from "../ui";
+import { Cabecera, diasEntre, fechaCorta, nDias, Icono, miles, soles, soles2, Vacio, type NombreIcono } from "../ui";
 
 /** `documento`: un mensaje de Telegram por confirmar (ver `parteDocumento`). `monto`, `categoria` y `medio` solo vuelven en la URL cuando no se pudo guardar (así no se pierde lo escrito). */
 const CLAVES_Q = ["tipo", "modo", "volver", "viajeId", "vehiculoId", "facturaId", "prestamoId", "pieza", "parteId", "repuestoId", "monto", "categoria", "medio", "documento"] as const;
@@ -286,7 +286,7 @@ const ListaFacturas: FC<{ q: Q; filas: FilaCobro[]; selId: number | null; hoy: s
       {filas.map((f) => (
         <a class={`fila-aviso${f.facturaId === selId ? " sel" : ""}`} href={urlAnotar({ ...q, facturaId: f.facturaId, monto: "" })} data-panel-link="" aria-current={f.facturaId === selId ? "true" : undefined}>
           <span class="punto" style={`background:var(${f.estado === "vencida" ? "--accent" : "--amber-bar"})`}></span>
-          <span class="txt"><b>{f.cliente}</b> · {f.serieNumero}<br /><span class="muted">{f.estado === "vencida" ? `vencida hace ${diasEntre(f.fechaVencimiento, h)} días` : `vence ${fechaCorta(f.fechaVencimiento)}`}</span></span>
+          <span class="txt"><b>{f.cliente}</b> · {f.serieNumero}<br /><span class="muted">{f.estado === "vencida" ? `vencida hace ${nDias(diasEntre(f.fechaVencimiento, h))}` : `vence ${fechaCorta(f.fechaVencimiento)}`}</span></span>
           <b>{soles2(f.saldo)}</b>
         </a>
       ))}
@@ -393,7 +393,7 @@ async function parteRepare(c: C, d: Deps, q: Q): Promise<PartesForm> {
         <input type="hidden" name="casillaReinicia" value="1" />
         {partes.length ? (
           <label class="opcion-fila"><input type="checkbox" name="reinicia" value="1" /><span>{parteReinicia
-            ? `Cambié la pieza por una nueva (reinicia el contador de ${parteReinicia.nombre})`
+            ? "Cambié la pieza por una nueva (reinicia el contador de la parte elegida)"
             : "Cambié una parte por una nueva (elige cuál en «cambiar»; su contador vuelve a 0)"}</span></label>
         ) : null}
       </>
@@ -495,7 +495,7 @@ async function parteAnotarPrestamo(_c: C, d: Deps, q: Q): Promise<PartesForm> {
               <a class={`fila-aviso${p.id === sel.id ? " sel" : ""}`} href={urlAnotar({ ...q, prestamoId: p.id })} data-panel-link="" aria-current={p.id === sel.id ? "true" : undefined}>
                 <span class="punto" style={`background:var(${p.proxima!.vencimiento < h ? "--accent" : "--amber-bar"})`}></span>
                 <span class="txt"><b>{p.entidad}</b> · cuota {p.pagadas + 1} de {p.total}<br />{p.proxima!.vencimiento < h
-                  ? <span class="vencida">vencida hace {diasEntre(p.proxima!.vencimiento, h)} días</span>
+                  ? <span class="vencida">vencida hace {nDias(diasEntre(p.proxima!.vencimiento, h))}</span>
                   : <span class="muted">vence {fechaCorta(p.proxima!.vencimiento)}</span>}</span>
                 <b>{soles2(p.proxima!.monto)}</b>
               </a>

@@ -6,7 +6,7 @@ const num = (el) => {
   const n = Number(String(el.value).replace(/,/g, "."));
   return Number.isFinite(n) ? n : 0;
 };
-const soles = (n) => "S/ " + n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const soles = (n) => "S/\u00a0" + n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 export function cotizar(e) {
   const margen = Math.min(90, Math.max(0, e.margenPct));

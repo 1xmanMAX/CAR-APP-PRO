@@ -48,18 +48,19 @@ async function vista(c: C, d: Deps) {
   return pagina(c, d, { titulo: "Rutas y presupuestos", seccion: "viajes", lugar: "ajustes" }, (
     <>
       <Cabecera titulo="Rutas y presupuestos" volver="/ajustes" sub="Cada viaje nuevo copia la plantilla de su ruta; al lado va el promedio real de los últimos 5 viajes." />
-      {conPromedio.length === 0 ? <Panel titulo="RUTAS"><Vacio>Todavía no hay rutas. Crea la primera abajo.</Vacio></Panel> : conPromedio.map(({ r, prom }) => {
+      <h2 class="titulo-seccion">Rutas{conPromedio.length ? ` · ${conPromedio.length}` : ""}</h2>
+      {conPromedio.length === 0 ? <div class="lista-filas"><Vacio>Todavía no hay rutas. Crea la primera abajo.</Vacio></div> : conPromedio.map(({ r, prom }) => {
         const valores = new Map(r.plantilla.map((l) => [l.categoria, l.monto]));
         const total = r.plantilla.reduce((s, l) => s + l.monto, 0);
         return (
-          <Panel titulo={r.nombre} der={<span class="lbl">PLANTILLA {soles2(total)}{prom.viajes ? ` · PROMEDIO DE ${prom.viajes} VIAJES ${soles2([...prom.montos.values()].reduce((a, b) => a + b, 0))}` : " · SIN VIAJES CERRADOS"}</span>}>
+          <Panel clase="panel-ruta" titulo={r.nombre} der={<span class="muted">Plantilla {soles2(total)}{prom.viajes ? ` · promedio de ${prom.viajes} ${prom.viajes === 1 ? "viaje" : "viajes"} ${soles2([...prom.montos.values()].reduce((a, b) => a + b, 0))}` : " · sin viajes cerrados"}</span>}>
             {edita ? (
               <form method="post" action={`/rutas/${r.id}`} class="filas">
                 <CamposPlantilla categorias={categorias} valores={valores} promedio={prom.montos} />
                 <div class="acciones">
-                  <button class="btn primario chico" type="submit">GUARDAR PLANTILLA</button>
-                  {prom.viajes ? <button class="btn chico" type="submit" name="usarPromedio" value="1">USAR PROMEDIO</button> : null}
-                  <button class="btn chico fantasma" type="submit" name="desactivar" value="1">DESACTIVAR RUTA</button>
+                  <button class="btn primario chico" type="submit">Guardar plantilla</button>
+                  {prom.viajes ? <button class="btn chico" type="submit" name="usarPromedio" value="1">Usar promedio</button> : null}
+                  <button class="btn chico fantasma" type="submit" name="desactivar" value="1">Desactivar ruta</button>
                 </div>
               </form>
             ) : (
@@ -68,7 +69,8 @@ async function vista(c: C, d: Deps) {
           </Panel>
         );
       })}
-      <Panel titulo="VALOR REFERENCIAL MTC (FACTURA CON DETRACCIÓN)">
+      <h2 class="titulo-seccion">Valor referencial MTC (factura con detracción)</h2>
+      <Panel>
         {valoresRef.length === 0 ? <Vacio>Todavía no hay valores referenciales. La factura de transporte necesita uno por cada ruta (origen y destino por ubigeo).</Vacio> : (
           <div class="tabla-wrap"><table class="t">
             <thead><tr><th>Origen (ubigeo)</th><th>Destino (ubigeo)</th><th class="num">S/ por TM</th><th>Fuente</th>{edita ? <th></th> : null}</tr></thead>
@@ -76,7 +78,7 @@ async function vista(c: C, d: Deps) {
               <tr><td>{v.partidaUbigeo}</td><td>{v.llegadaUbigeo}</td><td class="num">{soles2(v.vrPorTm)}</td><td>{v.fuente ?? "—"}</td>
                 {edita ? (
                   <td><form method="post" action="/rutas/vr/borrar"><input type="hidden" name="partidaUbigeo" value={v.partidaUbigeo} /><input type="hidden" name="llegadaUbigeo" value={v.llegadaUbigeo} />
-                    <button class="btn chico fantasma" type="submit" style="min-height:44px">BORRAR</button></form></td>
+                    <button class="btn chico fantasma" type="submit" style="min-height:44px">Borrar</button></form></td>
                 ) : null}
               </tr>
             ))}</tbody>
@@ -90,12 +92,14 @@ async function vista(c: C, d: Deps) {
               <label class="campo" style="flex:1"><span>S/ por TM *</span><input name="vrPorTm" required inputmode="decimal" placeholder="85.50" /></label>
               <label class="campo" style="flex:1"><span>Fuente (opcional)</span><input name="fuente" placeholder="Anexo MTC" /></label>
             </div>
-            <button class="btn primario" type="submit" style="min-height:44px">GUARDAR VALOR REFERENCIAL</button>
+            <button class="btn primario" type="submit" style="min-height:44px">Guardar valor referencial</button>
           </form>
         ) : null}
       </Panel>
       {edita ? (
-        <Panel titulo="+ NUEVA RUTA">
+        <>
+        <h2 class="titulo-seccion" id="nueva-ruta">Nueva ruta</h2>
+        <Panel>
           <form method="post" action="/rutas" class="filas">
             <div class="linea">
               <label class="campo" style="flex:1"><span>Origen *</span><input name="origen" required placeholder="Juliaca" /></label>
@@ -106,9 +110,10 @@ async function vista(c: C, d: Deps) {
               <summary><span class="btn chico fantasma">Poner cuánto debería costar (opcional)</span></summary>
               <div style="margin-top:8px"><CamposPlantilla categorias={categorias} valores={new Map()} /></div>
             </details>
-            <button class="btn primario" type="submit">CREAR RUTA</button>
+            <button class="btn primario" type="submit">Crear ruta</button>
           </form>
         </Panel>
+        </>
       ) : null}
     </>
   ));

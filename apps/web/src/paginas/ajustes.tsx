@@ -232,6 +232,7 @@ async function hub(c: C, d: Deps) {
 
 export function rutasAjustes(app: App, d: Deps): void {
   app.get("/ajustes", (c) => hub(c as C, d));
+  app.get("/ajustes/", (c) => c.redirect("/ajustes"));
   app.get("/ajustes/:sub{empresa|usuarios|costos-fijos|categorias|partes}", (c) => subpagina(c as C, d, c.req.param("sub") as Sub));
   const guardar = async (c: C, id?: number) => {
     const f = await formulario(c);

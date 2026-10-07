@@ -40,10 +40,26 @@ export const mesCorto = (mes: string) => nombreMes(mes).toLowerCase();
 const MESES_LARGOS = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
 /** "2026-10" → "octubre". */
 export const mesLargo = (mes: string) => MESES_LARGOS[Number(mes.slice(5, 7)) - 1] ?? mes;
+/**
+ * Elegir un mes en castellano («octubre 2026»). El `<input type="month">` sale en el idioma del
+ * navegador («October 2026»); esta lista no. Trae los últimos `meses` hasta `hasta` (el mes actual).
+ */
+export const SelectMes: FC<{ nombre: string; valor: string; hasta: string; etiqueta: string; meses?: number }> = (p) => {
+  const lista: string[] = [];
+  let a = Number(p.hasta.slice(0, 4)), m = Number(p.hasta.slice(5, 7));
+  for (let i = 0; i < (p.meses ?? 36); i++) {
+    lista.push(`${a}-${String(m).padStart(2, "0")}`);
+    if (--m === 0) { m = 12; a--; }
+  }
+  if (!lista.includes(p.valor)) { lista.push(p.valor); lista.sort().reverse(); }
+  return <select name={p.nombre} aria-label={p.etiqueta}>{lista.map((x) => <option value={x} selected={x === p.valor}>{mesLargo(x)} {x.slice(0, 4)}</option>)}</select>;
+};
 /** Días entre dos fechas AAAA-MM-DD (b − a). */
 export function diasEntre(a: string, b: string): number {
   return Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86_400_000);
 }
+/** «1 día», «3 días» (singular cuando toca). */
+export const nDias = (n: number) => `${n} ${n === 1 ? "día" : "días"}`;
 export const pct = (n: number | null | undefined) => (n === null || n === undefined ? "—" : `${n}%`);
 /** Un margen en palabras de la calle: 45 (%) → "S/ 45" (de cada S/ 100 te quedan S/ 45). */
 export const deCada100 = (margenPct: number | null | undefined) => (margenPct === null || margenPct === undefined ? "—" : soles(margenPct * 100));

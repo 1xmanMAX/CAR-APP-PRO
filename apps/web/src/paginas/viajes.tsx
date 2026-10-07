@@ -9,7 +9,7 @@ import {
 import { guardarCobro } from "../acciones";
 import { accion, formulario, pagina, servirDeAlmacen, volverA, type App, type C, type Deps } from "../base";
 import { enteroONull } from "./flota";
-import { Cabecera, diasEntre, ESTADO_GUIA, fechaDia, ListaViajes, mesLargo, nombreGuia, TarjetaEnRuta, TEXTO_GUIA, Vacio } from "../ui";
+import { Cabecera, diasEntre, ESTADO_GUIA, fechaDia, ListaViajes, mesLargo, nombreGuia, SelectMes, TarjetaEnRuta, TEXTO_GUIA, Vacio } from "../ui";
 
 /** Formulario de «Facturar» de una guía aceptada (también lo usa el detalle del viaje). */
 export const FormFacturar: FC<{ guiaId: number; etiqueta: string; volver: string; aviso?: string | null }> = (p) => (
@@ -96,7 +96,7 @@ async function vista(c: C, d: Deps) {
         <div class="fila-sep">
           <h2 class="titulo-seccion">{mesLargo(mes)} {mes.slice(0, 4)} · {delMes.length} {delMes.length === 1 ? "viaje" : "viajes"}</h2>
           <form method="get" action="/viajes" class="linea filtro">
-            <input type="month" name="mes" value={mes} aria-label="Mes" />
+            <SelectMes nombre="mes" valor={mes} hasta={h.slice(0, 7)} etiqueta="Mes" />
             <select name="unidad" aria-label="Camión"><option value="">Todos</option>{unidades.map((u) => <option value={u.id} selected={u.id === unidadId}>{u.codigo}</option>)}</select>
             <button class="btn chico" type="submit">Ver</button>
           </form>

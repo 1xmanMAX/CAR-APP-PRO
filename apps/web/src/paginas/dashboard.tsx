@@ -6,7 +6,7 @@ import {
 } from "@sunatapp/core";
 import { pagina, type App, type C, type Deps } from "../base";
 import { RUTA, veAjustes } from "../lugares";
-import { Cabecera, Cifra, diasEntre, fechaCorta, Icono, ListaViajes, mesLargo, soles, soles2, TarjetaEnRuta, Vacio, type DatosCabecera } from "../ui";
+import { Cabecera, Cifra, diasEntre, fechaCorta, nDias, Icono, ListaViajes, mesLargo, soles, soles2, TarjetaEnRuta, Vacio, type DatosCabecera } from "../ui";
 import { ESTADO_LECTURA } from "./revisar";
 
 type Evento = Awaited<ReturnType<typeof listarEventos>>[number];
@@ -78,7 +78,7 @@ export async function atenciones(ctx: Contexto, rol: RolUsuario, cab: DatosCabec
     if (sueltos.length) r.push({ color: "proximo", conSeccion: true, texto: `${sueltos.length} ${sueltos.length === 1 ? "gasto del chofer" : "gastos del chofer"} sin viaje`, href: RUTA.revisar });
     const cobros = await listarCobrosPendientes(ctx);
     for (const f of cobros.filas.filter((x) => x.estado === "vencida").slice(0, 2)) {
-      r.push({ color: "cambiar", texto: `${f.cliente} debe ${soles(f.saldo)} hace ${diasEntre(f.fechaVencimiento, h)} días`, href: RUTA.cobrar(f.facturaId) });
+      r.push({ color: "cambiar", texto: `${f.cliente} debe ${soles(f.saldo)} hace ${nDias(diasEntre(f.fechaVencimiento, h))}`, href: RUTA.cobrar(f.facturaId) });
     }
     const sinGuia = (await viajesPorRevisar(ctx)).filter((x) => x.motivo === "sin_guia" && x.viajeId !== null);
     if (sinGuia.length === 1) r.push({ color: "proximo", conSeccion: true, texto: `${sinGuia[0]!.codigo} no tiene guía`, href: `/viajes/${sinGuia[0]!.viajeId}` });
@@ -193,7 +193,7 @@ async function vistaAtencion(c: C, d: Deps) {
                   {edita ? (
                     opciones.length ? (
                       <>
-                        <select name="viajeId" aria-label="¿A qué viaje?">{opciones.map((v) => <option value={v.id}>{v.codigo} · {v.ruta}</option>)}</select>
+                        <select name="viajeId" aria-label="¿A qué viaje?">{opciones.map((v) => <option value={v.id}>{v.ruta} · {v.codigo}</option>)}</select>
                         <button class="btn chico" type="submit">Asignar</button>
                       </>
                     ) : <span class="muted">Ese camión no tiene viajes todavía.</span>

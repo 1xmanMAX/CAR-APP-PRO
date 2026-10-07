@@ -184,7 +184,7 @@ async function vista(c: C, d: Deps) {
           const clase = e === "A TIEMPO" ? "ok" : e === "TARDE" ? "cambiar" : "proximo";
           return (
             <div class="fila-historial">
-              <div class="fila-sep"><b>{todos ? `${h.unidad} · ` : ""}{fechaMedia(h.fecha)}</b><span>{h.costoTotal ? soles2(h.costoTotal) : "sin costo"}</span></div>
+              <div class="fila-sep"><b>{todos ? `${unidades.find((u) => u.id === h.vehiculoId)?.placa ?? h.unidad} · ` : ""}{fechaMedia(h.fecha)}</b><span>{h.costoTotal ? soles2(h.costoTotal) : "sin costo"}</span></div>
               <span>{h.trabajo}</span>
               <span class="muted">{[TIPOS_REPARACION[h.tipo], h.pieza, h.parte, h.taller, h.odometro ? `${miles(h.odometro)} km` : null].filter(Boolean).join(" · ")}</span>
               {e ? (
@@ -329,7 +329,7 @@ async function vista(c: C, d: Deps) {
     </div>
   );
 
-  return pagina(c, d, { titulo: `Camión ${unidad.codigo}`, seccion: "trailer", scripts: ["/static/trailer3d.js"], importmap: true }, (
+  return pagina(c, d, { titulo: `Camión ${unidad.placa}`, seccion: "trailer", scripts: ["/static/trailer3d.js"], importmap: true }, (
     <>
       <Datos id="datos-visor" valor={datosVisor} />
       <Cabecera titulo="Mis camiones" sub={`${unidad.placa}${unidad.carreta ? ` + ${unidad.carreta.placa}` : ""} · ${[unidad.marca, unidad.modelo].filter(Boolean).join(" ") || "—"}`} />

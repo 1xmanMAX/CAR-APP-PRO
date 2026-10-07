@@ -6,7 +6,7 @@ import {
 } from "@sunatapp/core";
 import { accion, formulario, pagina, type App, type C, type Deps } from "../base";
 import { redirigir } from "../redirecciones";
-import { Barra, Cabecera, Datos, deCada100, fechaDia, GrafScroll, mesCorto, Panel, soles, soles2, Vacio } from "../ui";
+import { Barra, Cabecera, Datos, deCada100, fechaDia, GrafScroll, mesCorto, Panel, SelectMes, soles, soles2, Vacio } from "../ui";
 
 function GraficoProyeccion({ meses }: { meses: Array<{ mes: string; ingresos: number; costos: number; proyectado: boolean }> }) {
   const W = 640, H = 190, pad = 6;
@@ -72,8 +72,8 @@ async function vista(c: C, d: Deps, parte: "rentabilidad" | "cotizar") {
           <a class={`btn chico${vistaSel === "mes" ? " primario" : ""}`} href={enlace("mes")}>Por mes</a>
           <input type="hidden" name="vista" value={vistaSel} />
           <select name="unidad" aria-label="Camión"><option value="">Todos</option>{unidades.map((u) => <option value={u.id} selected={u.id === unidadSel}>{u.codigo}</option>)}</select>
-          <input type="month" name="desde" value={desdeMes} aria-label="Desde" />
-          <input type="month" name="hasta" value={hastaMes} aria-label="Hasta" />
+          <SelectMes nombre="desde" valor={desdeMes} hasta={h.slice(0, 7)} etiqueta="Desde" />
+          <SelectMes nombre="hasta" valor={hastaMes} hasta={h.slice(0, 7)} etiqueta="Hasta" />
           <button class="btn chico" type="submit">Ver</button>
         </form>
       }>

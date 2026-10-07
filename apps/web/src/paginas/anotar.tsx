@@ -1,9 +1,9 @@
 /** @jsxRuntime automatic @jsxImportSource hono/jsx */
 import type { Child, FC, PropsWithChildren } from "hono/jsx";
 import {
-  asiQueda, camionDeMensaje, capturarContexto, categoriasMasUsadas, ErrorNegocio, fechaHoraLima, GRUPOS_PIEZA, hoy, listarCategorias, listarCobrosPendientes, listarPrestamos,
+  asiQueda, camionDeMensaje, capturarContexto, categoriasMasUsadas, ErrorNegocio, fechaHoraLima, GRUPOS_PIEZA, hoy, listarCategorias, listarCobrosPendientes, listarCostosFijos, listarPrestamos,
   documentoPorConfirmar, listarRepuestos, liquidacionViaje, listarUnidades, listarViajesFlota, MEDIOS_ENTREGA, NOMBRE_MEDIO_PAGO, nombreCategoria, partesDePieza, partesDeUnidad,
-  parsearMonto, pieza, piezasDeSemirremolque, puedeEditar, TIPOS_REPARACION, ultimaUnidadDeUsuario, viajesEnRuta,
+  parsearMonto, pieza, piezasDeSemirremolque, puedeEditar, textoYaSeCarga, TIPOS_REPARACION, ultimaUnidadDeUsuario, viajesEnRuta,
   type AsiQueda, type FilaCobro, type GrupoPieza, type TipoReparacion, type UsuarioWeb, type ViajeEnRuta,
 } from "@sunatapp/core";
 import { accion, formularioMultiparte, pagina, volverA, type App, type C, type Deps } from "../base";
@@ -421,18 +421,30 @@ async function parteRepare(c: C, d: Deps, q: Q): Promise<PartesForm> {
   };
 }
 
-async function parteEmpresa(_c: C, d: Deps, q: Q): Promise<PartesForm> {
-  const [todas, unidades] = await Promise.all([listarCategorias(d.ctx, { tipo: "fijo", soloActivas: true }), listarUnidades(d.ctx)]);
+async function parteEmpresa(c: C, d: Deps, q: Q): Promise<PartesForm> {
+  const [todas, unidades, activos] = await Promise.all([listarCategorias(d.ctx, { tipo: "fijo", soloActivas: true }), listarUnidades(d.ctx), listarCostosFijos(d.ctx)]);
   // Las cuotas se pagan en «Préstamo o cuota» (ahí ya quedan como gasto).
   const fijas = todas.filter((k) => k.clave !== CATEGORIA_CUOTA);
+  // Crear un gasto de cada mes es de Ajustes (el contador anota el pago, no crea el fijo).
+  const puedeMensual = puedeEditar(c.get("usuario").rol, "ajustes");
+  // Lo que ya se carga solo en cada categoría: anotarlo otra vez lo contaría dos veces.
+  const yaSeCarga = new Map<string, string>();
+  for (const f of activos) if (!yaSeCarga.has(f.categoria)) yaSeCarga.set(f.categoria, textoYaSeCarga(f));
+  const avisoElegida = yaSeCarga.get(q.categoria) ?? null;
   return {
     campos: (
       <>
         <CampoMonto valor={q.monto} />
         <label class="campo"><span>¿En qué?</span>
-          <select name="categoria" required><option value="">Elige…</option>{fijas.map((k) => <option value={k.clave} selected={k.clave === q.categoria}>{k.nombre}</option>)}</select>
+          <select name="categoria" required data-con-fijos=""><option value="">Elige…</option>{fijas.map((k) => <option value={k.clave} selected={k.clave === q.categoria} data-fijo={yaSeCarga.get(k.clave)}>{k.nombre}</option>)}</select>
         </label>
-        <label class="opcion-fila"><input type="checkbox" name="mensual" value="1" /><span>Se repite cada mes<br /><span class="muted">Sueldo, alquiler, GPS: se carga solo</span></span></label>
+        <div class="ya-fijo" data-ya-fijo="" hidden={!avisoElegida}>
+          <div class="aviso info" role="status">{avisoElegida ?? ""}</div>
+          <label class="opcion-fila"><input type="checkbox" name="igualAparte" value="1" /><span>Igual es un pago aparte<br /><span class="muted">Un pago extra, no el de cada mes</span></span></label>
+        </div>
+        {puedeMensual && !avisoElegida ? (
+          <label class="opcion-fila" data-mensual=""><input type="checkbox" name="mensual" value="1" /><span>Se repite cada mes<br /><span class="muted">Sueldo, alquiler, GPS: se carga solo</span></span></label>
+        ) : null}
         <FotoOpcional />
       </>
     ),
@@ -442,7 +454,7 @@ async function parteEmpresa(_c: C, d: Deps, q: Q): Promise<PartesForm> {
         <>
           <SelectUnidad unidades={unidades} elegido={null} vacio="— de la empresa —" />
           <CampoFecha d={d} />
-          <label class="campo"><span>Nombre (si se repite cada mes)</span><input name="concepto" placeholder="Sueldo de Mario" /></label>
+          {puedeMensual ? <label class="campo"><span>Nombre (si se repite cada mes)</span><input name="concepto" placeholder="Sueldo de Mario" /></label> : null}
           <label class="campo"><span>¿Cómo se pagó?</span><select name="medioPago"><option value="">Automático</option>{Object.entries(NOMBRE_MEDIO_PAGO).map(([k, n]) => <option value={k}>{n}</option>)}</select></label>
           <label class="campo"><span>Detalle</span><input name="nota" maxlength={200} /></label>
         </>
@@ -724,6 +736,7 @@ export function rutasAnotar(app: App, d: Deps): void {
     const u = c.get("usuario");
     const tipo = f.tipo as TipoAnotar;
     if (!(tipo in TIPOS_ANOTAR) || !tiposAnotar(u.rol).includes(tipo)) return c.text("Tu rol no puede anotar eso", 403);
+    if (tipo === "empresa" && f.mensual === "1" && !puedeEditar(u.rol, "ajustes")) return c.text("Tu rol no crea gastos de cada mes", 403);
     const destino = volverA(f.volver, "/");
     // Si no se pudo guardar, vuelve al formulario con lo escrito (en «Otro», la categoría elegida en la lista).
     const categoria = tipo === "gaste" && f.categoria === "otro" ? f.categoriaOtra : f.categoria;

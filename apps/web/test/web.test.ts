@@ -19,7 +19,7 @@ vi.mock("@sunatapp/core", async (importOriginal) => {
 });
 import {
   AVISO_RETORNO_VACIO, emitirFactura, emitirGuia, leerPausaSunat, MAX_INTENTOS, MENSAJE_VERIFICAR_EN_SOL, pausarSunat, prepararFactura, registrarGuiaBorrador, listarValoresReferenciales,
-  buscarUnidad, crearCategoria, crearUnidad, fijarLectura, crearEnlaceWeb, guardarUsuario, registrarGasto, registrarViajeFlota, listarEventos, listarUsuarios, listarViajesFlota, obtenerEmpresa, partesDeUnidad, crearRepuesto, listarCostosFijos, listarPrestamos, listarReparaciones, listarRepuestos, piezasDeTipo, instalarParte, listarTiposParte, liquidacionViaje,
+  buscarUnidad, crearCategoria, crearCostoFijo, crearUnidad, fijarLectura, crearEnlaceWeb, guardarUsuario, registrarGasto, registrarViajeFlota, listarEventos, listarUsuarios, listarViajesFlota, obtenerEmpresa, partesDeUnidad, crearRepuesto, listarCostosFijos, listarPrestamos, listarReparaciones, listarRepuestos, piezasDeTipo, instalarParte, listarTiposParte, liquidacionViaje,
   type Contexto,
 } from "@sunatapp/core";
 import { crearDb, documentoRecibido, eq, factura, gasto, guiaTransportista, usuario, vehiculo } from "../../../packages/db/src/index";
@@ -381,6 +381,54 @@ describe("web", () => {
         expect(g).toMatchObject({ monto: 12000, viajeId: null });
       });
 
+      it("Gasto de la empresa: si la categoría ya se carga sola, lo avisa y pide confirmar que es un pago aparte", async () => {
+        const cookie = await entrar();
+        await crearCostoFijo(ctx, { concepto: "Sueldo de Mario", categoria: "sueldo_chofer", monto: 250000, periodicidad: "mensual" });
+        // En la lista, cada categoría con fijo lleva su aviso (el JS lo muestra al elegirla).
+        let html = await (await app.request("/anotar?tipo=empresa", { headers: { cookie } })).text();
+        expect(html).toContain('data-fijo="Ya se carga solo: Sueldo de Mario S/ 2,500.00 cada mes"');
+        // Con la categoría elegida (al volver de un error): aviso, casilla «Igual es un pago aparte» y sin «Se repite cada mes».
+        html = await (await app.request("/anotar?tipo=empresa&categoria=sueldo_chofer", { headers: { cookie } })).text();
+        expect(html).toContain("Ya se carga solo: Sueldo de Mario S/ 2,500.00 cada mes");
+        expect(html).toMatch(/<input type="checkbox" name="igualAparte" value="1"/);
+        expect(html).not.toContain('name="mensual"');
+        let r = await enviar(cookie, { tipo: "empresa", volver: "/", monto: "2500", categoria: "sueldo_chofer" });
+        expect(aviso(r)).toContain("error=Ya se carga solo: Sueldo de Mario S/ 2,500.00 cada mes");
+        expect(r.headers.get("location")).toContain("categoria=sueldo_chofer");
+        expect((await ctx.db.select().from(gasto)).filter((g) => g.categoria === "sueldo_chofer" && !g.costoFijoId)).toHaveLength(0);
+        r = await enviar(cookie, { tipo: "empresa", volver: "/", monto: "300", categoria: "sueldo_chofer", igualAparte: "1" });
+        expect(aviso(r)).toContain("ok=Gasto guardado");
+        // Un segundo fijo igual no se crea.
+        r = await enviar(cookie, { tipo: "empresa", volver: "/", monto: "2500", categoria: "sueldo_chofer", mensual: "1", concepto: "Sueldo de Mario" });
+        expect(aviso(r)).toContain("error=Ya se carga solo");
+        expect(await listarCostosFijos(ctx)).toHaveLength(1);
+      });
+
+      it("Gasto de la empresa mensual: la fecha es desde cuándo, y se guardan el medio y la foto", async () => {
+        const cookie = await entrar();
+        const fd = new FormData();
+        for (const [k, v] of Object.entries({ tipo: "empresa", volver: "/", monto: "120", categoria: "telefonia", mensual: "1", fecha: "2026-09-05", medioPago: "yape_plin" })) fd.set(k, v);
+        fd.set("foto", new File([Buffer.from("jpeg")], "voucher.jpg", { type: "image/jpeg" }));
+        const r = await app.request("/anotar", { method: "POST", headers: { cookie, origin: ORIGEN }, body: fd });
+        expect(aviso(r)).toContain("ok=");
+        const [f] = await listarCostosFijos(ctx);
+        expect(f).toMatchObject({ desde: "2026-09-05", medioPago: "yape_plin", monto: 12000 });
+        const [g] = await ctx.db.select().from(gasto).where(eq(gasto.costoFijoId, f!.id));
+        expect(g!.rutaFoto).toMatch(/^vouchers\//);
+      });
+
+      it("Gasto de la empresa: solo quien edita Ajustes crea gastos de cada mes (el contador no)", async () => {
+        await guardarUsuario(ctx, { nombre: "Conta", email: "conta@demo.pe", rol: "contador", clave: "clave-segura" });
+        const conta = await entrar("conta@demo.pe");
+        const html = await (await app.request("/anotar?tipo=empresa", { headers: { cookie: conta } })).text();
+        expect(html).toContain('name="categoria"');
+        expect(html).not.toContain('name="mensual"');
+        const r = await enviar(conta, { tipo: "empresa", volver: "/", monto: "2500", categoria: "sueldo_chofer", mensual: "1" });
+        expect(r.status).toBe(403);
+        expect(await listarCostosFijos(ctx)).toHaveLength(0);
+        expect(aviso(await enviar(conta, { tipo: "empresa", volver: "/", monto: "120", categoria: "telefonia" }))).toContain("ok=Gasto guardado");
+      });
+
       it("Préstamo: uno nuevo, pagar su cuota y una reinversión", async () => {
         const cookie = await entrar();
         expect(aviso(await enviar(cookie, { tipo: "prestamo", modo: "nuevo", volver: "/", entidad: "Caja Arequipa", monto: "12000", tasa: "18", cuotas: "12" }))).toContain("ok=Préstamo creado");
@@ -404,7 +452,7 @@ describe("web", () => {
         const cookie = await entrar();
         const html = await (await app.request("/anotar?tipo=empresa", { headers: { cookie } })).text();
         expect(html).not.toContain('value="cuota_prestamo"');
-        expect(html).toMatch(/<select name="categoria" required=""><option value="">Elige/);
+        expect(html).toMatch(/<select name="categoria" required=""[^>]*><option value="">Elige/);
         const r = await enviar(cookie, { tipo: "empresa", volver: "/", monto: "500", categoria: "cuota_prestamo" });
         expect(aviso(r)).toContain("error=");
         expect(aviso(r)).toContain("Préstamo o cuota");

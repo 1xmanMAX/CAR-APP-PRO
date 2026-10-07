@@ -5,6 +5,7 @@ import { registrarAuditoria } from "../infra/auditoria";
 import type { Contexto } from "../infra/contexto";
 import { hoy } from "../flota/unidades";
 import { categoriaValida } from "./categorias";
+import { formatearSoles } from "../dominio/montos";
 
 export interface CostoFijo {
   id: number; concepto: string; categoria: string; monto: number; periodicidad: Periodicidad; vehiculoId: number | null; unidad: string | null;
@@ -23,6 +24,8 @@ export async function crearCostoFijo(
   e: {
     concepto: string; categoria: string; monto: number; periodicidad: Periodicidad; vehiculoId?: number | null; medioPago?: MedioPago;
     desde?: string; hasta?: string | null; usuarioId?: number;
+    /** Foto del voucher: queda en el gasto del primer mes (el fijo no guarda fotos). */
+    rutaFoto?: string | null;
   },
 ): Promise<number> {
   if (!e.concepto.trim()) throw new ErrorNegocio("Falta el concepto");
@@ -31,12 +34,32 @@ export async function crearCostoFijo(
   if (cat.tipo !== "fijo") throw new ErrorNegocio(`«${cat.nombre}» no es una categoría fija`);
   const desde = e.desde ?? `${hoy(ctx).slice(0, 7)}-01`;
   if (e.hasta && e.hasta < desde) throw new ErrorNegocio("La fecha de fin no puede ser anterior al inicio");
+  // Dos fijos activos iguales cargarían el mismo pago dos veces cada mes.
+  const igual = (await fijoActivoDe(ctx, e.categoria)).find((f) =>
+    f.concepto.trim().toLowerCase() === e.concepto.trim().toLowerCase() && f.vehiculoId === (e.vehiculoId ?? null));
+  if (igual) throw new ErrorNegocio(textoYaSeCarga(igual));
   const [f] = await ctx.db.insert(costoFijo).values({
     concepto: e.concepto.trim(), categoria: e.categoria, monto: e.monto, periodicidad: e.periodicidad, vehiculoId: e.vehiculoId ?? null,
     medioPago: e.medioPago ?? "transferencia", desde, hasta: e.hasta ?? null, usuarioId: e.usuarioId ?? null,
   }).returning({ id: costoFijo.id });
   await registrarAuditoria(ctx.db, { usuarioId: e.usuarioId, accion: "costo_fijo_creado", entidad: "costo_fijo", entidadId: f!.id, detalle: e });
+  const periodo = desde.slice(0, 7);
+  if (e.rutaFoto && periodo <= hoy(ctx).slice(0, 7)) {
+    await generarFijosDelMes(ctx, periodo);
+    await ctx.db.update(gasto).set({ rutaFoto: e.rutaFoto }).where(and(eq(gasto.costoFijoId, f!.id), eq(gasto.periodo, periodo)));
+  }
   return f!.id;
+}
+
+/** Los fijos activos de una categoría (para avisar que ese pago ya se carga solo). */
+export async function fijoActivoDe(ctx: Contexto, categoria: string): Promise<Array<{ concepto: string; monto: number; periodicidad: Periodicidad; vehiculoId: number | null }>> {
+  return ctx.db.select({ concepto: costoFijo.concepto, monto: costoFijo.monto, periodicidad: costoFijo.periodicidad, vehiculoId: costoFijo.vehiculoId })
+    .from(costoFijo).where(and(eq(costoFijo.activo, true), eq(costoFijo.categoria, categoria))).orderBy(costoFijo.id);
+}
+
+/** «Ya se carga solo: Sueldo de Mario S/ 2,500.00 cada mes». */
+export function textoYaSeCarga(f: { concepto: string; monto: number; periodicidad: Periodicidad }): string {
+  return `Ya se carga solo: ${f.concepto} ${formatearSoles(f.monto)} ${f.periodicidad === "anual" ? "al año" : "cada mes"}`;
 }
 
 export async function editarCostoFijo(

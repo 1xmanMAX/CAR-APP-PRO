@@ -99,6 +99,25 @@
     // Si la ventana se achica a tamaño celular, el panel se cierra (en el celular Anotar es su propia página).
     ancho.addEventListener("change", () => { if (!ancho.matches && !panel.hidden) cerrar(); });
   }
+  // «De la empresa»: si la categoría ya se carga sola cada mes, se avisa, se pide confirmar que es un
+  // pago aparte y se esconde «Se repite cada mes» (el servidor igual lo revisa al guardar).
+  document.addEventListener("change", (e) => {
+    const sel = e.target;
+    if (!(sel instanceof HTMLSelectElement) || !sel.matches("select[data-con-fijos]") || !sel.form) return;
+    const texto = (sel.selectedOptions[0] && sel.selectedOptions[0].dataset.fijo) || "";
+    const caja = sel.form.querySelector("[data-ya-fijo]");
+    if (caja) {
+      caja.hidden = !texto;
+      caja.querySelector(".aviso").textContent = texto;
+      const aparte = caja.querySelector("input[name=igualAparte]");
+      if (aparte && !texto) aparte.checked = false;
+    }
+    const mensual = sel.form.querySelector("[data-mensual]");
+    if (mensual) {
+      mensual.hidden = !!texto;
+      if (texto) mensual.querySelector("input").checked = false;
+    }
+  });
   enlazarAsiQueda(document);
   // Si la ventana pasa a tamaño PC con /anotar abierto, «Así queda» empieza a escuchar.
   ancho.addEventListener("change", () => enlazarAsiQueda(document));

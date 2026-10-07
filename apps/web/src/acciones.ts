@@ -1,6 +1,6 @@
 import {
-  crearCostoFijo, crearPrestamo, ErrorNegocio, hoy, listarCategorias, MEDIOS_ENTREGA, pagarCuota, parsearMonto, pieza, registrarCambio, registrarCobro,
-  registrarCompra, registrarEntrega, registrarGasto, registrarIngreso, registrarReinversion, TIPOS_REPARACION, type MedioPago, type TipoReparacion,
+  crearCostoFijo, crearPrestamo, ErrorNegocio, fijoActivoDe, hoy, listarCategorias, MEDIOS_ENTREGA, pagarCuota, parsearMonto, pieza, registrarCambio, registrarCobro,
+  registrarCompra, registrarEntrega, registrarGasto, registrarIngreso, registrarReinversion, textoYaSeCarga, TIPOS_REPARACION, type MedioPago, type TipoReparacion,
 } from "@sunatapp/core";
 import type { Deps } from "./base";
 import { enteroONull } from "./paginas/flota";
@@ -125,12 +125,18 @@ export async function guardarGastoEmpresa(d: Deps, usuarioId: number, f: Campos,
   if (f.mensual === "1") {
     const fijas = await listarCategorias(d.ctx, { tipo: "fijo", soloActivas: true });
     const nombre = fijas.find((k) => k.clave === f.categoria)?.nombre ?? "Gasto fijo";
+    const monto = montoObligatorio(f.monto);
+    // La fecha elegida es desde cuándo corre; el medio y la foto quedan como en un gasto suelto.
     await crearCostoFijo(d.ctx, {
-      concepto: f.concepto?.trim() || nombre, categoria: f.categoria ?? "", monto: montoObligatorio(f.monto), periodicidad: "mensual",
-      vehiculoId: idONull(f.vehiculoId), usuarioId,
+      concepto: f.concepto?.trim() || nombre, categoria: f.categoria ?? "", monto, periodicidad: "mensual",
+      vehiculoId: idONull(f.vehiculoId), usuarioId, desde: f.fecha || undefined, medioPago: (f.medioPago || undefined) as MedioPago | undefined,
+      rutaFoto: await guardarFoto(d, foto),
     });
     return `${nombre}: queda como gasto de cada mes (se carga solo)`;
   }
+  // Si esa categoría ya se carga sola cada mes, anotarla otra vez la contaría dos veces: se pide confirmar.
+  const [fijo] = await fijoActivoDe(d.ctx, f.categoria);
+  if (fijo && f.igualAparte !== "1") throw new ErrorNegocio(`${textoYaSeCarga(fijo)}. Si es un pago aparte, marca «Igual es un pago aparte»`);
   return guardarGasto(d, usuarioId, { ...f, viajeId: "" }, foto);
 }
 

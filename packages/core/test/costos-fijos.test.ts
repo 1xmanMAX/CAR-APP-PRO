@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { eq, gasto } from "@sunatapp/db";
 import {
-  asegurarFijos, borrarGasto, crearCostoFijo, crearPrestamo, editarCostoFijo, guardarPresupuestoMensual, presupuestoMensual, flujoCaja, generarFijosDelMes, listarCostosFijos, listarMovimientos, montoDelMes, pagarCuota,
+  asegurarFijos, borrarGasto, crearCostoFijo, crearUnidad, crearPrestamo, editarCostoFijo, guardarPresupuestoMensual, presupuestoMensual, flujoCaja, generarFijosDelMes, listarCostosFijos, listarMovimientos, montoDelMes, pagarCuota,
   registrarGasto, resumenFinanciero, type Contexto,
 } from "../src/index";
 import { crearContextoPrueba } from "./helpers";
@@ -29,6 +29,25 @@ describe("costos fijos recurrentes", () => {
     expect(gs[0]).toMatchObject({ fecha: "2026-09-01", periodo: "2026-09", vehiculoId: 1, medioPago: "transferencia", origen: "sistema", viajeId: null });
     expect(await generarFijosDelMes(ctx, "2026-07")).toBe(1); // solo el contador: el sueldo empieza en agosto
     expect((await listarCostosFijos(ctx, false)).map((f) => f.concepto).sort()).toEqual(["Contador", "Sueldo chofer T-01"]);
+  });
+
+  it("no crea un segundo fijo activo igual (mismo concepto, categoría y camión): se cobraría dos veces", async () => {
+    const id = await crearCostoFijo(ctx, { concepto: "Sueldo de Mario", categoria: "sueldo_chofer", monto: 250000, periodicidad: "mensual", vehiculoId: 1 });
+    await expect(crearCostoFijo(ctx, { concepto: " sueldo de mario ", categoria: "sueldo_chofer", monto: 260000, periodicidad: "mensual", vehiculoId: 1 }))
+      .rejects.toThrow("Ya se carga solo: Sueldo de Mario S/ 2,500.00 cada mes");
+    // Otro camión u otro concepto sí; uno desactivado ya no cuenta.
+    const t2 = await crearUnidad(ctx, { placa: "XYZ-987" });
+    await crearCostoFijo(ctx, { concepto: "Sueldo de Mario", categoria: "sueldo_chofer", monto: 250000, periodicidad: "mensual", vehiculoId: t2.id });
+    await crearCostoFijo(ctx, { concepto: "Sueldo de Luis", categoria: "sueldo_chofer", monto: 250000, periodicidad: "mensual", vehiculoId: 1 });
+    await editarCostoFijo(ctx, id, { activo: false });
+    await crearCostoFijo(ctx, { concepto: "Sueldo de Mario", categoria: "sueldo_chofer", monto: 270000, periodicidad: "mensual", vehiculoId: 1 });
+    expect(await listarCostosFijos(ctx)).toHaveLength(3);
+  });
+
+  it("el voucher del fijo queda en el gasto del primer mes", async () => {
+    const id = await crearCostoFijo(ctx, { concepto: "GPS", categoria: "telefonia", monto: 12000, periodicidad: "mensual", desde: "2026-09-05", medioPago: "yape_plin", rutaFoto: "vouchers/gps.jpg" });
+    const gs = await ctx.db.select().from(gasto).where(eq(gasto.costoFijoId, id));
+    expect(gs).toEqual([expect.objectContaining({ periodo: "2026-09", rutaFoto: "vouchers/gps.jpg", medioPago: "yape_plin", monto: 12000 })]);
   });
 
   it("rechaza una categoría variable para un fijo", async () => {

@@ -2,7 +2,7 @@
 import type { Child, FC, PropsWithChildren } from "hono/jsx";
 import {
   asiQueda, capturarContexto, categoriasMasUsadas, ErrorNegocio, fechaHoraLima, GRUPOS_PIEZA, hoy, listarCategorias, listarCobrosPendientes, listarPrestamos,
-  listarRepuestos, liquidacionViaje, listarUnidades, listarViajesFlota, MEDIOS_ENTREGA, NOMBRE_MEDIO_PAGO, nombreCategoria, partesDePieza, partesDeUnidad,
+  listarPorRevisar, listarRepuestos, liquidacionViaje, listarUnidades, listarViajesFlota, MEDIOS_ENTREGA, NOMBRE_MEDIO_PAGO, nombreCategoria, partesDePieza, partesDeUnidad,
   parsearMonto, pieza, piezasDeSemirremolque, puedeEditar, TIPOS_REPARACION, ultimaUnidadDeUsuario, viajesEnRuta,
   type AsiQueda, type FilaCobro, type GrupoPieza, type TipoReparacion, type UsuarioWeb, type ViajeEnRuta,
 } from "@sunatapp/core";
@@ -12,10 +12,11 @@ import {
   CATEGORIA_CUOTA, pagarCuotaDe, type Campos,
 } from "../acciones";
 import { TIPOS_ANOTAR, tiposAnotar, type TipoAnotar } from "../lugares";
+import { ESTADO_LECTURA, valoresLectura } from "./revisar";
 import { Cabecera, diasEntre, fechaCorta, Icono, miles, soles, soles2, Vacio, type NombreIcono } from "../ui";
 
-/** `monto` y `categoria` solo vuelven en la URL cuando no se pudo guardar (así no se pierde lo escrito). */
-const CLAVES_Q = ["tipo", "modo", "volver", "viajeId", "vehiculoId", "facturaId", "prestamoId", "pieza", "parteId", "repuestoId", "monto", "categoria"] as const;
+/** `documento`: un mensaje de Telegram por confirmar (ver `parteDocumento`). `monto` y `categoria` solo vuelven en la URL cuando no se pudo guardar (así no se pierde lo escrito). */
+const CLAVES_Q = ["tipo", "modo", "volver", "viajeId", "vehiculoId", "facturaId", "prestamoId", "pieza", "parteId", "repuestoId", "monto", "categoria", "documento"] as const;
 type ClaveQ = (typeof CLAVES_Q)[number];
 /** Lo que llega en la URL de /anotar (todo texto; "" = no vino). */
 export type Q = Record<ClaveQ, string> & { parcial: boolean };
@@ -37,7 +38,7 @@ export function urlAnotar(q: Partial<Record<ClaveQ, string | number | null>>): s
   }
   return `/anotar?${p.toString()}`;
 }
-const otroTipo = (q: Q, tipo: TipoAnotar) => urlAnotar({ tipo, volver: q.volver, viajeId: q.viajeId, vehiculoId: q.vehiculoId });
+const otroTipo = (q: Q, tipo: TipoAnotar) => urlAnotar({ tipo, volver: q.volver, viajeId: q.viajeId, vehiculoId: q.vehiculoId, documento: q.documento });
 
 /** Lo que cada tipo pone en el formulario. */
 export interface PartesForm {
@@ -509,15 +510,90 @@ async function parteAnotarPrestamo(_c: C, d: Deps, q: Q): Promise<PartesForm> {
   };
 }
 
+/** Lo que mandó el chofer por Telegram y no se pudo guardar solo: mismo formulario, precargado. */
+async function parteDocumento(d: Deps, q: Q, pedido: string | undefined): Promise<PartesForm | null> {
+  const id = num(q.documento);
+  const item = id === null ? undefined : (await listarPorRevisar(d.ctx)).find((x) => x.documentoId === id);
+  if (!item) return null;
+  const v = valoresLectura(item.lectura);
+  // Sin «tipo» en la URL manda lo que leyó la IA; con «tipo» manda el botón que tocó el usuario.
+  const tipo = pedido === "chofer" || pedido === "gaste" ? pedido : v.tipo === "entrega" ? "chofer" : "gaste";
+  const [categorias, unidades] = await Promise.all([listarCategorias(d.ctx, { soloActivas: true }), listarUnidades(d.ctx)]);
+  // Si volvió porque no se pudo guardar, lo escrito manda sobre lo que leyó la IA.
+  const monto = q.monto || v.monto;
+  const categoria = q.categoria || v.categoria;
+  const arriba = (
+    <section class="panel llego-telegram">
+      <div class="fila-sep"><b>Llegó por Telegram · {fechaCorta(item.desde.toISOString().slice(0, 10))}</b><span class={`chip ${item.estado === "error" ? "cambiar" : "proximo"}`}>{ESTADO_LECTURA[item.estado] ?? item.estado}</span></div>
+      {item.texto ? <span>«{item.texto}»</span> : null}
+      {item.error ? <span class="muted">{item.error}</span> : null}
+      {item.rutaArchivo && item.tipo === "foto" ? (
+        <a href={`/archivo/documento/${item.documentoId}`} target="_blank" class="foto-telegram"><img src={`/archivo/documento/${item.documentoId}`} alt="Foto que mandó el chofer" /></a>
+      ) : null}
+      {item.rutaArchivo && item.tipo === "voz" ? <audio controls src={`/archivo/documento/${item.documentoId}`} style="width:100%"></audio> : null}
+      <span class="muted">Revisa el monto con la foto o el mensaje y guarda.</span>
+    </section>
+  );
+  return {
+    accion: `/revisar/${item.documentoId}`,
+    tipoOculto: tipo === "chofer" ? "entrega" : "gasto",
+    arriba,
+    campos: (
+      <>
+        <CampoMonto valor={monto} />
+        {tipo === "gaste" ? (
+          <label class="campo"><span>¿En qué?</span>
+            <select name="categoria">{categorias.map((k) => <option value={k.clave} selected={k.clave === categoria}>{k.nombre}</option>)}</select>
+          </label>
+        ) : (
+          <fieldset class="grupo"><legend class="lbl">¿Cómo se la diste?</legend>
+            <div class="opciones-texto">{Object.entries(MEDIOS_ENTREGA).map(([k, n]) => <OpcionTexto nombre="medio" valor={k} texto={n} marcado={k === v.medio} />)}</div>
+          </fieldset>
+        )}
+      </>
+    ),
+    solo: {
+      texto: tipo === "chofer" ? "Se anota en el viaje en curso del camión que elijas" : "Se guarda en el viaje en curso del camión que elijas (si no tiene, queda sin viaje)",
+      cambiar: (
+        <>
+          <SelectUnidad unidades={unidades} elegido={unidades[0]?.id ?? null} />
+          {tipo === "gaste" ? <label class="campo"><span>Detalle</span><input name="nota" maxlength={200} value={v.nota} /></label> : null}
+        </>
+      ),
+    },
+    boton: "GUARDAR",
+  };
+}
+
+/** `/anotar?documento=`: confirmar (o descartar) lo que llegó por Telegram. Solo Gasté y Plata al chofer. */
+async function vistaDocumento(c: C, d: Deps, q: Q, permitidos: TipoAnotar[]) {
+  // Los mismos que antes confirmaban en «Por revisar» (POST /revisar/… pide poder editar Viajes).
+  const dos = permitidos.filter((t) => t === "gaste" || t === "chofer");
+  if (!puedeEditar(c.get("usuario").rol, "viajes") || !dos.length) return c.redirect("/?error=" + encodeURIComponent("Tu rol no confirma lo que manda el chofer"));
+  const p = await parteDocumento(d, q, c.req.query("tipo"));
+  if (!p) return c.redirect("/?ver=atencion&error=" + encodeURIComponent("Ese mensaje ya se guardó o se descartó"));
+  const qDoc: Q = { ...q, tipo: p.tipoOculto === "entrega" ? "chofer" : "gaste", volver: q.volver === "/" ? "/?ver=atencion" : q.volver };
+  const cuerpo = (
+    <FormAnotar q={qDoc} permitidos={dos} p={p} titulo="Confirma lo que llegó" clase="con-documento" despues={
+      <form method="post" action={`/revisar/${q.documento}/descartar`} class="descartar" data-confirmar="¿Descartar este mensaje? No se guarda nada.">
+        <button class="btn fantasma" type="submit">No es nada: descartar</button>
+      </form>
+    } />
+  );
+  if (q.parcial) return c.html(cuerpo.toString());
+  return pagina(c, d, { titulo: "Confirma lo que llegó", seccion: "dashboard", lugar: "anotar", sinNavInferior: true }, cuerpo);
+}
+
 const PARTES: Record<TipoAnotar, (c: C, d: Deps, q: Q) => Promise<PartesForm>> = {
   gaste: parteGaste, chofer: parteChofer, cobro: parteCobro, repare: parteRepare, empresa: parteEmpresa, prestamo: parteAnotarPrestamo,
 };
 
 // ── Formulario ───────────────────────────────────────────────────────────────
 
-const FormAnotar: FC<{ q: Q; permitidos: TipoAnotar[]; p: PartesForm }> = ({ q, permitidos, p }) => (
-  <div class="anotar">
-    <Cabecera titulo="¿Qué pasó?" volver={q.volver} />
+/** `titulo`, `clase` y `despues` (otro formulario debajo, p. ej. «descartar») los usa el modo documento. */
+const FormAnotar: FC<{ q: Q; permitidos: TipoAnotar[]; p: PartesForm; titulo?: string; clase?: string; despues?: Child }> = ({ q, permitidos, p, titulo, clase, despues }) => (
+  <div class={clase ? `anotar ${clase}` : "anotar"}>
+    <Cabecera titulo={titulo ?? "¿Qué pasó?"} volver={q.volver} />
     <nav class="tipos-anotar" aria-label="¿Qué pasó?">
       {permitidos.map((t) => (
         <a href={otroTipo(q, t)} data-panel-link="" class={t === q.tipo ? "activo" : undefined} aria-current={t === q.tipo ? "true" : undefined}>
@@ -534,7 +610,7 @@ const FormAnotar: FC<{ q: Q; permitidos: TipoAnotar[]; p: PartesForm }> = ({ q, 
     ) : null}
     {p.arriba ?? null}
     {p.soloMensaje ?? (
-      <form method="post" action={p.accion ?? "/anotar"} enctype="multipart/form-data" class="form-anotar" data-asi-queda={q.tipo === "gaste" || q.tipo === "chofer" ? "" : undefined}>
+      <form method="post" action={p.accion ?? "/anotar"} enctype="multipart/form-data" class="form-anotar" data-asi-queda={!p.accion && (q.tipo === "gaste" || q.tipo === "chofer") ? "" : undefined}>
         <input type="hidden" name="tipo" value={p.tipoOculto ?? q.tipo} />
         {q.modo ? <input type="hidden" name="modo" value={q.modo} /> : null}
         <input type="hidden" name="volver" value={q.volver} />
@@ -544,6 +620,7 @@ const FormAnotar: FC<{ q: Q; permitidos: TipoAnotar[]; p: PartesForm }> = ({ q, 
         <button class="btn primario guardar" type="submit">{p.boton ?? "GUARDAR"}</button>
       </form>
     )}
+    {despues ?? null}
   </div>
 );
 
@@ -551,6 +628,7 @@ async function vista(c: C, d: Deps) {
   const permitidos = tiposAnotar(c.get("usuario").rol);
   if (!permitidos.length) return c.redirect("/?error=" + encodeURIComponent("Tu rol no anota movimientos"));
   const q = leerQ(c, permitidos);
+  if (q.documento) return vistaDocumento(c, d, q, permitidos);
   const p = await PARTES[q.tipo as TipoAnotar](c, d, q);
   const cuerpo = <FormAnotar q={q} permitidos={permitidos} p={p} />;
   if (q.parcial) return c.html(cuerpo.toString());

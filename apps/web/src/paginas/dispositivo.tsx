@@ -163,7 +163,7 @@ async function vista(c: C, d: Deps, resultado?: ResultadoPruebaSunat, nota?: str
                   <span class={`chip ${e.ia.voz ? "ok" : "neutro"}`}>{e.ia.voz ? "NOTAS DE VOZ ACTIVAS" : "SIN NOTAS DE VOZ"}</span>
                 </span>
                 {e.ia.error ? <div class="aviso error">{e.ia.error}</div> : null}
-                <span class="muted" style="font-size:12px">Este mes: {ia.lecturas} lecturas · US$ {ia.usd.toFixed(3)}. Lo que quedó a medias está en <a href="/revisar">Por revisar</a>.</span>
+                <span class="muted" style="font-size:12px">Este mes: {ia.lecturas} lecturas · US$ {ia.usd.toFixed(3)}. Lo que quedó a medias está en <a href="/?ver=atencion">Necesita tu atención</a>.</span>
               </div>
               <span class="muted" style="font-size:12px">El chofer manda la foto de la boleta, un texto («grifo 350») o una nota de voz, y el bot le pide confirmar antes de guardar el gasto.
                 Sin clave de IA se entienden los textos y las fotos se completan con botones. Con DeepSeek también se leen las fotos (cuesta menos de un centavo de dólar por boleta).</span>

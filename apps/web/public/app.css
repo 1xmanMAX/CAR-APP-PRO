@@ -578,3 +578,17 @@ a.fila-toca:hover { background: var(--accent-softer); }
 .sin-gap .header > * + *, .sin-gap .header .datos > * + *, .sin-gap .acciones > * + *, .sin-gap .nav a + a,
 .sin-gap .form-grid > *, .sin-gap form.linea > * + *, .sin-gap .usuario-menu > * + * { margin-left: 12px; }
 .sin-gap .tira i { margin: 0 3px 3px 0; }
+
+/* ── Necesita tu atención: gasto sin viaje con «Asignar» en la misma fila ── */
+.fila-papel.asignar > span:first-child { flex: 2 1 220px; }
+.fila-papel.asignar select { flex: 1 1 180px; width: auto; min-width: 0; }
+/* Confirmar lo que llegó por Telegram: en la PC la foto queda al lado del formulario. */
+.llego-telegram .foto-telegram { display: block; }
+.llego-telegram .foto-telegram img { display: block; max-width: 100%; max-height: 320px; border-radius: 4px; margin: 0 auto; }
+.anotar.con-documento .descartar .btn { width: 100%; }
+@media (min-width: 900px) {
+  .contenido > .anotar.con-documento { display: grid; grid-template-columns: minmax(0, 560px) minmax(0, 1fr); grid-template-rows: auto auto auto auto 1fr; column-gap: 24px; row-gap: 12px; width: auto; max-width: 1080px; align-items: start; }
+  .contenido > .anotar.con-documento > * { grid-column: 1; }
+  .contenido > .anotar.con-documento > .llego-telegram { grid-column: 2; grid-row: 1 / span 5; position: sticky; top: 16px; }
+  .contenido > .anotar.con-documento .foto-telegram img { max-height: 560px; }
+}

@@ -20,7 +20,7 @@ export const RUTA = {
   repuestos: "/camiones?tab=repuestos",
   numeros: "/numeros",
   catalogoPartes: "/ajustes/partes",
-  revisar: "/revisar",
+  revisar: "/?ver=atencion",
   /** Cobrar una factura: «Me pagaron» de Anotar con la factura elegida; al guardar vuelve a Inicio. */
   cobrar: (facturaId: number) => `/anotar?tipo=cobro&facturaId=${facturaId}&volver=%2F`,
 };

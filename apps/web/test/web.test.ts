@@ -22,7 +22,7 @@ import {
   buscarUnidad, crearCategoria, crearEnlaceWeb, guardarUsuario, registrarGasto, registrarViajeFlota, listarEventos, listarUsuarios, listarViajesFlota, obtenerEmpresa, partesDeUnidad, crearRepuesto, listarCostosFijos, listarPrestamos, listarReparaciones, listarRepuestos, piezasDeTipo, instalarParte, listarTiposParte, liquidacionViaje,
   type Contexto,
 } from "@sunatapp/core";
-import { crearDb, eq, factura, gasto, guiaTransportista, vehiculo } from "../../../packages/db/src/index";
+import { crearDb, documentoRecibido, eq, factura, gasto, guiaTransportista, vehiculo } from "../../../packages/db/src/index";
 import { crearContextoPrueba, entradaGuia, prepararDatosTransporte } from "../../../packages/core/test/helpers";
 import { crearWeb } from "../src/app";
 import { tiposAnotar } from "../src/lugares";
@@ -473,7 +473,7 @@ describe("web", () => {
       expect(await (await app.request("/ajustes/categorias", { headers: { cookie } })).text()).toContain("Guardianía");
       expect(await (await app.request("/ajustes/costos-fijos", { headers: { cookie } })).text()).toContain("Sueldo T-01");
       await registrarViajeFlota(ctx, { vehiculoId: 1, origenLugar: "Juliaca", destinoLugar: "Puno", estado: "en_curso", origen: "web" });
-      expect(await (await app.request("/revisar", { headers: { cookie } })).text()).toContain("SIN GUÍA");
+      expect(await (await app.request("/?ver=atencion", { headers: { cookie } })).text()).toContain("SIN GUÍA");
     });
 
     it("los avisos enlazan a Rutas y a Camiones; Nueva ruta pliega el presupuesto", async () => {
@@ -618,16 +618,71 @@ describe("web", () => {
       ctx.ia = crearLectorReglas();
       const m = await recibirMensaje(ctx, { tipo: "voz", contenido: Buffer.from("ogg"), mime: "audio/ogg", telegramChatId: 5, telegramMessageId: 6 });
       await leerDocumento(ctx, m.id);
-      let html = await (await app.request("/revisar", { headers: { cookie } })).text();
-      expect(html).toContain("NO SE PUDO LEER");
+      const viejo = await app.request("/revisar", { headers: { cookie } });
+      expect(viejo.status).toBe(302);
+      expect(viejo.headers.get("location")).toBe("/?ver=atencion");
+      expect(await (await app.request("/", { headers: { cookie } })).text()).toContain(`/anotar?documento=${m.id}`);
+      let html = await (await app.request(`/anotar?documento=${m.id}`, { headers: { cookie } })).text();
+      expect(html).toContain("No se pudo leer");
       expect(html).toMatch(new RegExp(`<audio controls[^>]*src="/archivo/documento/${m.id}"`));
-      expect(await (await app.request("/", { headers: { cookie } })).text()).toContain("por confirmar");
+      expect(html).toContain(`action="/revisar/${m.id}"`);
       const r = await post(cookie, `/revisar/${m.id}`, { tipo: "gasto", categoria: "peaje", monto: "28.50", vehiculoId: "1" });
       expect(aviso(r)).toContain("ok=Gasto guardado");
-      html = await (await app.request("/revisar", { headers: { cookie } })).text();
-      expect(html).toContain("GASTOS SIN VIAJE · 1");
+      expect(r.headers.get("location")).toMatch(/^\/\?ver=atencion/);
+      html = await (await app.request("/?ver=atencion", { headers: { cookie } })).text();
+      expect(html).toContain("Gastos sin viaje · 1");
       expect((await app.request(`/archivo/documento/${m.id}`, { headers: { cookie } })).status).toBe(200);
       expect((await app.request(`/archivo/documento/${m.id}`)).status).toBe(302);
+    });
+
+    it("por revisar: Anotar precargado con lo que leyó la IA, descartar, asignar viaje y roles", async () => {
+      const cookie = await entrar();
+      const { recibirMensaje, leerDocumento, crearLectorReglas } = await import("./ayuda-revisar");
+      ctx.ia = crearLectorReglas();
+      const m = await recibirMensaje(ctx, { tipo: "texto", texto: "me yapearon 500", telegramChatId: 5, telegramMessageId: 7 });
+      await leerDocumento(ctx, m.id);
+      // Sin confirmar hace más de 24 h: pasa a «Necesita tu atención».
+      await ctx.db.update(documentoRecibido).set({ creadoEn: new Date(ctx.reloj().getTime() - 2 * 86_400_000) }).where(eq(documentoRecibido.id, m.id));
+      let html = await (await app.request(`/anotar?documento=${m.id}`, { headers: { cookie } })).text();
+      expect(html).toContain("Llegó por Telegram");
+      expect(html).toContain("«me yapearon 500»");
+      expect(html).toContain('name="tipo" value="entrega"');
+      expect(html).toContain('value="500.00"');
+      expect(html).toMatch(/value="yape" checked/);
+      expect(html).toContain(`href="/anotar?tipo=gaste&amp;volver=%2F%3Fver%3Datencion&amp;documento=${m.id}"`);
+      expect(html).toContain(`action="/revisar/${m.id}/descartar"`);
+      html = await (await app.request(`/anotar?documento=${m.id}&tipo=gaste`, { headers: { cookie } })).text();
+      expect(html).toContain('name="tipo" value="gasto"');
+      expect(html).toContain('name="categoria"');
+      // El taller no confirma plata del chofer (antes tampoco veía Por revisar).
+      await guardarUsuario(ctx, { nombre: "Taller", email: "taller@demo.pe", rol: "taller", clave: "clave-segura" });
+      const taller = await entrar("taller@demo.pe");
+      expect(aviso(await app.request(`/anotar?documento=${m.id}`, { headers: { cookie: taller } }))).toContain("error=");
+      expect((await post(taller, `/revisar/${m.id}/descartar`, {})).status).toBe(403);
+      // El contador sí.
+      await guardarUsuario(ctx, { nombre: "Conta", email: "conta@demo.pe", rol: "contador", clave: "clave-segura" });
+      const conta = await entrar("conta@demo.pe");
+      expect(await (await app.request(`/anotar?documento=${m.id}`, { headers: { cookie: conta } })).text()).toContain(`action="/revisar/${m.id}"`);
+      // Si no se pudo guardar, vuelve al mismo formulario con lo escrito.
+      let r = await post(cookie, `/revisar/${m.id}`, { tipo: "entrega", monto: "cinco", medio: "yape", vehiculoId: "1", volver: "/?ver=atencion" });
+      expect(r.headers.get("location")!.startsWith(`/anotar?documento=${m.id}&tipo=chofer&volver=%2F%3Fver%3Datencion&monto=cinco`)).toBe(true);
+      expect(aviso(r)).toContain("error=Monto no válido");
+      expect(await (await app.request(r.headers.get("location")!, { headers: { cookie } })).text()).toContain('value="cinco"');
+      r = await post(cookie, `/revisar/${m.id}/descartar`, {});
+      expect(aviso(r)).toContain("ok=Descartado");
+      expect(r.headers.get("location")).toMatch(/^\/\?ver=atencion/);
+      r = await app.request(`/anotar?documento=${m.id}`, { headers: { cookie } });
+      expect(r.headers.get("location")).toMatch(/^\/\?ver=atencion&error=/);
+      // Gasto sin viaje: «Asignar» lo pasa a un viaje del mismo camión.
+      const g = await registrarGasto(ctx, { categoria: "peaje", monto: 2850, vehiculoId: 1, origen: "telegram" });
+      const v = await registrarViajeFlota(ctx, { vehiculoId: 1, origenLugar: "Yura", destinoLugar: "Puno", estado: "cerrado", origen: "web" });
+      html = await (await app.request("/?ver=atencion", { headers: { cookie } })).text();
+      expect(html).toContain("Gastos sin viaje · 1");
+      expect(html).toContain(`action="/revisar/gasto/${g.id}"`);
+      r = await post(cookie, `/revisar/gasto/${g.id}`, { viajeId: String(v.id) });
+      expect(aviso(r)).toContain("ok=Gasto pasado a");
+      expect(r.headers.get("location")).toMatch(/^\/\?ver=atencion/);
+      expect(await (await app.request("/?ver=atencion", { headers: { cookie } })).text()).not.toContain("Gastos sin viaje");
     });
 
     it("rutas: plantilla, usar el promedio y editar el presupuesto de un viaje", async () => {

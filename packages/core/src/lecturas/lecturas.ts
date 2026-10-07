@@ -174,7 +174,10 @@ export async function leerDocumento(ctx: Contexto, documentoId: number): Promise
 export async function corregirLectura(ctx: Contexto, documentoId: number, texto: string): Promise<ResultadoLeer> {
   const [d] = await ctx.db.select({ c: documentoRecibido.correcciones, estado: documentoRecibido.estadoLectura }).from(documentoRecibido).where(eq(documentoRecibido.id, documentoId));
   if (!d) throw new ErrorNegocio("El mensaje no existe");
-  if (d.estado === "confirmado") return { ok: false, documentoId, error: "ya_confirmado", mensaje: "Este mensaje ya se guardó." };
+  if (d.estado === "confirmado" || d.estado === "descartado") {
+    // Lo ya resuelto no se toca (ni se le suman correcciones).
+    return { ok: false, documentoId, error: "ya_confirmado", mensaje: d.estado === "confirmado" ? "Este mensaje ya se guardó." : "Este mensaje se descartó." };
+  }
   const correcciones = [...(Array.isArray(d.c) ? (d.c as string[]) : []), texto.trim()];
   await ctx.db.update(documentoRecibido).set({ correcciones }).where(eq(documentoRecibido.id, documentoId));
   return leerDocumento(ctx, documentoId);
@@ -332,6 +335,21 @@ export async function listarPorRevisar(ctx: Contexto): Promise<ItemPorRevisar[]>
 const placaNormal = (t: string) => t.toUpperCase().replace(/[^A-Z0-9]/g, "");
 
 /**
+ * La placa aparece como palabra entera, o partida en palabras seguidas («XYZ 987», «XYZ-987»):
+ * «ABC1234» o «XABC123» no son la placa ABC-123.
+ */
+function tienePlaca(palabras: string[], placa: string): boolean {
+  for (let i = 0; i < palabras.length; i++) {
+    let junto = "";
+    for (let j = i; j < palabras.length && junto.length < placa.length; j++) {
+      junto += palabras[j];
+      if (junto === placa) return true;
+    }
+  }
+  return false;
+}
+
+/**
  * De qué camión es un mensaje del chofer, en este orden: (a) una placa escrita en el texto o leída
  * en la boleta; (b) el viaje en curso de quien lo mandó; (c) el último camión con que anotó un gasto.
  * null si no hay cómo saberlo (se pregunta).
@@ -341,9 +359,9 @@ export async function camionDeMensaje(
 ): Promise<{ vehiculoId: number; por: "placa" | "viaje" | "ultimo" } | null> {
   const l = m.lectura;
   const leido = l?.tipo === "gasto" ? [l.nota, l.proveedorNombre, l.comprobante] : [];
-  const fuente = placaNormal([m.texto, ...leido].filter(Boolean).join(" "));
-  if (fuente) {
-    const u = (await listarUnidades(ctx)).find((x) => x.placa && placaNormal(x.placa).length >= 5 && fuente.includes(placaNormal(x.placa)));
+  const palabras = [m.texto, ...leido].filter(Boolean).join(" ").toUpperCase().split(/[^A-Z0-9]+/).filter(Boolean);
+  if (palabras.length) {
+    const u = (await listarUnidades(ctx)).find((x) => x.placa && placaNormal(x.placa).length >= 5 && tienePlaca(palabras, placaNormal(x.placa)));
     if (u) return { vehiculoId: u.id, por: "placa" };
   }
   if (m.usuarioId === null) return null;

@@ -95,6 +95,10 @@ describe("lecturas de mensajes", () => {
     await descartarLectura(ctx, id);
     await expect(confirmarLectura(ctx, id, { vehiculoId: 1 })).rejects.toThrow();
     expect(await ctx.db.select().from(gasto).where(eq(gasto.documentoId, id))).toEqual([]);
+    // Corregir lo descartado no lo vuelve a leer ni le suma correcciones.
+    expect(await corregirLectura(ctx, id, "eran 40")).toMatchObject({ ok: false, error: "ya_confirmado", mensaje: "Este mensaje se descartó." });
+    const [d2] = await ctx.db.select().from(documentoRecibido).where(eq(documentoRecibido.id, id));
+    expect(d2!.correcciones).toEqual(["eran 28.50"]);
   });
 
   it("lo ya guardado o descartado no vuelve a «por confirmar»: guardar dos veces no duplica y descartar no lo toca", async () => {
@@ -121,6 +125,10 @@ describe("lecturas de mensajes", () => {
     const t2 = await crearUnidad(ctx, { placa: "XYZ-987" });
     expect(await camionDeMensaje(ctx, { usuarioId: null, texto: "peaje 12 placa xyz 987", lectura: null })).toEqual({ vehiculoId: t2.id, por: "placa" });
     expect(await camionDeMensaje(ctx, { usuarioId: null, texto: "peaje 12", lectura: null })).toBeNull();
+    // Solo palabras enteras: «XYZ9876» o «AXYZ 987» no son la placa XYZ-987.
+    expect(await camionDeMensaje(ctx, { usuarioId: null, texto: "boleta XYZ9876", lectura: null })).toBeNull();
+    expect(await camionDeMensaje(ctx, { usuarioId: null, texto: "ruc AXYZ 987", lectura: null })).toBeNull();
+    expect(await camionDeMensaje(ctx, { usuarioId: null, texto: "placa XYZ-987.", lectura: null })).toEqual({ vehiculoId: t2.id, por: "placa" });
     // El usuario 1 maneja (conductor 1) un viaje en curso con T-02.
     await ctx.db.update(usuario).set({ conductorId: 1 }).where(eq(usuario.id, 1));
     expect(await camionDeMensaje(ctx, { usuarioId: 1, texto: "peaje 12", lectura: null })).toBeNull();

@@ -19,7 +19,7 @@ export const RUTA = {
   /** Los repuestos (antes Inventario). */
   repuestos: "/camiones?tab=repuestos",
   numeros: "/numeros",
-  catalogoPartes: "/ajustes",
+  catalogoPartes: "/ajustes/partes",
   revisar: "/revisar",
   /** Cobrar una factura: «Me pagaron» de Anotar con la factura elegida; al guardar vuelve a Inicio. */
   cobrar: (facturaId: number) => `/anotar?tipo=cobro&facturaId=${facturaId}&volver=%2F`,
@@ -38,8 +38,8 @@ export function menuDe(rol: RolUsuario): EntradaMenu[] {
   return todos.filter((e) => e.seccion === "dashboard" || puedeVer(rol, e.seccion));
 }
 
-/** Por ahora Ajustes es solo del dueño; la tarea 10 lo abre a todos (el hub filtra las tarjetas). */
-export const veAjustes = (rol: RolUsuario): boolean => puedeVer(rol, "ajustes");
+/** El hub de Ajustes lo ven todos (cada tarjeta se filtra por rol). */
+export const veAjustes = (_rol: RolUsuario): boolean => true;
 
 export type TipoAnotar = "gaste" | "chofer" | "cobro" | "repare" | "empresa" | "prestamo";
 

@@ -39,4 +39,13 @@ export const LUGARES: LugarCaptura[] = [
   { nombre: "numeros-rentabilidad", ruta: "/numeros/rentabilidad" },
   { nombre: "numeros-graficos", ruta: "/numeros/graficos" },
   { nombre: "ajustes", ruta: "/ajustes" },
+  { nombre: "ajustes-empresa", ruta: "/ajustes/empresa" },
+  { nombre: "ajustes-usuarios", ruta: "/ajustes/usuarios" },
+  { nombre: "ajustes-costos-fijos", ruta: "/ajustes/costos-fijos" },
+  { nombre: "ajustes-categorias", ruta: "/ajustes/categorias" },
+  { nombre: "ajustes-partes", ruta: "/ajustes/partes" },
+  { nombre: "rutas", ruta: "/rutas" },
+  { nombre: "telegram", ruta: "/telegram" },
+  { nombre: "sincronizar", ruta: "/sincronizar" },
+  { nombre: "dispositivo", ruta: "/ajustes/dispositivo" },
 ];

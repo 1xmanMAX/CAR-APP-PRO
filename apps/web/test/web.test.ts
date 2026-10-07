@@ -164,7 +164,8 @@ describe("web", () => {
       expect(html).toContain("Necesita tu atención");
       expect(html).not.toContain("Ganaste este mes");
       expect(html).not.toContain("En ruta ahora");
-      expect(html).not.toContain('aria-label="Ajustes"');
+      // El hub de Ajustes lo ven todos (ahí están Salir e Instalar app en el celular).
+      expect(html).toContain('aria-label="Ajustes"');
     });
 
     describe("anotar", () => {
@@ -467,18 +468,34 @@ describe("web", () => {
 
     it("ajustes: crear categoría y costo fijo; por revisar muestra viajes sin guía", async () => {
       const cookie = await entrar();
-      expect((await post(cookie, "/ajustes/categoria", { nombre: "Guardianía", tipo: "variable" })).status).toBe(303);
-      expect((await post(cookie, "/ajustes/costo-fijo", { concepto: "Sueldo T-01", categoria: "sueldo_chofer", monto: "2500", periodicidad: "mensual", vehiculoId: "1", desde: "2026-09-01" })).status).toBe(303);
-      const html = await (await app.request("/ajustes", { headers: { cookie } })).text();
-      expect(html).toContain("Guardianía");
-      expect(html).toContain("Sueldo T-01");
+      expect((await post(cookie, "/ajustes/categoria", { nombre: "Guardianía", tipo: "variable" })).headers.get("location")).toMatch(/^\/ajustes\/categorias\?ok=/);
+      expect((await post(cookie, "/ajustes/costo-fijo", { concepto: "Sueldo T-01", categoria: "sueldo_chofer", monto: "2500", periodicidad: "mensual", vehiculoId: "1", desde: "2026-09-01" })).headers.get("location")).toMatch(/^\/ajustes\/costos-fijos\?ok=/);
+      expect(await (await app.request("/ajustes/categorias", { headers: { cookie } })).text()).toContain("Guardianía");
+      expect(await (await app.request("/ajustes/costos-fijos", { headers: { cookie } })).text()).toContain("Sueldo T-01");
       await registrarViajeFlota(ctx, { vehiculoId: 1, origenLugar: "Juliaca", destinoLugar: "Puno", estado: "en_curso", origen: "web" });
       expect(await (await app.request("/revisar", { headers: { cookie } })).text()).toContain("SIN GUÍA");
     });
 
+    it("ajustes: hub con tarjetas según el rol", async () => {
+      const cookie = await entrar();
+      const html = await (await app.request("/ajustes", { headers: { cookie } })).text();
+      for (const t of ["Empresa", "Usuarios", "Costos fijos", "Categorías", "Rutas y presupuestos", "Catálogo de partes", "Telegram", "Sincronizar", "Este dispositivo y SUNAT", "Salir"]) expect(html, t).toContain(t);
+      await guardarUsuario(ctx, { nombre: "Conta", email: "conta@demo.pe", rol: "contador", clave: "clave-segura" });
+      const conta = await entrar("conta@demo.pe");
+      const hub = await (await app.request("/ajustes", { headers: { cookie: conta } })).text();
+      expect(hub).toContain("Rutas y presupuestos");
+      expect(hub).toContain("Sincronizar");
+      expect(hub).not.toContain('href="/ajustes/usuarios"');
+      expect((await app.request("/ajustes/usuarios", { headers: { cookie: conta } })).headers.get("location")).toContain("/?error=");
+      await guardarUsuario(ctx, { nombre: "Taller", email: "taller@demo.pe", rol: "taller", clave: "clave-segura" });
+      const taller = await (await app.request("/ajustes", { headers: { cookie: await entrar("taller@demo.pe") } })).text();
+      expect(taller).toContain("Telegram");
+      expect(taller).not.toContain("Rutas y presupuestos");
+    });
+
     it("todas las pantallas cargan", async () => {
       const cookie = await entrar();
-      for (const ruta of ["/", "/camiones/1", "/camiones/1?tab=historial", "/camiones/1?tab=repuestos", "/camiones/1?tab=datos", "/camiones/nuevo", "/viajes", "/numeros", "/numeros?periodo=anio", "/numeros/caja", "/numeros/prestamos", "/numeros/cotizar", "/numeros/rentabilidad", "/numeros/graficos", "/telegram", "/ajustes", "/api/feed"]) {
+      for (const ruta of ["/", "/camiones/1", "/camiones/1?tab=historial", "/camiones/1?tab=repuestos", "/camiones/1?tab=datos", "/camiones/nuevo", "/viajes", "/numeros", "/numeros?periodo=anio", "/numeros/caja", "/numeros/prestamos", "/numeros/cotizar", "/numeros/rentabilidad", "/numeros/graficos", "/telegram", "/ajustes", "/ajustes/empresa", "/ajustes/usuarios", "/ajustes/costos-fijos", "/ajustes/categorias", "/ajustes/partes", "/rutas", "/sincronizar", "/api/feed"]) {
         const r = await app.request(ruta, { headers: { cookie } });
         expect(r.status, ruta).toBe(200);
       }

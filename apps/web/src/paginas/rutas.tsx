@@ -4,7 +4,7 @@ import {
   promedioDeRuta, puedeEditar, type Categoria, type LineaPlantilla,
 } from "@sunatapp/core";
 import { accion, formulario, pagina, type App, type C, type Deps } from "../base";
-import { Panel, soles2, Vacio } from "../ui";
+import { Cabecera, Panel, soles2, Vacio } from "../ui";
 
 const aSoles = (c: number | undefined) => (c ? (c / 100).toFixed(2) : "");
 
@@ -45,13 +45,9 @@ async function vista(c: C, d: Deps) {
     const p = partesDeRuta(r.nombre);
     return { r, prom: await promedioDeRuta(d.ctx, p?.origen ?? null, p?.destino ?? null) };
   }));
-  return pagina(c, d, { titulo: "Rutas y presupuestos", seccion: "viajes" }, (
+  return pagina(c, d, { titulo: "Rutas y presupuestos", seccion: "viajes", lugar: "ajustes" }, (
     <>
-      <section class="panel" style="flex-direction:row;align-items:center;flex-wrap:wrap;gap:10px">
-        <a class="btn chico" href="/viajes">← VIAJES</a>
-        <b class="mono-t" style="font-size:16px">RUTAS · PRESUPUESTO POR VIAJE</b>
-        <span class="muted" style="font-size:12px">Cada viaje nuevo de «origen → destino» copia la plantilla de su ruta (luego se puede ajustar en el viaje). Al lado va el promedio real de los últimos 5 viajes.</span>
-      </section>
+      <Cabecera titulo="Rutas y presupuestos" volver="/ajustes" sub="Cada viaje nuevo copia la plantilla de su ruta; al lado va el promedio real de los últimos 5 viajes." />
       {conPromedio.length === 0 ? <Panel titulo="RUTAS"><Vacio>Todavía no hay rutas. Crea la primera abajo.</Vacio></Panel> : conPromedio.map(({ r, prom }) => {
         const valores = new Map(r.plantilla.map((l) => [l.categoria, l.monto]));
         const total = r.plantilla.reduce((s, l) => s + l.monto, 0);

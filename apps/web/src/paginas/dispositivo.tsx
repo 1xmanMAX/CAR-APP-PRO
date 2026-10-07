@@ -5,7 +5,7 @@ import {
   probarConexionSunat, reanudarSunat, type DatosPrueba, type ResultadoPruebaSunat,
 } from "@sunatapp/core";
 import { accion, formularioMultiparte, pagina, type App, type C, type Deps, type EstadoServicios } from "../base";
-import { Panel, Vacio } from "../ui";
+import { Cabecera, Panel, Vacio } from "../ui";
 
 /**
  * **Ajustes → Este dispositivo**: lo que en la PC se escribía a mano en `.env` (bot de Telegram y
@@ -60,7 +60,7 @@ async function vista(c: C, d: Deps, resultado?: ResultadoPruebaSunat, nota?: str
   const s = d.servicios;
   if (!s) {
     return pagina(c, d, { titulo: "Este dispositivo", seccion: "ajustes" }, (
-      <Panel titulo="ESTE DISPOSITIVO"><Vacio>Esta forma de arranque solo tiene la web. Abre Control Flota con INICIAR.bat (PC) o la app de Android.</Vacio></Panel>
+      <><Cabecera titulo="Este dispositivo y SUNAT" volver="/ajustes" /><Panel titulo="ESTE DISPOSITIVO"><Vacio>Esta forma de arranque solo tiene la web. Abre Control Flota con INICIAR.bat (PC) o la app de Android.</Vacio></Panel></>
     ));
   }
   const e = s.estado();
@@ -71,123 +71,128 @@ async function vista(c: C, d: Deps, resultado?: ResultadoPruebaSunat, nota?: str
   const facturaAuto = await facturaAutomaticaActiva(d.ctx);
   return pagina(c, d, { titulo: "Este dispositivo", seccion: "ajustes" }, (
     <>
+      <Cabecera titulo="Este dispositivo y SUNAT" volver="/ajustes" />
       <section class="panel oscuro" style="gap:6px">
         <b class="mono-t" style="font-size:16px;color:var(--accent-on-dark)">AJUSTES DE ESTE DISPOSITIVO · {e.plataforma === "android" ? "CELULAR" : "PC"}</b>
         <span style="font-size:12px">Son solo de este equipo y no se sincronizan (así el token del bot y las claves SUNAT viven en uno solo). Al guardar se aplican al momento, sin cerrar la app.
           Se guardan en <code>{e.archivoAjustes}</code>.</span>
       </section>
       <form method="post" action="/ajustes/dispositivo" enctype="multipart/form-data">
-        <div class="grid g-lado">
-          <Panel titulo="BOT DE TELEGRAM">
-            <EstadoBot e={e.bot} />
-            {e.codigoRegistro && e.bot.estado === "en_linea" ? (
-              <div class="aviso info">Para registrarte como dueño en el bot, envíale este código desde tu Telegram: <b class="mono-t" style="font-size:18px">{e.codigoRegistro}</b></div>
-            ) : null}
-            <label class="campo"><span>Token del bot ({oculto(a.TELEGRAM_BOT_TOKEN)}) · te lo da @BotFather</span>
-              <input name="TELEGRAM_BOT_TOKEN" type="password" autocomplete="off" placeholder={a.TELEGRAM_BOT_TOKEN ? "déjalo vacío para no cambiarlo" : "123456789:AA…"} />
-            </label>
-            {a.TELEGRAM_BOT_TOKEN ? (
-              <label class="campo" style="flex-direction:row;gap:6px;align-items:center"><input type="checkbox" name="quitarToken" value="1" style="width:auto;min-height:0" /><span style="text-transform:none">Apagar el bot en este dispositivo (quitar el token)</span></label>
-            ) : null}
-            <div class="linea">
-              <label class="campo" style="flex:1"><span>Hora del aviso diario</span><input name="BOT_HORA_AVISO" type="time" value={a.BOT_HORA_AVISO || "08:00"} /></label>
-              <label class="campo" style="flex:1"><span>Lector de guías PDF</span>
-                <select name="EXTRACTOR"><option value="reglas" selected={(a.EXTRACTOR || "reglas") === "reglas"}>Reglas (sin internet)</option><option value="ia" selected={a.EXTRACTOR === "ia"}>IA</option></select>
-              </label>
-            </div>
-            <span class="muted" style="font-size:12px">Pon el token en <b>un solo dispositivo</b>, el que pase más tiempo encendido y con internet: Telegram no deja conectar el mismo bot en dos a la vez.
-              Sin bot, los avisos para Telegram esperan en cola en este dispositivo.</span>
-          </Panel>
-
-          <Panel titulo="SUNAT">
-            {pausa ? (
-              <div class="aviso error">⏸ SUNAT en pausa desde {pausa.desde.slice(0, 16).replace("T", " ")}: {pausa.motivo}. Corrige tus claves y guarda, o <button class="btn chico" type="submit" style="min-height:44px" formaction="/ajustes/dispositivo/reanudar">REINTENTAR AHORA</button></div>
-            ) : null}
-            {e.sunat.modo === "real" && !FORMULA_VR_VERIFICADA ? (
-              <div class="aviso info">La fórmula del valor referencial MTC aún no está verificada contra la norma: revisa el monto de la detracción de tus primeras facturas.</div>
-            ) : null}
-            <div class="filas" style="gap:4px">
-              <span><span class={`chip ${e.sunat.modo === "real" ? "ok" : "neutro"}`}>MODO {e.sunat.modo.toUpperCase()}</span></span>
-              {e.sunat.error ? <div class="aviso error">{e.sunat.error}</div> : null}
-            </div>
-            <label class="campo"><span>Modo</span>
-              <select name="SUNAT_MODO">
-                <option value="simulado" selected={modo === "simulado"}>Simulado (sin validez, para practicar)</option>
-                <option value="beta" selected={modo === "beta"}>Beta (facturas al ambiente de pruebas de SUNAT)</option>
-                <option value="real" selected={modo === "real"}>Real (con tu certificado y clave SOL)</option>
-              </select>
-            </label>
-            <label class="campo"><span>Facturas en modo real</span>
-              <select name="SUNAT_AMBIENTE_FACTURA">
-                <option value="" selected={!a.SUNAT_AMBIENTE_FACTURA}>Producción</option>
-                <option value="beta" selected={a.SUNAT_AMBIENTE_FACTURA === "beta"}>Beta (pruebas)</option>
-              </select>
-            </label>
-            <div class="linea">
-              <label class="campo" style="flex:1"><span>Usuario SOL</span><input name="SUNAT_SOL_USUARIO" value={a.SUNAT_SOL_USUARIO ?? ""} autocomplete="off" /></label>
-              <label class="campo" style="flex:1"><span>Clave SOL ({oculto(a.SUNAT_SOL_CLAVE)})</span><input name="SUNAT_SOL_CLAVE" type="password" autocomplete="off" /></label>
-            </div>
-            <div class="linea">
-              <label class="campo" style="flex:1"><span>GRE client_id</span><input name="SUNAT_GRE_CLIENT_ID" value={a.SUNAT_GRE_CLIENT_ID ?? ""} autocomplete="off" /></label>
-              <label class="campo" style="flex:1"><span>GRE client_secret ({oculto(a.SUNAT_GRE_CLIENT_SECRET)})</span><input name="SUNAT_GRE_CLIENT_SECRET" type="password" autocomplete="off" /></label>
-            </div>
-            <label class="campo"><span>Certificado digital .pfx ({a.SUNAT_CERT_PATH ? "cargado" : "sin cargar"})</span><input name="certificado" type="file" accept=".pfx,.p12,application/x-pkcs12" /></label>
-            <label class="campo"><span>Clave del certificado ({oculto(a.SUNAT_CERT_PASSWORD)})</span><input name="SUNAT_CERT_PASSWORD" type="password" autocomplete="off" /></label>
-            <label class="campo" style="flex-direction:row;gap:6px;align-items:center;min-height:44px"><input type="checkbox" name="facturaAutomatica" value="1" checked={facturaAuto} style="width:auto;min-height:0" /><span style="text-transform:none">Facturar solo al aceptarse la guía (si el viaje tiene flete pactado y una sola guía)</span></label>
-            <button class="btn chico" type="submit" formaction="/ajustes/dispositivo/probar" style="min-height:44px">PROBAR CONEXIÓN</button>
-            {resultado ? (
+        <div class="grid g-lado" style="align-items:start">
+          <div class="filas" style="gap:10px;min-width:0">
+            <Panel titulo="SUNAT">
+              {pausa ? (
+                <div class="aviso error">⏸ SUNAT en pausa desde {pausa.desde.slice(0, 16).replace("T", " ")}: {pausa.motivo}. Corrige tus claves y guarda, o <button class="btn chico" type="submit" style="min-height:44px" formaction="/ajustes/dispositivo/reanudar">REINTENTAR AHORA</button></div>
+              ) : null}
+              {e.sunat.modo === "real" && !FORMULA_VR_VERIFICADA ? (
+                <div class="aviso info">La fórmula del valor referencial MTC aún no está verificada contra la norma: revisa el monto de la detracción de tus primeras facturas.</div>
+              ) : null}
               <div class="filas" style="gap:4px">
-                {nota ? <span class="aviso error">{nota}</span> : null}
-                {([["Certificado", resultado.certificado], ["Usuario y clave SOL", resultado.claveSol], ["Credenciales de guías", resultado.credencialesGre]] as const).map(([n, p]) => (
-                  <span class={`aviso ${p.ok ? "info" : "error"}`}>{p.ok ? "✅" : "❌"} <b>{n}:</b> {p.mensaje}</span>
-                ))}
+                <span><span class={`chip ${e.sunat.modo === "real" ? "ok" : "neutro"}`}>MODO {e.sunat.modo.toUpperCase()}</span></span>
+                {e.sunat.error ? <div class="aviso error">{e.sunat.error}</div> : null}
               </div>
-            ) : null}
-            <span class="muted" style="font-size:12px">Las claves vacías no se cambian. Emite los documentos reales desde un solo dispositivo para que la numeración no se cruce.</span>
-          </Panel>
+              <label class="campo"><span>Modo</span>
+                <select name="SUNAT_MODO">
+                  <option value="simulado" selected={modo === "simulado"}>Simulado (sin validez, para practicar)</option>
+                  <option value="beta" selected={modo === "beta"}>Beta (facturas al ambiente de pruebas de SUNAT)</option>
+                  <option value="real" selected={modo === "real"}>Real (con tu certificado y clave SOL)</option>
+                </select>
+              </label>
+              <label class="campo"><span>Facturas en modo real</span>
+                <select name="SUNAT_AMBIENTE_FACTURA">
+                  <option value="" selected={!a.SUNAT_AMBIENTE_FACTURA}>Producción</option>
+                  <option value="beta" selected={a.SUNAT_AMBIENTE_FACTURA === "beta"}>Beta (pruebas)</option>
+                </select>
+              </label>
+              <div class="linea">
+                <label class="campo" style="flex:1"><span>Usuario SOL</span><input name="SUNAT_SOL_USUARIO" value={a.SUNAT_SOL_USUARIO ?? ""} autocomplete="off" /></label>
+                <label class="campo" style="flex:1"><span>Clave SOL ({oculto(a.SUNAT_SOL_CLAVE)})</span><input name="SUNAT_SOL_CLAVE" type="password" autocomplete="off" /></label>
+              </div>
+              <div class="linea">
+                <label class="campo" style="flex:1"><span>GRE client_id</span><input name="SUNAT_GRE_CLIENT_ID" value={a.SUNAT_GRE_CLIENT_ID ?? ""} autocomplete="off" /></label>
+                <label class="campo" style="flex:1"><span>GRE client_secret ({oculto(a.SUNAT_GRE_CLIENT_SECRET)})</span><input name="SUNAT_GRE_CLIENT_SECRET" type="password" autocomplete="off" /></label>
+              </div>
+              <label class="campo"><span>Certificado digital .pfx ({a.SUNAT_CERT_PATH ? "cargado" : "sin cargar"})</span><input name="certificado" type="file" accept=".pfx,.p12,application/x-pkcs12" /></label>
+              <label class="campo"><span>Clave del certificado ({oculto(a.SUNAT_CERT_PASSWORD)})</span><input name="SUNAT_CERT_PASSWORD" type="password" autocomplete="off" /></label>
+              <label class="campo" style="flex-direction:row;gap:6px;align-items:center;min-height:44px"><input type="checkbox" name="facturaAutomatica" value="1" checked={facturaAuto} style="width:auto;min-height:0" /><span style="text-transform:none">Facturar solo al aceptarse la guía (si el viaje tiene flete pactado y una sola guía)</span></label>
+              <button class="btn chico" type="submit" formaction="/ajustes/dispositivo/probar" style="min-height:44px">PROBAR CONEXIÓN</button>
+              {resultado ? (
+                <div class="filas" style="gap:4px">
+                  {nota ? <span class="aviso error">{nota}</span> : null}
+                  {([["Certificado", resultado.certificado], ["Usuario y clave SOL", resultado.claveSol], ["Credenciales de guías", resultado.credencialesGre]] as const).map(([n, p]) => (
+                    <span class={`aviso ${p.ok ? "info" : "error"}`}>{p.ok ? "✅" : "❌"} <b>{n}:</b> {p.mensaje}</span>
+                  ))}
+                </div>
+              ) : null}
+              <span class="muted" style="font-size:12px">Las claves vacías no se cambian. Emite los documentos reales desde un solo dispositivo para que la numeración no se cruce.
+                La placa, la configuración vehicular y la carga útil de cada camión van en <a href="/camiones">Camiones</a> › Datos.</span>
+            </Panel>
+            <Panel titulo="CÓMO CONSEGUIR TUS ACCESOS SUNAT (UNA SOLA VEZ)">
+              <ol style="margin:0;padding-left:18px;font-size:13px;line-height:1.5">
+                <li><b>Certificado digital gratis:</b> SOL → Empresas → Comprobantes de Pago → Certificado Digital Tributario → «Solicitar Certificado Digital Tributario». Te llega al Buzón SOL; al descargarlo creas su clave y obtienes <code>certificado.p12</code>.</li>
+                <li><b>Emisor desde tu sistema:</b> en SOL, inscríbete en «SEE - Del Contribuyente» subiendo ese certificado y tu correo. Rige desde el día siguiente.</li>
+                <li><b>Credenciales de guías:</b> SOL → Empresas → Credenciales de API SUNAT → Gestión de Credenciales → registra una aplicación tipo <b>Desktop</b> marcando «GRE Emisión de Comprobantes». Copia el ID (client_id) y la CLAVE (client_secret).</li>
+                <li><b>Usuario SOL:</b> si SUNAT responde «el usuario debe ser secundario» (0112), crea un usuario secundario con perfil de emisión electrónica y úsalo aquí. Dale también el permiso de <b>consulta de comprobantes / CDR</b>: con él la app recupera el CDR de una factura que SUNAT ya tiene.</li>
+                <li>Escribe tus datos y toca <b>PROBAR CONEXIÓN</b> (se guardan al probar, sin cambiar el modo; ya en modo Real, solo se guardan si sale todo ✅). Si sale todo ✅, cambia el modo a <b>Real</b> y guarda.</li>
+              </ol>
+              <span class="muted" style="font-size:12px">No hay ambiente de pruebas de SUNAT para guías: la primera guía en modo Real ya es real. Hasta el 28-02-2027 SUNAT no sanciona errores en guías de transportista.</span>
+            </Panel>
+          </div>
+          <div class="filas" style="gap:10px;min-width:0">
+            <Panel titulo="BOT DE TELEGRAM">
+              <EstadoBot e={e.bot} />
+              {e.codigoRegistro && e.bot.estado === "en_linea" ? (
+                <div class="aviso info">Para registrarte como dueño en el bot, envíale este código desde tu Telegram: <b class="mono-t" style="font-size:18px">{e.codigoRegistro}</b></div>
+              ) : null}
+              <label class="campo"><span>Token del bot ({oculto(a.TELEGRAM_BOT_TOKEN)}) · te lo da @BotFather</span>
+                <input name="TELEGRAM_BOT_TOKEN" type="password" autocomplete="off" placeholder={a.TELEGRAM_BOT_TOKEN ? "déjalo vacío para no cambiarlo" : "123456789:AA…"} />
+              </label>
+              {a.TELEGRAM_BOT_TOKEN ? (
+                <label class="campo" style="flex-direction:row;gap:6px;align-items:center"><input type="checkbox" name="quitarToken" value="1" style="width:auto;min-height:0" /><span style="text-transform:none">Apagar el bot en este dispositivo (quitar el token)</span></label>
+              ) : null}
+              <div class="linea">
+                <label class="campo" style="flex:1"><span>Hora del aviso diario</span><input name="BOT_HORA_AVISO" type="time" value={a.BOT_HORA_AVISO || "08:00"} /></label>
+                <label class="campo" style="flex:1"><span>Lector de guías PDF</span>
+                  <select name="EXTRACTOR"><option value="reglas" selected={(a.EXTRACTOR || "reglas") === "reglas"}>Reglas (sin internet)</option><option value="ia" selected={a.EXTRACTOR === "ia"}>IA</option></select>
+                </label>
+              </div>
+              <span class="muted" style="font-size:12px">Pon el token en <b>un solo dispositivo</b>, el que pase más tiempo encendido y con internet: Telegram no deja conectar el mismo bot en dos a la vez.
+                Sin bot, los avisos para Telegram esperan en cola en este dispositivo.</span>
+            </Panel>
+            <Panel titulo="LECTURA DE BOLETAS POR TELEGRAM">
+              <div class="filas" style="gap:4px">
+                <span>
+                  <span class={`chip ${e.ia.lector === "deepseek" ? "ok" : "neutro"}`}>{e.ia.lector === "deepseek" ? "IA DEEPSEEK · LEE FOTOS" : "REGLAS · SOLO TEXTO"}</span>{" "}
+                  <span class={`chip ${e.ia.voz ? "ok" : "neutro"}`}>{e.ia.voz ? "NOTAS DE VOZ ACTIVAS" : "SIN NOTAS DE VOZ"}</span>
+                </span>
+                {e.ia.error ? <div class="aviso error">{e.ia.error}</div> : null}
+                <span class="muted" style="font-size:12px">Este mes: {ia.lecturas} lecturas · US$ {ia.usd.toFixed(3)}. Lo que quedó a medias está en <a href="/revisar">Por revisar</a>.</span>
+              </div>
+              <span class="muted" style="font-size:12px">El chofer manda la foto de la boleta, un texto («grifo 350») o una nota de voz, y el bot le pide confirmar antes de guardar el gasto.
+                Sin clave de IA se entienden los textos y las fotos se completan con botones. Con DeepSeek también se leen las fotos (cuesta menos de un centavo de dólar por boleta).</span>
+              <div class="linea">
+                <label class="campo" style="flex:1"><span>Lector</span>
+                  <select name="IA_PROVEEDOR">
+                    <option value="reglas" selected={e.ia.lector === "reglas"}>Reglas (sin internet, gratis)</option>
+                    <option value="deepseek" selected={e.ia.lector === "deepseek"}>DeepSeek (lee fotos)</option>
+                  </select>
+                </label>
+                <label class="campo" style="flex:2"><span>Clave de DeepSeek ({oculto(a.DEEPSEEK_API_KEY)}) · platform.deepseek.com</span>
+                  <input name="DEEPSEEK_API_KEY" type="password" autocomplete="off" placeholder={a.DEEPSEEK_API_KEY ? "déjalo vacío para no cambiarla" : "sk-…"} />
+                </label>
+              </div>
+              {a.DEEPSEEK_API_KEY ? (
+                <label class="campo" style="flex-direction:row;gap:6px;align-items:center"><input type="checkbox" name="quitarClaveIa" value="1" style="width:auto;min-height:0" /><span style="text-transform:none">Quitar la clave de DeepSeek</span></label>
+              ) : null}
+              {e.plataforma === "pc" ? (
+                <div class="linea">
+                  <label class="campo" style="flex:1"><span>whisper.cpp (ruta del programa, opcional)</span><input name="WHISPER_BIN" value={a.WHISPER_BIN ?? ""} placeholder="C:\whisper\main.exe" autocomplete="off" /></label>
+                  <label class="campo" style="flex:1"><span>Modelo de whisper (.bin)</span><input name="WHISPER_MODELO" value={a.WHISPER_MODELO ?? ""} placeholder="ggml-small.bin" autocomplete="off" /></label>
+                </div>
+              ) : null}
+            </Panel>
+          </div>
         </div>
-        <Panel titulo="CÓMO CONSEGUIR TUS ACCESOS SUNAT (UNA SOLA VEZ)">
-          <ol style="margin:0;padding-left:18px;font-size:13px;line-height:1.5">
-            <li><b>Certificado digital gratis:</b> SOL → Empresas → Comprobantes de Pago → Certificado Digital Tributario → «Solicitar Certificado Digital Tributario». Te llega al Buzón SOL; al descargarlo creas su clave y obtienes <code>certificado.p12</code>.</li>
-            <li><b>Emisor desde tu sistema:</b> en SOL, inscríbete en «SEE - Del Contribuyente» subiendo ese certificado y tu correo. Rige desde el día siguiente.</li>
-            <li><b>Credenciales de guías:</b> SOL → Empresas → Credenciales de API SUNAT → Gestión de Credenciales → registra una aplicación tipo <b>Desktop</b> marcando «GRE Emisión de Comprobantes». Copia el ID (client_id) y la CLAVE (client_secret).</li>
-            <li><b>Usuario SOL:</b> si SUNAT responde «el usuario debe ser secundario» (0112), crea un usuario secundario con perfil de emisión electrónica y úsalo aquí. Dale también el permiso de <b>consulta de comprobantes / CDR</b>: con él la app recupera el CDR de una factura que SUNAT ya tiene.</li>
-            <li>Escribe tus datos y toca <b>PROBAR CONEXIÓN</b> (se guardan al probar, sin cambiar el modo; ya en modo Real, solo se guardan si sale todo ✅). Si sale todo ✅, cambia el modo a <b>Real</b> y guarda.</li>
-          </ol>
-          <span class="muted" style="font-size:12px">No hay ambiente de pruebas de SUNAT para guías: la primera guía en modo Real ya es real. Hasta el 28-02-2027 SUNAT no sanciona errores en guías de transportista.</span>
-        </Panel>
-        <Panel titulo="LECTURA DE BOLETAS POR TELEGRAM">
-          <div class="filas" style="gap:4px">
-            <span>
-              <span class={`chip ${e.ia.lector === "deepseek" ? "ok" : "neutro"}`}>{e.ia.lector === "deepseek" ? "IA DEEPSEEK · LEE FOTOS" : "REGLAS · SOLO TEXTO"}</span>{" "}
-              <span class={`chip ${e.ia.voz ? "ok" : "neutro"}`}>{e.ia.voz ? "NOTAS DE VOZ ACTIVAS" : "SIN NOTAS DE VOZ"}</span>
-            </span>
-            {e.ia.error ? <div class="aviso error">{e.ia.error}</div> : null}
-            <span class="muted" style="font-size:12px">Este mes: {ia.lecturas} lecturas · US$ {ia.usd.toFixed(3)}. Lo que quedó a medias está en <a href="/revisar">Por revisar</a>.</span>
-          </div>
-          <span class="muted" style="font-size:12px">El chofer manda la foto de la boleta, un texto («grifo 350») o una nota de voz, y el bot le pide confirmar antes de guardar el gasto.
-            Sin clave de IA se entienden los textos y las fotos se completan con botones. Con DeepSeek también se leen las fotos (cuesta menos de un centavo de dólar por boleta).</span>
-          <div class="linea">
-            <label class="campo" style="flex:1"><span>Lector</span>
-              <select name="IA_PROVEEDOR">
-                <option value="reglas" selected={e.ia.lector === "reglas"}>Reglas (sin internet, gratis)</option>
-                <option value="deepseek" selected={e.ia.lector === "deepseek"}>DeepSeek (lee fotos)</option>
-              </select>
-            </label>
-            <label class="campo" style="flex:2"><span>Clave de DeepSeek ({oculto(a.DEEPSEEK_API_KEY)}) · platform.deepseek.com</span>
-              <input name="DEEPSEEK_API_KEY" type="password" autocomplete="off" placeholder={a.DEEPSEEK_API_KEY ? "déjalo vacío para no cambiarla" : "sk-…"} />
-            </label>
-          </div>
-          {a.DEEPSEEK_API_KEY ? (
-            <label class="campo" style="flex-direction:row;gap:6px;align-items:center"><input type="checkbox" name="quitarClaveIa" value="1" style="width:auto;min-height:0" /><span style="text-transform:none">Quitar la clave de DeepSeek</span></label>
-          ) : null}
-          {e.plataforma === "pc" ? (
-            <div class="linea">
-              <label class="campo" style="flex:1"><span>whisper.cpp (ruta del programa, opcional)</span><input name="WHISPER_BIN" value={a.WHISPER_BIN ?? ""} placeholder="C:\whisper\main.exe" autocomplete="off" /></label>
-              <label class="campo" style="flex:1"><span>Modelo de whisper (.bin)</span><input name="WHISPER_MODELO" value={a.WHISPER_MODELO ?? ""} placeholder="ggml-small.bin" autocomplete="off" /></label>
-            </div>
-          ) : null}
-        </Panel>
         <button class="btn primario" type="submit" style="margin-top:10px">GUARDAR Y APLICAR</button>
       </form>
     </>

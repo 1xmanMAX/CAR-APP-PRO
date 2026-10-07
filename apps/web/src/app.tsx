@@ -35,6 +35,7 @@ export type { OpcionesWeb } from "./base";
 
 /** Qué sección protege cada ruta, para aplicar los permisos por rol. */
 function seccionDeRuta(ruta: string): Seccion | null {
+  if (ruta === "/ajustes" || ruta === "/ajustes/") return null; // el hub lo ven todos; filtra sus tarjetas
   const primero = ruta.split("/")[1] ?? "";
   const mapa: Record<string, Seccion> = {
     "": "dashboard", camiones: "trailer", trailer: "trailer", parte: "trailer", flota: "flota", inventario: "inventario", reparaciones: "reparaciones",

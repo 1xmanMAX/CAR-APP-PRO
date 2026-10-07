@@ -1,3 +1,10 @@
+// Enlaces viejos a una parte de Ajustes (/ajustes#empresa…): ahora cada parte tiene su página.
+(() => {
+  if (location.pathname !== "/ajustes" || !location.hash) return;
+  const parte = decodeURIComponent(location.hash.slice(1));
+  if (["empresa", "usuarios", "costos-fijos", "categorias", "partes", "dispositivo"].includes(parte)) location.replace(`/ajustes/${parte}`);
+})();
+
 // Comportamiento mínimo común: reloj de Lima, feeds que se refrescan solos y confirmaciones.
 (() => {
   const reloj = document.querySelector("[data-reloj]");

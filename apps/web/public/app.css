@@ -55,7 +55,7 @@ h1, h2, h3 { margin: 0; }
 .header .dato { display: flex; flex-direction: column; gap: 2px; }
 .header .dato b { font-family: var(--f-title); font-size: 16px; }
 .header .hora { font-family: var(--f-title); font-weight: 700; font-size: 22px; }
-.bot-estado { font-size: 11px; font-weight: 600; padding: 4px 8px; border: 1px solid var(--ok); color: var(--ok); border-radius: 4px; white-space: nowrap; text-decoration: none; }
+.bot-estado { font-size: 12px; font-weight: 600; padding: 4px 8px; border: 1px solid var(--ok); color: var(--ok); border-radius: 4px; white-space: nowrap; text-decoration: none; }
 .bot-estado.off { border-color: var(--accent); color: var(--accent); }
 .usuario-menu { display: flex; gap: 8px; align-items: center; font-size: 11px; }
 
@@ -177,6 +177,8 @@ details.plegable[open] > summary .btn { background: var(--panel-alt); }
 .feed .ev.error .cmd { color: var(--amber-dark); }
 .vivo { color: var(--accent-on-dark-2); font-size: 12px; font-weight: 600; letter-spacing: .08em; }
 .vivo.off { color: var(--dark-muted); }
+/* Fuera de un panel oscuro (Sincronizar) el rosa claro no se lee sobre el papel. */
+.panel:not(.oscuro) .vivo { color: var(--muted); }
 
 /* Gráficos SVG */
 svg.graf { width: 100%; height: auto; display: block; }
@@ -535,6 +537,19 @@ a.fila-toca:hover { background: var(--accent-softer); }
 @media (min-width: 900px) {
   .numeros-cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }
 }
+/* ── Ajustes ── */
+.hub { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
+.tarjeta-hub { position: relative; display: flex; flex-direction: column; gap: 4px; min-height: 72px; padding: 14px 36px 14px 16px; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; color: var(--text); text-decoration: none; }
+.tarjeta-hub b { font-family: var(--f-title); font-size: 16px; }
+.tarjeta-hub .flecha { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 22px; }
+.tarjeta-hub:hover { border-color: var(--accent); color: var(--text); }
+@media (min-width: 900px) {
+  .hub { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+  .tarjeta-hub { min-height: 110px; }
+}
+.sin-gap .tarjeta-hub > * + * { margin-top: 4px; }
+/* Formularios cortos (Empresa, Categorías): en la PC no se estiran a todo el ancho. */
+.ajustes-angosto { max-width: 760px; }
 .sin-gap .pagina > * + *, .sin-gap .panel > * + *, .sin-gap .filas > * + * { margin-top: 10px; }
 .sin-gap .header > * + *, .sin-gap .header .datos > * + *, .sin-gap .acciones > * + *, .sin-gap .nav a + a,
 .sin-gap .form-grid > *, .sin-gap form.linea > * + *, .sin-gap .usuario-menu > * + * { margin-left: 12px; }

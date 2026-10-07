@@ -6,7 +6,7 @@ import {
   renombrarDispositivo, salirDelGrupo, unirseAGrupo,
 } from "@sunatapp/core";
 import { accion, formulario, pagina, type App, type C, type Deps } from "../base";
-import { Datos, Panel, Vacio } from "../ui";
+import { Cabecera, Datos, Panel, Vacio } from "../ui";
 
 function hora(v: string | Date | null): string {
   if (!v) return "—";
@@ -25,6 +25,7 @@ async function vista(c: C, d: Deps) {
 
   return pagina(c, d, { titulo: "Sincronizar", seccion: "sincronizar", scripts: ["/static/sincronizar.js"] }, (
     <>
+      <Cabecera titulo="Sincronizar" volver="/ajustes" />
       <Datos id="datos-sinc" valor={{ enGrupo: !!i.grupo }} />
       <section class="panel oscuro" style="gap:6px">
         <b class="mono-t" style="font-size:16px;color:var(--accent-on-dark)">SINCRONIZAR SIN SERVIDOR · POR TU WI-FI</b>

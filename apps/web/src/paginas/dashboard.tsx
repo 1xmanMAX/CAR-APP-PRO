@@ -238,7 +238,7 @@ async function vista(c: C, d: Deps) {
             <span class="sub">{tg.sub}</span>
           </section>
           <div class="tres-cifras">
-            <Cifra etiqueta="Entró" valor={soles(res.entro)} sub={`${res.viajes} viajes`} tono="ok" />
+            <Cifra etiqueta="Entró" valor={soles(res.entro)} sub={`${res.viajes} ${res.viajes === 1 ? "viaje" : "viajes"} (con los en ruta)`} tono="ok" />
             <Cifra etiqueta="Salió" valor={soles(res.salio)} />
             <Cifra etiqueta="Te deben" valor={soles(res.teDeben)} sub={`${res.facturasPorCobrar} facturas`} tono={res.vencido > 0 ? "cambiar" : undefined} />
           </div>

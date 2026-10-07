@@ -50,10 +50,10 @@ async function vista(c: C, d: Deps) {
             // Mes: la lista de Viajes de ese mes (mismo «Dejó»). Año: el resto del ranking aquí mismo.
             periodo === "anio" ? (
               <details class="plegable">
-                <summary class="ver-mas">Ver los {ranking.length} viajes</summary>
+                <summary class="ver-mas">Ver los {ranking.length} viajes con flete</summary>
                 <div class="lista-filas">{ranking.slice(6).map((v) => <FilaRanking v={v} />)}</div>
               </details>
-            ) : <a class="ver-mas" href={`/viajes?mes=${rango.desde.slice(0, 7)}`}>Ver los {ranking.length} viajes</a>
+            ) : <a class="ver-mas" href={`/viajes?mes=${rango.desde.slice(0, 7)}`}>Ver los {ranking.length} viajes con flete</a>
           ) : null}
         </section>
         <section class="col">

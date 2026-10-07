@@ -81,7 +81,9 @@ async function vista(c: C, d: Deps) {
   const atascados = c.get("usuario").rol === "dueno" ? await listarDocumentosAtascados(ctx) : null;
   const hayAtascados = !!atascados && atascados.facturas.length + atascados.guias.length + atascados.porReemitir.length > 0;
   const retornoVacio = await avisosRetornoVacio(ctx, guias.filter((g) => !g.facturada));
+  // La lista del mes va sin los en ruta (están arriba); el título los suma aparte, así cuadra con Inicio.
   const delMes = viajes.filter((v) => v.estado !== "en_curso");
+  const enRutaDelMes = viajes.length - delMes.length;
   return pagina(c, d, { titulo: "Viajes", seccion: "viajes" }, (
     <>
       <Cabecera titulo="Viajes" der={edita ? <a class="btn primario" href="#nuevo-viaje">+ Nuevo viaje</a> : null} />
@@ -94,7 +96,7 @@ async function vista(c: C, d: Deps) {
       ) : null}
       <section class="col">
         <div class="fila-sep">
-          <h2 class="titulo-seccion">{mesLargo(mes)} {mes.slice(0, 4)} · {delMes.length} {delMes.length === 1 ? "viaje" : "viajes"}</h2>
+          <h2 class="titulo-seccion">{mesLargo(mes)} {mes.slice(0, 4)} · {delMes.length} {delMes.length === 1 ? "viaje" : "viajes"}{enRutaDelMes ? ` + ${enRutaDelMes} en ruta` : ""}</h2>
           <form method="get" action="/viajes" class="linea filtro">
             <SelectMes nombre="mes" valor={mes} hasta={h.slice(0, 7)} etiqueta="Mes" />
             <select name="unidad" aria-label="Camión"><option value="">Todos</option>{unidades.map((u) => <option value={u.id} selected={u.id === unidadId}>{u.codigo}</option>)}</select>

@@ -1,11 +1,12 @@
 /** @jsxRuntime automatic @jsxImportSource hono/jsx */
 import {
   ajustarVidaParte, ErrorNegocio, GRUPOS_PIEZA, hoy, instalarParte, listarReparaciones, listarRepuestos, listarTiposParte,
-  listarUnidades, listarViajesFlota, parsearMonto, partesDePieza, repuestosDePieza, partesDeUnidad, pieza, piezasDeSemirremolque, puedeEditar, TIPOS_SEMIRREMOLQUE, registrarCambio, TIPOS_REPARACION, viajesDesde, ZONAS,
+  listarUnidades, listarViajesFlota, partesDePieza, repuestosDePieza, partesDeUnidad, pieza, piezasDeSemirremolque, puedeEditar, TIPOS_SEMIRREMOLQUE, TIPOS_REPARACION, viajesDesde, ZONAS,
   type GrupoPieza, type ParteConDesgaste, type TipoReparacion,
 } from "@sunatapp/core";
 import { raw } from "hono/html";
 import { accion, formulario, pagina, type App, type C, type Deps } from "../base";
+import { guardarCambio } from "../acciones";
 import { Barra, ChipEstado, Datos, ETIQUETA_ESTADO, fechaMedia, miles, Panel, soles2, Vacio } from "../ui";
 
 const entero = (v: string | undefined): number | null => {
@@ -311,21 +312,7 @@ export function rutasTrailer(app: App, d: Deps): void {
     return accion(c, p ? `/trailer/${id}?pieza=${p.id}` : `/trailer/${id}`, async () => {
       if (!puedeEditar(c.get("usuario").rol, "reparaciones")) throw new ErrorNegocio("Tu rol no puede registrar reparaciones");
       if (!p) throw new ErrorNegocio("Elige una pieza del modelo");
-      if (!f.trabajo?.trim()) throw new ErrorNegocio("Escribe qué pasó o qué se hizo");
-      const tipo = (f.tipo ?? "correctivo") as TipoReparacion;
-      if (!(tipo in TIPOS_REPARACION)) throw new ErrorNegocio("Tipo no válido");
-      const manoObra = f.manoObra ? parsearMonto(f.manoObra) : 0;
-      if (manoObra === null) throw new ErrorNegocio("Mano de obra no válida");
-      const odometro = entero(f.odometro);
-      const cantidad = entero(f.cantidad) ?? 1;
-      if (Number.isNaN(odometro) || Number.isNaN(cantidad)) throw new ErrorNegocio("Números no válidos");
-      const r = await registrarCambio(d.ctx, {
-        vehiculoId: id, componente: p.id, parteInstaladaId: f.parteId ? Number(f.parteId) : null, tipo, trabajo: f.trabajo,
-        odometro: odometro ?? undefined, fecha: f.fecha || undefined, manoObra, taller: f.taller || null,
-        repuestos: f.repuestoId ? [{ repuestoId: Number(f.repuestoId), cantidad }] : [], origen: "web", usuarioId: c.get("usuario").id,
-      });
-      await d.avisar(r.resumen).catch(() => {});
-      return `Guardado en ${p.nombre}${r.costoTotal ? ` · ${soles2(r.costoTotal)}` : ""}`;
+      return (await guardarCambio(d, c.get("usuario").id, { ...f, vehiculoId: String(id) }, f.tipo || "correctivo")).ok;
     });
   });
   app.post("/parte/:id/vida", async (c) => {

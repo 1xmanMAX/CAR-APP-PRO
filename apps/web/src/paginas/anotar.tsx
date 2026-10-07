@@ -1,14 +1,18 @@
 /** @jsxRuntime automatic @jsxImportSource hono/jsx */
 import type { Child, FC, PropsWithChildren } from "hono/jsx";
 import {
-  capturarContexto, categoriasMasUsadas, ErrorNegocio, fechaHoraLima, hoy, listarCategorias, listarCobrosPendientes,
-  liquidacionViaje, listarUnidades, listarViajesFlota, MEDIOS_ENTREGA, NOMBRE_MEDIO_PAGO, nombreCategoria, puedeEditar, ultimaUnidadDeUsuario, viajesEnRuta,
-  type FilaCobro, type UsuarioWeb, type ViajeEnRuta,
+  capturarContexto, categoriasMasUsadas, ErrorNegocio, fechaHoraLima, GRUPOS_PIEZA, hoy, listarCategorias, listarCobrosPendientes, listarPrestamos,
+  listarRepuestos, liquidacionViaje, listarUnidades, listarViajesFlota, MEDIOS_ENTREGA, NOMBRE_MEDIO_PAGO, nombreCategoria, partesDeUnidad,
+  piezasDeSemirremolque, puedeEditar, TIPOS_REPARACION, ultimaUnidadDeUsuario, viajesEnRuta,
+  type FilaCobro, type GrupoPieza, type TipoReparacion, type UsuarioWeb, type ViajeEnRuta,
 } from "@sunatapp/core";
 import { accion, formularioMultiparte, pagina, volverA, type App, type C, type Deps } from "../base";
-import { guardarCobro, guardarEntrega, guardarGasto, guardarIngreso, type Campos } from "../acciones";
-import { TIPOS_ANOTAR, tiposAnotar, tiposAnotarListos, type TipoAnotar } from "../lugares";
-import { Cabecera, diasEntre, fechaCorta, Icono, soles2, Vacio, type NombreIcono } from "../ui";
+import {
+  guardarCambio, guardarCobro, guardarCompra, guardarEntrega, guardarGasto, guardarGastoEmpresa, guardarIngreso, guardarPrestamo, guardarReinversion,
+  pagarCuotaDe, type Campos,
+} from "../acciones";
+import { TIPOS_ANOTAR, tiposAnotar, type TipoAnotar } from "../lugares";
+import { Cabecera, diasEntre, fechaCorta, Icono, miles, soles2, Vacio, type NombreIcono } from "../ui";
 
 /** `monto` y `categoria` solo vuelven en la URL cuando no se pudo guardar (así no se pierde lo escrito). */
 const CLAVES_Q = ["tipo", "modo", "volver", "viajeId", "vehiculoId", "facturaId", "prestamoId", "pieza", "parteId", "repuestoId", "monto", "categoria"] as const;
@@ -57,6 +61,13 @@ const CampoMonto: FC<{ valor?: string; etiqueta?: string }> = (p) => (
   <label class="campo campo-monto">
     <span>{p.etiqueta ?? "¿Cuánto?"}</span>
     <span class="monto-caja"><span aria-hidden="true">S/</span><input name="monto" inputmode="decimal" required autocomplete="off" placeholder="0.00" value={p.valor ?? ""} /></span>
+  </label>
+);
+
+/** Mismo aspecto que CampoMonto con otro nombre de campo (Reparé manda `manoObra`, la compra `costo`). */
+const CampoPlata: FC<{ nombre: string; etiqueta: string; requerido?: boolean }> = (p) => (
+  <label class="campo campo-monto"><span>{p.etiqueta}</span>
+    <span class="monto-caja"><span aria-hidden="true">S/</span><input name={p.nombre} inputmode="decimal" required={p.requerido} autocomplete="off" placeholder="0.00" /></span>
   </label>
 );
 
@@ -270,7 +281,166 @@ async function parteCobro(c: C, d: Deps, q: Q): Promise<PartesForm> {
   };
 }
 
-const PARTES: Partial<Record<TipoAnotar, (c: C, d: Deps, q: Q) => Promise<PartesForm>>> = { gaste: parteGaste, chofer: parteChofer, cobro: parteCobro };
+async function parteRepare(c: C, d: Deps, q: Q): Promise<PartesForm> {
+  const ctx = d.ctx;
+  const rol = c.get("usuario").rol;
+  const modos = puedeEditar(rol, "inventario") && puedeEditar(rol, "reparaciones")
+    ? [{ modo: "", etiqueta: "Cambio o arreglo" }, { modo: "compra", etiqueta: "Compra para stock" }] : undefined;
+  const [unidades, repuestos] = await Promise.all([listarUnidades(ctx), listarRepuestos(ctx)]);
+  if (q.modo === "compra") {
+    const elegido = num(q.repuestoId);
+    return {
+      modos,
+      campos: (
+        <>
+          <label class="campo"><span>¿Qué repuesto?</span>
+            <select name="repuestoId" required>{repuestos.map((r) => <option value={r.id} selected={r.id === elegido}>{r.codigo} · {r.nombre} (hay {r.stock})</option>)}</select>
+          </label>
+          <label class="campo"><span>¿Cuántos?</span><input name="cantidad" inputmode="numeric" required value="1" /></label>
+          <CampoPlata nombre="costo" etiqueta="¿Cuánto costó cada uno?" requerido />
+          <label class="campo"><span>¿Dónde lo compraste? (opcional)</span><input name="proveedor" /></label>
+        </>
+      ),
+      solo: { texto: `Entra al stock hoy ${ahora(d)} · el repuesto nuevo se crea en Camiones › Repuestos`, cambiar: <CampoFecha d={d} /> },
+    };
+  }
+  const unidad = unidades.find((u) => u.id === num(q.vehiculoId)) ?? unidades[0];
+  if (!unidad) return { modos, campos: null, soloMensaje: <div class="lista-filas"><Vacio>Primero agrega un camión.</Vacio></div> };
+  const partes = await partesDeUnidad(ctx, unidad.id);
+  const piezas = piezasDeSemirremolque(unidad.semirremolque);
+  const parteSel = num(q.parteId);
+  // Sin campo «monto»: el costo es la mano de obra más los repuestos que salen del stock.
+  return {
+    modos,
+    campos: (
+      <>
+        <fieldset class="grupo"><legend class="lbl">¿Qué camión?</legend>
+          <div class="segmentos">
+            {unidades.map((u) => (
+              <a href={urlAnotar({ ...q, vehiculoId: u.id, parteId: "", pieza: "" })} data-panel-link="" class={u.id === unidad.id ? "activo" : undefined} aria-current={u.id === unidad.id ? "true" : undefined}>{u.codigo}</a>
+            ))}
+          </div>
+        </fieldset>
+        <input type="hidden" name="vehiculoId" value={unidad.id} />
+        <label class="campo"><span>¿Qué pieza? (o tócala en el 3D de Camiones)</span>
+          <select name="componente">
+            <option value="">— general, sin pieza —</option>
+            {(Object.keys(GRUPOS_PIEZA) as GrupoPieza[]).map((g) => (
+              <optgroup label={GRUPOS_PIEZA[g]}>{piezas.filter((p) => p.grupo === g).map((p) => <option value={p.id} selected={p.id === q.pieza}>{p.nombre}</option>)}</optgroup>
+            ))}
+          </select>
+        </label>
+        <label class="campo"><span>¿Qué se hizo?</span><input name="trabajo" maxlength={200} placeholder="Cambio de llanta, parchado, se ajustó…" /></label>
+        <CampoPlata nombre="manoObra" etiqueta="Mano de obra (si hubo)" />
+      </>
+    ),
+    solo: {
+      texto: `${unidad.codigo} · hoy ${ahora(d)} · ${miles(unidad.odometroKm)} km`,
+      cambiar: (
+        <>
+          <label class="campo"><span>¿Reinicia el contador de una parte?</span>
+            <select name="parteId"><option value="">— no —</option>{partes.map((p) => <option value={p.id} selected={p.id === parteSel}>{p.nombre} · {p.pct}% (vuelve a 0)</option>)}</select>
+          </label>
+          <label class="campo"><span>Repuesto del stock</span>
+            <select name="repuestoId"><option value="">— ninguno —</option>{repuestos.filter((r) => r.stock > 0).map((r) => <option value={r.id}>{r.codigo} · {r.nombre} (hay {r.stock})</option>)}</select>
+          </label>
+          <label class="campo"><span>Cantidad</span><input name="cantidad" inputmode="numeric" value="1" /></label>
+          <label class="campo"><span>Tipo</span>
+            <select name="tipoReparacion">{(Object.keys(TIPOS_REPARACION) as TipoReparacion[]).map((t) => <option value={t} selected={t === (q.pieza ? "correctivo" : "preventivo")}>{TIPOS_REPARACION[t]}</option>)}</select>
+          </label>
+          <label class="campo"><span>Taller o mecánico</span><input name="taller" /></label>
+          <CampoFecha d={d} />
+          <label class="campo"><span>Odómetro (km)</span><input name="odometro" inputmode="numeric" placeholder={String(unidad.odometroKm)} /></label>
+        </>
+      ),
+    },
+  };
+}
+
+async function parteEmpresa(_c: C, d: Deps, _q: Q): Promise<PartesForm> {
+  const [fijas, unidades] = await Promise.all([listarCategorias(d.ctx, { tipo: "fijo", soloActivas: true }), listarUnidades(d.ctx)]);
+  return {
+    campos: (
+      <>
+        <CampoMonto />
+        <label class="campo"><span>¿En qué?</span><select name="categoria" required>{fijas.map((k) => <option value={k.clave}>{k.nombre}</option>)}</select></label>
+        <label class="opcion-fila"><input type="checkbox" name="mensual" value="1" /><span>Se repite cada mes (sueldo, alquiler, GPS…): anótalo una vez y se carga solo</span></label>
+        <FotoOpcional />
+      </>
+    ),
+    solo: {
+      texto: `Hoy ${ahora(d)} · de la empresa, sin camión ni viaje`,
+      cambiar: (
+        <>
+          <SelectUnidad unidades={unidades} elegido={null} vacio="— de la empresa —" />
+          <CampoFecha d={d} />
+          <label class="campo"><span>Nombre (si se repite cada mes)</span><input name="concepto" placeholder="Sueldo de Mario" /></label>
+          <label class="campo"><span>¿Cómo se pagó?</span><select name="medioPago"><option value="">Automático</option>{Object.entries(NOMBRE_MEDIO_PAGO).map(([k, n]) => <option value={k}>{n}</option>)}</select></label>
+          <label class="campo"><span>Detalle</span><input name="nota" maxlength={200} /></label>
+        </>
+      ),
+    },
+  };
+}
+
+async function parteAnotarPrestamo(_c: C, d: Deps, q: Q): Promise<PartesForm> {
+  const modos = [{ modo: "", etiqueta: "Pagar una cuota" }, { modo: "nuevo", etiqueta: "Préstamo nuevo" }, { modo: "reinversion", etiqueta: "Reinversión" }];
+  const unidades = await listarUnidades(d.ctx);
+  if (q.modo === "nuevo") {
+    return {
+      modos,
+      campos: (
+        <>
+          <label class="campo"><span>¿Quién te prestó?</span><input name="entidad" required placeholder="Banco, caja, financiera" /></label>
+          <CampoMonto etiqueta="¿Cuánto te prestaron?" />
+          <label class="campo"><span>Tasa anual (TEA %)</span><input name="tasa" inputmode="decimal" required /></label>
+          <label class="campo"><span>¿En cuántas cuotas?</span><input name="cuotas" inputmode="numeric" required /></label>
+        </>
+      ),
+      solo: { texto: `Desembolso hoy · de la empresa`, cambiar: <><label class="campo"><span>Desembolso</span><input type="date" name="fecha" value={hoy(d.ctx)} /></label><SelectUnidad unidades={unidades} elegido={null} vacio="— de la empresa —" /></> },
+    };
+  }
+  if (q.modo === "reinversion") {
+    return {
+      modos,
+      campos: (
+        <>
+          <label class="campo"><span>¿En qué invertiste?</span><input name="concepto" required placeholder="Carreta nueva, GPS, motor…" /></label>
+          <CampoMonto />
+        </>
+      ),
+      solo: { texto: `Hoy ${ahora(d)} · de la empresa`, cambiar: <><SelectUnidad unidades={unidades} elegido={null} vacio="— de la empresa —" /><CampoFecha d={d} /></> },
+    };
+  }
+  // La que vence (o venció) primero, arriba y elegida.
+  const conCuota = (await listarPrestamos(d.ctx)).filter((p) => p.proxima).sort((a, b) => a.proxima!.vencimiento.localeCompare(b.proxima!.vencimiento));
+  if (!conCuota.length) return { modos, campos: null, soloMensaje: <div class="lista-filas"><Vacio>No tienes cuotas pendientes. 👌</Vacio></div> };
+  const sel = conCuota.find((p) => p.id === num(q.prestamoId)) ?? conCuota[0]!;
+  return {
+    modos,
+    campos: (
+      <>
+        <fieldset class="grupo"><legend class="lbl">¿Qué cuota pagaste?</legend>
+          <div class="lista-filas">
+            {conCuota.map((p) => (
+              <a class={`fila-aviso${p.id === sel.id ? " sel" : ""}`} href={urlAnotar({ ...q, prestamoId: p.id })} data-panel-link="" aria-current={p.id === sel.id ? "true" : undefined}>
+                <span class="txt"><b>{p.entidad}</b> · cuota {p.pagadas + 1} de {p.total}<br /><span class="muted">vence {fechaCorta(p.proxima!.vencimiento)}</span></span>
+                <b>{soles2(p.proxima!.monto)}</b>
+              </a>
+            ))}
+          </div>
+        </fieldset>
+        <input type="hidden" name="prestamoId" value={sel.id} />
+      </>
+    ),
+    solo: { texto: `Se paga hoy la cuota de ${soles2(sel.proxima!.monto)} de ${sel.entidad}` },
+    boton: "PAGAR CUOTA",
+  };
+}
+
+const PARTES: Record<TipoAnotar, (c: C, d: Deps, q: Q) => Promise<PartesForm>> = {
+  gaste: parteGaste, chofer: parteChofer, cobro: parteCobro, repare: parteRepare, empresa: parteEmpresa, prestamo: parteAnotarPrestamo,
+};
 
 // ── Formulario ───────────────────────────────────────────────────────────────
 
@@ -307,10 +477,10 @@ const FormAnotar: FC<{ q: Q; permitidos: TipoAnotar[]; p: PartesForm }> = ({ q, 
 );
 
 async function vista(c: C, d: Deps) {
-  const permitidos = tiposAnotarListos(c.get("usuario").rol);
+  const permitidos = tiposAnotar(c.get("usuario").rol);
   if (!permitidos.length) return c.redirect("/?error=" + encodeURIComponent("Tu rol no anota movimientos"));
   const q = leerQ(c, permitidos);
-  const p = await PARTES[q.tipo as TipoAnotar]!(c, d, q);
+  const p = await PARTES[q.tipo as TipoAnotar](c, d, q);
   const cuerpo = <FormAnotar q={q} permitidos={permitidos} p={p} />;
   if (q.parcial) return c.html(cuerpo.toString());
   return pagina(c, d, { titulo: "Anotar", seccion: "dashboard", lugar: "anotar", sinNavInferior: true }, cuerpo);
@@ -338,8 +508,22 @@ async function guardarAnotacion(d: Deps, u: UsuarioWeb, tipo: TipoAnotar, f: Cam
       if (facturaId === null) throw new ErrorNegocio("Elige la factura que te pagaron");
       return guardarCobro(d, u.id, facturaId, f);
     }
-    default:
-      throw new ErrorNegocio("Ese tipo todavía no se puede anotar aquí");
+    case "repare": {
+      if (f.modo === "compra") {
+        if (!puedeEditar(u.rol, "inventario")) throw new ErrorNegocio("Tu rol no puede registrar compras");
+        return guardarCompra(d, u.id, f);
+      }
+      return (await guardarCambio(d, u.id, f, f.tipoReparacion)).ok;
+    }
+    case "empresa":
+      return guardarGastoEmpresa(d, u.id, f, archivos.foto);
+    case "prestamo": {
+      if (f.modo === "nuevo") return guardarPrestamo(d, u.id, f);
+      if (f.modo === "reinversion") return guardarReinversion(d, u.id, f);
+      const prestamoId = num(f.prestamoId);
+      if (prestamoId === null) throw new ErrorNegocio("Elige la cuota que pagaste");
+      return pagarCuotaDe(d, u.id, prestamoId);
+    }
   }
 }
 

@@ -56,8 +56,3 @@ export function tiposAnotar(rol: RolUsuario): TipoAnotar[] {
   return (Object.keys(TIPOS_ANOTAR) as TipoAnotar[]).filter((t) => puedeEditar(rol, TIPOS_ANOTAR[t].seccion));
 }
 
-/** Tipos que ya tienen formulario en Anotar. La tarea 5 completa los demás y borra esta lista. */
-export const ANOTAR_LISTOS: TipoAnotar[] = ["gaste", "chofer", "cobro"];
-
-/** Lo que este rol puede anotar hoy (sin botón Anotar si no hay nada). */
-export const tiposAnotarListos = (rol: RolUsuario): TipoAnotar[] => tiposAnotar(rol).filter((t) => ANOTAR_LISTOS.includes(t));

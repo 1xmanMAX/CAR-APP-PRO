@@ -1,12 +1,11 @@
 /** @jsxRuntime automatic @jsxImportSource hono/jsx */
 import {
-  borrarGasto, capturarContexto, crearPrestamo, describirContexto, deudaPrestamos, ErrorNegocio, flujoCaja, hoy, listarMovimientos, listarPrestamos,
-  listarCategorias, listarReinversiones, listarUnidades, NOMBRE_MEDIO_PAGO, obtenerGasto, pagarCuota, puedeEditar, rangoMes,
-  registrarReinversion, reinvertidoEnAnio, resumenFinanciero, ultimaUnidadDeUsuario,
+  borrarGasto, capturarContexto, describirContexto, deudaPrestamos, flujoCaja, hoy, listarMovimientos, listarPrestamos,
+  listarCategorias, listarReinversiones, listarUnidades, NOMBRE_MEDIO_PAGO, obtenerGasto, puedeEditar, rangoMes,
+  reinvertidoEnAnio, resumenFinanciero, ultimaUnidadDeUsuario,
 } from "@sunatapp/core";
 import { accion, formulario, formularioMultiparte, pagina, servirDeAlmacen, type App, type C, type Deps } from "../base";
-import { enteroONull } from "./flota";
-import { guardarGasto, guardarIngreso, montoObligatorio } from "../acciones";
+import { guardarGasto, guardarIngreso, guardarPrestamo, guardarReinversion, montoObligatorio, pagarCuotaDe } from "../acciones";
 import { fechaCorta, fechaMedia, Kpi, Origen, Panel, soles, soles2, Vacio } from "../ui";
 
 const CHIP_MOV: Record<string, string> = { INGRESO: "ok", GASTO: "cambiar", "REINVERSIÓN": "proximo", CUOTA: "oscuro", COMPRA: "neutro" };
@@ -205,27 +204,13 @@ export function rutasFinanzas(app: App, d: Deps): void {
   });
   app.post("/finanzas/reinversion", async (c) => {
     const f = await formulario(c);
-    return accion(c, "/finanzas", async () => {
-      await registrarReinversion(d.ctx, { concepto: f.concepto ?? "", monto: montoObligatorio(f.monto), vehiculoId: f.vehiculoId ? Number(f.vehiculoId) : null, fecha: f.fecha || undefined, origen: "web", usuarioId: c.get("usuario").id });
-      return "Reinversión guardada";
-    });
+    return accion(c, "/finanzas", () => guardarReinversion(d, c.get("usuario").id, f));
   });
   app.post("/finanzas/prestamo", async (c) => {
     const f = await formulario(c);
-    return accion(c, "/finanzas", async () => {
-      const tasa = Number((f.tasa ?? "").replace(",", "."));
-      if (!Number.isFinite(tasa)) throw new ErrorNegocio("Tasa no válida");
-      await crearPrestamo(d.ctx, {
-        entidad: f.entidad ?? "", monto: montoObligatorio(f.monto), tasaAnual: tasa, cuotas: enteroONull(f.cuotas) ?? 0,
-        fechaInicio: f.fecha || undefined, vehiculoId: f.vehiculoId ? Number(f.vehiculoId) : null, usuarioId: c.get("usuario").id,
-      });
-      return "Préstamo creado con su cronograma de cuotas";
-    });
+    return accion(c, "/finanzas", () => guardarPrestamo(d, c.get("usuario").id, f));
   });
-  app.post("/finanzas/prestamo/:id/pagar", async (c) => accion(c, "/finanzas", async () => {
-    const r = await pagarCuota(d.ctx, Number(c.req.param("id")), undefined, c.get("usuario").id);
-    return `Cuota ${r.numero} pagada (${soles2(r.monto)})`;
-  }));
+  app.post("/finanzas/prestamo/:id/pagar", async (c) => accion(c, "/finanzas", () => pagarCuotaDe(d, c.get("usuario").id, Number(c.req.param("id")))));
   app.get("/archivo/gasto/:id", async (c) => {
     const g = await obtenerGasto(d.ctx, Number(c.req.param("id")));
     return servirDeAlmacen(c, d, g?.rutaFoto ?? null);

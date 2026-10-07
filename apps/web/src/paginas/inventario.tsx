@@ -1,9 +1,10 @@
 /** @jsxRuntime automatic @jsxImportSource hono/jsx */
 import {
-  CATEGORIAS_REPUESTO, crearRepuesto, editarRepuesto, ErrorNegocio, GRUPOS_PIEZA, listarCompras, listarRepuestos, listarTiposParte, listarUnidades,
-  nombrePieza, parsearMonto, PIEZAS, puedeEditar, registrarCompra, resumirInventario, type GrupoPieza,
+  CATEGORIAS_REPUESTO, crearRepuesto, editarRepuesto, GRUPOS_PIEZA, listarCompras, listarRepuestos, listarTiposParte, listarUnidades,
+  nombrePieza, PIEZAS, puedeEditar, resumirInventario, type GrupoPieza,
 } from "@sunatapp/core";
 import { accion, formulario, pagina, type App, type C, type Deps } from "../base";
+import { guardarCompra } from "../acciones";
 import { enteroONull } from "./flota";
 import { Barra, fechaCorta, Kpi, miles, Origen, Panel, soles, soles2, Vacio } from "../ui";
 
@@ -200,16 +201,6 @@ export function rutasInventario(app: App, d: Deps): void {
   });
   app.post("/inventario/compra", async (c) => {
     const f = await formulario(c);
-    return accion(c, "/inventario", async () => {
-      const costo = parsearMonto(f.costo ?? "");
-      if (costo === null) throw new ErrorNegocio("Costo unitario no válido");
-      const cantidad = enteroONull(f.cantidad);
-      if (cantidad === null) throw new ErrorNegocio("Indica la cantidad");
-      await registrarCompra(d.ctx, {
-        repuestoId: Number(f.repuestoId), cantidad, costoUnitario: costo, fecha: f.fecha || undefined, proveedor: f.proveedor || null,
-        origen: "web", usuarioId: c.get("usuario").id,
-      });
-      return `Compra registrada: +${cantidad} en stock`;
-    });
+    return accion(c, "/inventario", () => guardarCompra(d, c.get("usuario").id, f));
   });
 }

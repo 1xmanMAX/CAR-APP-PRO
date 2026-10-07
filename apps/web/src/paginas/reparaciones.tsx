@@ -1,10 +1,10 @@
 /** @jsxRuntime automatic @jsxImportSource hono/jsx */
 import {
-  ErrorNegocio, etiquetaCambio, GRUPOS_PIEZA, hoy, pieza, PIEZAS, listarReparaciones, listarRepuestos, listarUnidades, parsearMonto, partesConDesgaste,
-  registrarCambio, TIPOS_REPARACION, type GrupoPieza, type TipoReparacion,
+  etiquetaCambio, GRUPOS_PIEZA, hoy, pieza, PIEZAS, listarReparaciones, listarRepuestos, listarUnidades, partesConDesgaste,
+  TIPOS_REPARACION, type GrupoPieza, type TipoReparacion,
 } from "@sunatapp/core";
 import { accion, formulario, pagina, type App, type C, type Deps } from "../base";
-import { enteroONull } from "./flota";
+import { guardarCambio } from "../acciones";
 import { Barra, Datos, fechaMedia, miles, Origen, Panel, soles, soles2, Vacio } from "../ui";
 
 async function vista(c: C, d: Deps) {
@@ -151,29 +151,6 @@ export function rutasReparaciones(app: App, d: Deps): void {
   app.get("/reparaciones", (c) => vista(c, d));
   app.post("/reparaciones", async (c) => {
     const f = await formulario(c);
-    const vehiculoId = Number(f.vehiculoId);
-    return accion(c, `/reparaciones?unidad=${vehiculoId}`, async () => {
-      const ids = (f.repuestoId ?? "").split("\u0001");
-      const cants = (f.cantidad ?? "").split("\u0001");
-      const usados = new Map<number, number>();
-      ids.forEach((id, k) => {
-        if (!id) return;
-        const n = enteroONull(cants[k]) ?? 1;
-        usados.set(Number(id), (usados.get(Number(id)) ?? 0) + n);
-      });
-      const manoObra = f.manoObra ? parsearMonto(f.manoObra) : 0;
-      if (manoObra === null) throw new ErrorNegocio("Mano de obra no válida");
-      const tipo = (f.tipo ?? "preventivo") as TipoReparacion;
-      if (!(tipo in TIPOS_REPARACION)) throw new ErrorNegocio("Tipo no válido");
-      const r = await registrarCambio(d.ctx, {
-        vehiculoId, parteInstaladaId: f.parteId ? Number(f.parteId) : null, tipo, odometro: enteroONull(f.odometro) ?? undefined,
-        fecha: f.fecha || undefined, repuestos: [...usados].map(([repuestoId, cantidad]) => ({ repuestoId, cantidad })),
-        manoObra, taller: f.taller || null, trabajo: f.trabajo || null, componente: f.componente || null, origen: "web", usuarioId: c.get("usuario").id,
-      });
-      let aviso = r.resumen;
-      if (r.stockBajo.length) aviso += `\n⚠️ Stock bajo: ${r.stockBajo.map((s) => `${s.codigo} (${s.stock})`).join(", ")}`;
-      await d.avisar(aviso).catch(() => {});
-      return `Cambio guardado · ${r.trabajo} · ${soles2(r.costoTotal)}${r.desgastePct !== null ? ` · ${r.desgastePct}% ${r.etiqueta}` : ""}`;
-    });
+    return accion(c, `/reparaciones?unidad=${Number(f.vehiculoId)}`, async () => (await guardarCambio(d, c.get("usuario").id, f, f.tipo)).ok);
   });
 }

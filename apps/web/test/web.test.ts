@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
-  buscarUnidad, crearCategoria, crearEnlaceWeb, guardarUsuario, registrarGasto, registrarViajeFlota, listarEventos, listarUsuarios, listarViajesFlota, obtenerEmpresa, partesDeUnidad, instalarParte, listarTiposParte, liquidacionViaje,
+  buscarUnidad, crearCategoria, crearEnlaceWeb, guardarUsuario, registrarGasto, registrarViajeFlota, listarEventos, listarUsuarios, listarViajesFlota, obtenerEmpresa, partesDeUnidad, crearRepuesto, listarCostosFijos, listarPrestamos, listarReparaciones, listarRepuestos, instalarParte, listarTiposParte, liquidacionViaje,
   type Contexto,
 } from "@sunatapp/core";
 import { crearDb, gasto } from "../../../packages/db/src/index";
@@ -222,11 +222,11 @@ describe("web", () => {
         expect(texto).toMatch(/^Camión \S+ · viaje Juliaca → Arequipa · .+ · hoy \d\d:\d\d$/);
       });
 
-      it("el taller no ve el botón Anotar mientras no tenga su formulario", async () => {
+      it("el taller ve el botón Anotar (para Reparé / repuesto)", async () => {
         await guardarUsuario(ctx, { nombre: "Taller", email: "taller@demo.pe", rol: "taller", clave: "clave-segura" });
         const html = await (await app.request("/", { headers: { cookie: await entrar("taller@demo.pe") } })).text();
-        expect(html).not.toContain('aria-label="Anotar"');
-        expect(html).not.toContain("anotar-lateral");
+        expect(html).toContain('aria-label="Anotar"');
+        expect(html).toContain("anotar-lateral");
         const dueno = await (await app.request("/", { headers: { cookie: await entrar() } })).text();
         expect(dueno).toContain('aria-label="Anotar"');
       });
@@ -253,6 +253,60 @@ describe("web", () => {
         const html = await (await app.request("/anotar?tipo=cobro&facturaId=999", { headers: { cookie } })).text();
         expect(html).toContain("Esa factura ya está pagada");
         expect(html).not.toContain('name="facturaId"');
+      });
+
+      it("Reparé: un cambio en una pieza del 3D reinicia la parte y avisa", async () => {
+        const cookie = await entrar();
+        const t01 = (await buscarUnidad(ctx, "T-01"))!;
+        const aceite = (await listarTiposParte(ctx)).find((t) => t.codigo === "aceite")!;
+        await instalarParte(ctx, { vehiculoId: t01.id, tipoParteId: aceite.id });
+        const [p] = await partesDeUnidad(ctx, t01.id);
+        const html = await (await app.request(`/anotar?tipo=repare&vehiculoId=${t01.id}&pieza=retrovisor-izq&parteId=${p!.id}`, { headers: { cookie } })).text();
+        expect(html).toMatch(/<option value="retrovisor-izq" selected/);
+        const r = await enviar(cookie, { tipo: "repare", volver: `/`, vehiculoId: String(t01.id), componente: "retrovisor-izq", trabajo: "Se abrió el retrovisor", manoObra: "80", parteId: String(p!.id) });
+        expect(aviso(r)).toContain("ok=Guardado en Retrovisor");
+        const [rep] = await listarReparaciones(ctx, { vehiculoId: t01.id });
+        expect(rep).toMatchObject({ componente: "retrovisor-izq", trabajo: "Se abrió el retrovisor" });
+        expect(avisos).toHaveLength(1);
+        expect(aviso(await enviar(cookie, { tipo: "repare", volver: "/", vehiculoId: String(t01.id) }))).toContain("error=");
+      });
+
+      it("Reparé: compra para stock sube el stock", async () => {
+        const cookie = await entrar();
+        const id = await crearRepuesto(ctx, { nombre: "Filtro de aire", categoria: "Filtros" });
+        const r = await enviar(cookie, { tipo: "repare", modo: "compra", volver: "/", repuestoId: String(id), cantidad: "2", costo: "50" });
+        expect(aviso(r)).toContain("ok=Compra registrada: +2 en stock");
+        expect((await listarRepuestos(ctx)).find((x) => x.id === id)!.stock).toBe(2);
+      });
+
+      it("Gasto de la empresa: mensual crea el costo fijo; si no, un gasto sin viaje", async () => {
+        const cookie = await entrar();
+        let r = await enviar(cookie, { tipo: "empresa", volver: "/", monto: "2500", categoria: "sueldo_chofer", mensual: "1" });
+        expect(aviso(r)).toContain("ok=Sueldo del chofer: queda como gasto de cada mes");
+        expect(await listarCostosFijos(ctx)).toEqual([expect.objectContaining({ concepto: "Sueldo del chofer", monto: 250000, periodicidad: "mensual" })]);
+        r = await enviar(cookie, { tipo: "empresa", volver: "/", monto: "120", categoria: "telefonia" });
+        expect(aviso(r)).toContain("ok=Gasto guardado");
+        const g = (await ctx.db.select().from(gasto)).find((x) => x.categoria === "telefonia");
+        expect(g).toMatchObject({ monto: 12000, viajeId: null });
+      });
+
+      it("Préstamo: uno nuevo, pagar su cuota y una reinversión", async () => {
+        const cookie = await entrar();
+        expect(aviso(await enviar(cookie, { tipo: "prestamo", modo: "nuevo", volver: "/", entidad: "Caja Arequipa", monto: "12000", tasa: "18", cuotas: "12" }))).toContain("ok=Préstamo creado");
+        const [p] = await listarPrestamos(ctx);
+        const html = await (await app.request("/anotar?tipo=prestamo", { headers: { cookie } })).text();
+        expect(html).toContain("Caja Arequipa");
+        expect(aviso(await enviar(cookie, { tipo: "prestamo", volver: "/", prestamoId: String(p!.id) }))).toContain("ok=Cuota 1 pagada");
+        expect(aviso(await enviar(cookie, { tipo: "prestamo", modo: "reinversion", volver: "/", concepto: "GPS", monto: "900" }))).toContain("ok=Reinversión guardada");
+      });
+
+      it("el taller solo ve Reparé / repuesto", async () => {
+        await guardarUsuario(ctx, { nombre: "Taller", email: "taller@demo.pe", rol: "taller", clave: "clave-segura" });
+        const taller = await entrar("taller@demo.pe");
+        const html = await (await app.request("/anotar", { headers: { cookie: taller } })).text();
+        expect(html).toContain("Reparé / repuesto");
+        expect(html).not.toContain("Me pagaron");
+        expect((await enviar(taller, { tipo: "prestamo", modo: "reinversion", volver: "/", concepto: "X", monto: "1" })).status).toBe(403);
       });
     });
 

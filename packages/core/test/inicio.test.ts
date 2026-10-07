@@ -5,7 +5,7 @@ import {
   registrarViajeFlota, resumenInicio, viajeDeFactura, viajesEnRuta,
   type Contexto,
 } from "../src";
-import { crearContextoPrueba, entradaGuia } from "./helpers";
+import { crearContextoPrueba, entradaGuia, prepararDatosTransporte } from "./helpers";
 
 let ctx: Contexto;
 let cerrar: () => Promise<void>;
@@ -33,6 +33,7 @@ describe("consultas de Inicio", () => {
 
   it("viaje de una factura: por su guía; null si no hay", async () => {
     const v = await registrarViajeFlota(ctx, { vehiculoId: 1, origenLugar: "Yura", destinoLugar: "Puno", estado: "cerrado", fecha: "2026-09-12", origen: "web" });
+    await prepararDatosTransporte(ctx);
     const guiaId = await registrarGuiaBorrador(ctx, entradaGuia());
     await emitirGuia(ctx, guiaId);
     await ctx.db.update(guiaTransportista).set({ viajeId: v.id }).where(eq(guiaTransportista.id, guiaId));

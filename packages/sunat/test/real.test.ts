@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { SunatMixto } from "../src/mixto";
 import { ENDPOINT_CONSULTA_CDR, ENDPOINTS_FACTURA, SunatReal, type CredencialesSunat } from "../src/real";
 import { SunatSimulado } from "../src/simulado";
-import { SunatCredencialesError, SunatNoDisponibleError } from "../src/tipos";
+import { SunatCredencialesError, SunatNoDisponibleError, SunatYaRegistradoError } from "../src/tipos";
 import { leerXmlDeZip, zipArchivo } from "../src/zip";
 
 const cred: CredencialesSunat = {
@@ -166,10 +166,10 @@ describe("SunatReal — credenciales y faults", () => {
     expect(sobre).toContain("<numeroComprobante>7</numeroComprobante>");
   });
 
-  it("fault 1033 en beta (sin consulta de CDR) es rechazo con el código original", async () => {
+  it("fault 1033 en beta (sin consulta de CDR) no es rechazo: pide verificar", async () => {
     const { fn, llamadas } = fetchFalso([soapFault("1033")]);
-    expect(await new SunatReal(cred, { fetch: fn }).enviarFactura({ nombreArchivo: "20606433094-01-F001-7", xml: "<f/>" }))
-      .toMatchObject({ estado: "rechazada", codigo: "1033" });
+    await expect(new SunatReal(cred, { fetch: fn }).enviarFactura({ nombreArchivo: "20606433094-01-F001-7", xml: "<f/>" }))
+      .rejects.toMatchObject({ name: "SunatYaRegistradoError", codigo: "1033" });
     expect(llamadas.length).toBe(1);
   });
 
@@ -219,5 +219,40 @@ describe("SunatReal — correcciones de revisión", () => {
   it("consultarTicket con respuesta vacía no se da por aceptada", async () => {
     const { fn } = fetchFalso([token, () => json({})]);
     await expect(new SunatReal(cred, { fetch: fn }).consultarTicket("T")).rejects.toThrow("Respuesta de ticket inesperada");
+  });
+});
+
+describe("SunatReal — revisión final (C1, I4)", () => {
+  const faultSinCodigo = (mensaje: string, status = 500) => () =>
+    new Response(`<soap-env:Envelope xmlns:soap-env="http://schemas.xmlsoap.org/soap/envelope/"><soap-env:Body><soap-env:Fault><faultcode>soap-env:Client</faultcode><faultstring>${mensaje}</faultstring></soap-env:Fault></soap-env:Body></soap-env:Envelope>`, { status });
+
+  it("fault sin código en faultcode toma el código del faultstring (0102 → credenciales)", async () => {
+    await expect(new SunatReal(cred, { fetch: fetchFalso([faultSinCodigo("0102 Usuario o contraseña incorrectos")]).fn }).enviarFactura({ nombreArchivo: "a", xml: "<a/>" }))
+      .rejects.toBeInstanceOf(SunatCredencialesError);
+    expect(await new SunatReal(cred, { fetch: fetchFalso([faultSinCodigo("2800 Detalle")]).fn }).enviarFactura({ nombreArchivo: "a", xml: "<a/>" }))
+      .toMatchObject({ estado: "rechazada", codigo: "2800" });
+  });
+
+  it("HTTP 401/403 en SOAP (con o sin fault) es SunatCredencialesError", async () => {
+    await expect(new SunatReal(cred, { fetch: fetchFalso([() => new Response("Unauthorized", { status: 401 })]).fn }).enviarFactura({ nombreArchivo: "a", xml: "<a/>" }))
+      .rejects.toBeInstanceOf(SunatCredencialesError);
+    await expect(new SunatReal(cred, { fetch: fetchFalso([faultSinCodigo("Acceso denegado", 403)]).fn }).enviarFactura({ nombreArchivo: "a", xml: "<a/>" }))
+      .rejects.toBeInstanceOf(SunatCredencialesError);
+  });
+
+  it("probarClaveSol: 401/403 dice que la clave está mal (no «algo inesperado») y lo marca como credenciales", async () => {
+    for (const status of [401, 403]) {
+      const r = await new SunatReal(cred, { fetch: fetchFalso([() => new Response("", { status })]).fn }).probarClaveSol();
+      expect(r).toMatchObject({ ok: false, credenciales: true, mensaje: expect.stringContaining("usuario o clave SOL") });
+    }
+  });
+
+  it("1033 sin CDR recuperable no es rechazo: lanza SunatYaRegistradoError", async () => {
+    const { fn } = fetchFalso([soapFault("1033")]);
+    await expect(new SunatReal(cred, { fetch: fn }).enviarFactura({ nombreArchivo: "20606433094-01-F001-7", xml: "<f/>" }))
+      .rejects.toMatchObject({ name: "SunatYaRegistradoError", codigo: "1033" });
+    const prod = fetchFalso([soapFault("1032"), statusCdr("0011")]);
+    await expect(new SunatReal({ ...cred, ambienteFactura: "produccion" }, { fetch: prod.fn }).enviarFactura({ nombreArchivo: "20606433094-01-F001-7", xml: "<f/>" }))
+      .rejects.toBeInstanceOf(SunatYaRegistradoError);
   });
 });

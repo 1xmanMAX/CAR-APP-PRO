@@ -195,8 +195,14 @@ async function manejarBoton(c: Filter<ContextoBot, "callback_query:data">, deps:
     c.session.flujo = { tipo: "lectura", paso: "correccion", documentoId: id } satisfies EstadoFlujoLectura;
     await c.reply("¿Qué corrijo? Por ejemplo: eran 305 · era peaje · me lo dieron por yape");
   } else if (accion === "desc") {
-    await descartarLectura(deps.ctx, id, c.session.usuarioId).catch(() => {});
     delete c.session.flujo;
+    try {
+      await descartarLectura(deps.ctx, id, c.session.usuarioId);
+    } catch (e) {
+      // Ya se guardó (o descartó) desde la web o con otro botón: no se toca.
+      if (!(e instanceof ErrorNegocio)) throw e;
+      return void (await c.reply(`⚠️ ${e.message}`));
+    }
     await c.reply("❌ Descartado. No guardé nada.");
   } else if (accion === "cat") {
     const activas = await listarCategorias(deps.ctx, { soloActivas: true });
@@ -224,7 +230,14 @@ async function manejarTexto(c: Filter<ContextoBot, "message:text">, deps: Depend
     if (!Number.isInteger(km) || km <= 0) return void (await c.reply("Escribe solo el número del tablero, por ejemplo 402380, o toca «No sé»."));
     delete c.session.flujo;
     const d = await obtenerDocumento(deps.ctx, f.documentoId);
-    if (d.lectura?.tipo === "gasto") await fijarLectura(deps.ctx, f.documentoId, { ...d.lectura, kmOdometro: km });
+    if (d.lectura?.tipo === "gasto") {
+      try {
+        await fijarLectura(deps.ctx, f.documentoId, { ...d.lectura, kmOdometro: km });
+      } catch (e) {
+        if (!(e instanceof ErrorNegocio)) throw e;
+        return void (await c.reply(`⚠️ ${e.message}`));
+      }
+    }
     await continuarGuardado(c, deps, f.documentoId, false);
     return;
   }

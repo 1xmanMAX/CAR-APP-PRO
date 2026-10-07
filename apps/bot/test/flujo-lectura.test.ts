@@ -84,6 +84,20 @@ describe("boletas por Telegram", () => {
     expect(await a.ctx.db.select().from(gasto)).toEqual([]);
   });
 
+  it("❌ Descartar después de guardar no toca el gasto (ni lo vuelve a abrir)", async () => {
+    const a = await arnes();
+    await a.texto("peaje 30");
+    await a.esperarTareas();
+    const botones = a.botones();
+    await a.boton(botones.find((b) => b.text === "✅ Correcto")!.callback_data);
+    expect(a.ultimoTexto()).toMatch(/^✅ GASTO GUARDADO/);
+    await a.boton(botones.find((b) => b.text === "❌ Descartar")!.callback_data);
+    expect(a.ultimoTexto()).toBe("⚠️ Ese mensaje ya se guardó o se descartó");
+    expect((await a.ctx.db.select().from(gasto)).map((g) => g.monto)).toEqual([3000]);
+    const [d] = await a.ctx.db.select().from(documentoRecibido);
+    expect(d!.estadoLectura).toBe("confirmado");
+  });
+
   it("foto sin IA: pregunta la categoría y el monto, y guarda la foto con el gasto", async () => {
     const a = await arnes({ archivos: { boleta1: Buffer.from("jpeg-boleta") } });
     await a.foto("boleta1");

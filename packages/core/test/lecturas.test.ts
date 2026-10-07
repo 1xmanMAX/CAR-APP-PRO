@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { crearLectorReglas, IaCredencialesError, IaNoDisponibleError, type ProveedorIA } from "@sunatapp/ia";
-import { documentoRecibido, entrega, eq, gasto } from "@sunatapp/db";
+import { documentoRecibido, entrega, eq, gasto, usuario } from "@sunatapp/db";
 import {
   confirmarLectura, corregirLectura, descartarLectura, fijarLectura, leerDocumento, obtenerDocumento, procesarLecturasPendientes,
   recibirMensaje, registrarViajeFlota, listarPorRevisar, gastosSinViaje, asignarViajeGasto, contarPorRevisar, costoIaDelMes, crearRuta, liquidacionDeUnidad,
-  crearInvitacion, obtenerUnidad, usarInvitacion, type Contexto,
+  camionDeMensaje, crearInvitacion, crearUnidad, MENSAJE_YA_RESUELTO, registrarGasto, obtenerUnidad, usarInvitacion, type Contexto,
 } from "../src/index";
 import { crearContextoPrueba } from "./helpers";
 
@@ -95,6 +95,41 @@ describe("lecturas de mensajes", () => {
     await descartarLectura(ctx, id);
     await expect(confirmarLectura(ctx, id, { vehiculoId: 1 })).rejects.toThrow();
     expect(await ctx.db.select().from(gasto).where(eq(gasto.documentoId, id))).toEqual([]);
+  });
+
+  it("lo ya guardado o descartado no vuelve a «por confirmar»: guardar dos veces no duplica y descartar no lo toca", async () => {
+    const gastoDe = (monto: number) => ({ tipo: "gasto" as const, categoria: "peaje", monto, fecha: null, proveedorRuc: null, proveedorNombre: null, comprobante: null, nota: null, dudas: [], medioPago: null, kmOdometro: null });
+    const { id } = await texto("peaje 30");
+    await leerDocumento(ctx, id);
+    await fijarLectura(ctx, id, gastoDe(30));
+    await confirmarLectura(ctx, id, { vehiculoId: 1 });
+    // Segundo «guardar» desde la web (fijar + confirmar): no se reabre ni se duplica.
+    await expect(fijarLectura(ctx, id, gastoDe(31))).rejects.toThrow(MENSAJE_YA_RESUELTO);
+    expect(await confirmarLectura(ctx, id, { vehiculoId: 1 })).toEqual({ tipo: "ya_confirmado" });
+    await expect(descartarLectura(ctx, id)).rejects.toThrow(MENSAJE_YA_RESUELTO);
+    expect((await obtenerDocumento(ctx, id)).estado).toBe("confirmado");
+    expect((await ctx.db.select().from(gasto).where(eq(gasto.documentoId, id))).map((g) => g.monto)).toEqual([3000]);
+    const otro = await texto("peaje 12");
+    await leerDocumento(ctx, otro.id);
+    await descartarLectura(ctx, otro.id);
+    await expect(fijarLectura(ctx, otro.id, gastoDe(12))).rejects.toThrow(MENSAJE_YA_RESUELTO);
+    expect((await obtenerDocumento(ctx, otro.id)).estado).toBe("descartado");
+    await expect(fijarLectura(ctx, 99999, gastoDe(12))).rejects.toThrow("El mensaje no existe");
+  });
+
+  it("de qué camión es un mensaje: placa escrita, viaje en curso de quien lo mandó, último camión o no se sabe", async () => {
+    const t2 = await crearUnidad(ctx, { placa: "XYZ-987" });
+    expect(await camionDeMensaje(ctx, { usuarioId: null, texto: "peaje 12 placa xyz 987", lectura: null })).toEqual({ vehiculoId: t2.id, por: "placa" });
+    expect(await camionDeMensaje(ctx, { usuarioId: null, texto: "peaje 12", lectura: null })).toBeNull();
+    // El usuario 1 maneja (conductor 1) un viaje en curso con T-02.
+    await ctx.db.update(usuario).set({ conductorId: 1 }).where(eq(usuario.id, 1));
+    expect(await camionDeMensaje(ctx, { usuarioId: 1, texto: "peaje 12", lectura: null })).toBeNull();
+    await registrarGasto(ctx, { categoria: "peaje", monto: 1000, vehiculoId: 1, origen: "telegram", usuarioId: 1 });
+    expect(await camionDeMensaje(ctx, { usuarioId: 1, texto: "peaje 12", lectura: null })).toEqual({ vehiculoId: 1, por: "ultimo" });
+    await registrarViajeFlota(ctx, { vehiculoId: t2.id, origenLugar: "Juliaca", destinoLugar: "Puno", estado: "en_curso", origen: "web", conductorId: 1 });
+    expect(await camionDeMensaje(ctx, { usuarioId: 1, texto: "peaje 12", lectura: null })).toEqual({ vehiculoId: t2.id, por: "viaje" });
+    // La placa manda sobre el viaje: «ABC-123» es la T-01 del ejemplo.
+    expect(await camionDeMensaje(ctx, { usuarioId: 1, texto: "grifo 300 ABC123", lectura: null })).toEqual({ vehiculoId: 1, por: "placa" });
   });
 
   it("una foto que el lector no ve se completa a mano (categoría y monto)", async () => {

@@ -8,8 +8,8 @@ import {
 import { validarRuc } from "../dominio/validaciones";
 import { registrarDocumentoRecibido } from "../documentos/recibidos";
 import { ErrorNegocio } from "../errores";
-import { registrarGasto } from "../finanzas/finanzas";
-import { hoy } from "../flota/unidades";
+import { registrarGasto, ultimaUnidadDeUsuario } from "../finanzas/finanzas";
+import { hoy, listarUnidades } from "../flota/unidades";
 import { finalizarViajeFlota, registrarViajeFlota, viajeEnCursoDeUnidad } from "../flota/viajes-flota";
 import { registrarAuditoria } from "../infra/auditoria";
 import type { Contexto } from "../infra/contexto";
@@ -180,13 +180,23 @@ export async function corregirLectura(ctx: Contexto, documentoId: number, texto:
   return leerDocumento(ctx, documentoId);
 }
 
+export const MENSAJE_YA_RESUELTO = "Ese mensaje ya se guardó o se descartó";
+/** Lo ya confirmado o descartado no vuelve a «por confirmar» (si no, un segundo guardar duplicaría el gasto). */
+const RESUELTOS: EstadoLectura[] = ["confirmado", "descartado"];
+
+/** Sin fila actualizada: o el mensaje no existe, o ya se guardó o descartó. */
+async function noActualizado(ctx: Contexto, documentoId: number): Promise<never> {
+  const [existe] = await ctx.db.select({ id: documentoRecibido.id }).from(documentoRecibido).where(eq(documentoRecibido.id, documentoId));
+  throw new ErrorNegocio(existe ? MENSAJE_YA_RESUELTO : "El mensaje no existe");
+}
+
 /** Cuando la persona elige la categoría y escribe el monto (la foto no se pudo leer). */
 export async function fijarLectura(ctx: Contexto, documentoId: number, lectura: Lectura): Promise<Lectura> {
   const v = esquemaLectura.safeParse(lectura);
   if (!v.success) throw new ErrorNegocio("Datos del gasto no válidos");
   const [f] = await ctx.db.update(documentoRecibido).set({ estadoLectura: "por_confirmar", datosExtraidos: v.data, clasificacion: v.data.tipo, proximoIntentoEn: null })
-    .where(and(eq(documentoRecibido.id, documentoId))).returning({ estado: documentoRecibido.estadoLectura });
-  if (!f) throw new ErrorNegocio("El mensaje no existe");
+    .where(and(eq(documentoRecibido.id, documentoId), notInArray(documentoRecibido.estadoLectura, RESUELTOS))).returning({ estado: documentoRecibido.estadoLectura });
+  if (!f) return noActualizado(ctx, documentoId);
   return v.data;
 }
 
@@ -254,8 +264,8 @@ export async function confirmarLectura(ctx: Contexto, documentoId: number, o: { 
 
 export async function descartarLectura(ctx: Contexto, documentoId: number, usuarioId?: number): Promise<void> {
   const [f] = await ctx.db.update(documentoRecibido).set({ estadoLectura: "descartado", proximoIntentoEn: null })
-    .where(and(eq(documentoRecibido.id, documentoId))).returning({ id: documentoRecibido.id });
-  if (!f) throw new ErrorNegocio("El mensaje no existe");
+    .where(and(eq(documentoRecibido.id, documentoId), notInArray(documentoRecibido.estadoLectura, RESUELTOS))).returning({ id: documentoRecibido.id });
+  if (!f) return noActualizado(ctx, documentoId);
   await registrarAuditoria(ctx.db, { usuarioId, accion: "lectura_descartada", entidad: "documento_recibido", entidadId: documentoId });
 }
 
@@ -275,6 +285,8 @@ export async function procesarLecturasPendientes(ctx: Contexto): Promise<Array<R
 
 export interface ItemPorRevisar {
   documentoId: number;
+  /** Quién lo mandó por Telegram (null si no se sabe). */
+  usuarioId: number | null;
   tipo: TipoMensaje;
   estado: EstadoLectura;
   desde: Date;
@@ -310,10 +322,35 @@ export async function listarPorRevisar(ctx: Contexto): Promise<ItemPorRevisar[]>
   return filas.map((d) => {
     const l = esquemaLectura.safeParse(d.datosExtraidos);
     return {
-      documentoId: d.id, tipo: d.tipo, estado: d.estadoLectura, desde: d.creadoEn, lectura: l.success ? l.data : null, texto: d.texto,
+      documentoId: d.id, usuarioId: d.usuarioId, tipo: d.tipo, estado: d.estadoLectura, desde: d.creadoEn, lectura: l.success ? l.data : null, texto: d.texto,
       rutaArchivo: d.rutaArchivo, mime: d.mime, error: errores.filter((e) => e.documentoId === d.id && e.error).at(-1)?.error ?? null,
     };
   });
+}
+
+/** «V2B-845», «v2b 845» → «V2B845». */
+const placaNormal = (t: string) => t.toUpperCase().replace(/[^A-Z0-9]/g, "");
+
+/**
+ * De qué camión es un mensaje del chofer, en este orden: (a) una placa escrita en el texto o leída
+ * en la boleta; (b) el viaje en curso de quien lo mandó; (c) el último camión con que anotó un gasto.
+ * null si no hay cómo saberlo (se pregunta).
+ */
+export async function camionDeMensaje(
+  ctx: Contexto, m: Pick<ItemPorRevisar, "usuarioId" | "texto" | "lectura">,
+): Promise<{ vehiculoId: number; por: "placa" | "viaje" | "ultimo" } | null> {
+  const l = m.lectura;
+  const leido = l?.tipo === "gasto" ? [l.nota, l.proveedorNombre, l.comprobante] : [];
+  const fuente = placaNormal([m.texto, ...leido].filter(Boolean).join(" "));
+  if (fuente) {
+    const u = (await listarUnidades(ctx)).find((x) => x.placa && placaNormal(x.placa).length >= 5 && fuente.includes(placaNormal(x.placa)));
+    if (u) return { vehiculoId: u.id, por: "placa" };
+  }
+  if (m.usuarioId === null) return null;
+  const c = await capturarContexto(ctx, { usuarioId: m.usuarioId });
+  if (c.viajeId !== null && c.vehiculoId !== null) return { vehiculoId: c.vehiculoId, por: "viaje" };
+  const ultimo = await ultimaUnidadDeUsuario(ctx, m.usuarioId);
+  return ultimo !== null ? { vehiculoId: ultimo, por: "ultimo" } : null;
 }
 
 /** Gastos que llegaron por Telegram sin viaje (la unidad no tenía viaje en curso). */

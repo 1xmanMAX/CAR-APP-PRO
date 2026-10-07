@@ -141,6 +141,9 @@ async function vistaAtencion(c: C, d: Deps) {
     atenciones(ctx, u.rol, cab),
   ]);
   const otros = elegirAvisos(avisos.filter((a) => !a.conSeccion), true);
+  /** «S/ 350.00 · Combustible» o «S/ 500.00 · Plata al chofer»: lo que leyó la IA, para reconocerlo sin abrirlo. */
+  const leidoCorto = (l: (typeof docs)[number]["lectura"]) =>
+    l?.tipo === "gasto" ? `S/ ${l.monto.toFixed(2)} · ${nombreCategoria(l.categoria, categorias)}` : l?.tipo === "entrega" ? `S/ ${l.monto.toFixed(2)} · Plata al chofer` : null;
   return pagina(c, d, { titulo: "Necesita tu atención", seccion: "dashboard" }, (
     <>
       <Cabecera titulo="Necesita tu atención" volver="/" />
@@ -151,6 +154,7 @@ async function vistaAtencion(c: C, d: Deps) {
             {docs.map((x) => {
               const txt = (
                 <span class="txt">{NOMBRE_MENSAJE[x.tipo] ?? "Mensaje"} del {fechaCorta(x.desde.toISOString().slice(0, 10))} · <span class="muted">{ESTADO_LECTURA[x.estado] ?? x.estado}</span>
+                  {leidoCorto(x.lectura) ? <><br /><b>{leidoCorto(x.lectura)}</b></> : null}
                   {x.texto ? <><br /><span class="muted">«{x.texto}»</span></> : null}</span>
               );
               return edita ? (
@@ -189,7 +193,7 @@ async function vistaAtencion(c: C, d: Deps) {
                   {edita ? (
                     opciones.length ? (
                       <>
-                        <select name="viajeId" aria-label="¿A qué viaje?">{opciones.map((v) => <option value={v.id}>{v.codigo} · {v.unidad} · {v.ruta}</option>)}</select>
+                        <select name="viajeId" aria-label="¿A qué viaje?">{opciones.map((v) => <option value={v.id}>{v.codigo} · {v.ruta}</option>)}</select>
                         <button class="btn chico" type="submit">Asignar</button>
                       </>
                     ) : <span class="muted">Ese camión no tiene viajes todavía.</span>

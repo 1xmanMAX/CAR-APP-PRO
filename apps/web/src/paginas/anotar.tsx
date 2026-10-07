@@ -1,7 +1,7 @@
 /** @jsxRuntime automatic @jsxImportSource hono/jsx */
 import type { Child, FC, PropsWithChildren } from "hono/jsx";
 import {
-  asiQueda, capturarContexto, categoriasMasUsadas, ErrorNegocio, fechaHoraLima, GRUPOS_PIEZA, hoy, listarCategorias, listarCobrosPendientes, listarPrestamos,
+  asiQueda, camionDeMensaje, capturarContexto, categoriasMasUsadas, ErrorNegocio, fechaHoraLima, GRUPOS_PIEZA, hoy, listarCategorias, listarCobrosPendientes, listarPrestamos,
   listarPorRevisar, listarRepuestos, liquidacionViaje, listarUnidades, listarViajesFlota, MEDIOS_ENTREGA, NOMBRE_MEDIO_PAGO, nombreCategoria, partesDePieza, partesDeUnidad,
   parsearMonto, pieza, piezasDeSemirremolque, puedeEditar, TIPOS_REPARACION, ultimaUnidadDeUsuario, viajesEnRuta,
   type AsiQueda, type FilaCobro, type GrupoPieza, type TipoReparacion, type UsuarioWeb, type ViajeEnRuta,
@@ -15,8 +15,8 @@ import { TIPOS_ANOTAR, tiposAnotar, type TipoAnotar } from "../lugares";
 import { ESTADO_LECTURA, valoresLectura } from "./revisar";
 import { Cabecera, diasEntre, fechaCorta, Icono, miles, soles, soles2, Vacio, type NombreIcono } from "../ui";
 
-/** `documento`: un mensaje de Telegram por confirmar (ver `parteDocumento`). `monto` y `categoria` solo vuelven en la URL cuando no se pudo guardar (así no se pierde lo escrito). */
-const CLAVES_Q = ["tipo", "modo", "volver", "viajeId", "vehiculoId", "facturaId", "prestamoId", "pieza", "parteId", "repuestoId", "monto", "categoria", "documento"] as const;
+/** `documento`: un mensaje de Telegram por confirmar (ver `parteDocumento`). `monto`, `categoria` y `medio` solo vuelven en la URL cuando no se pudo guardar (así no se pierde lo escrito). */
+const CLAVES_Q = ["tipo", "modo", "volver", "viajeId", "vehiculoId", "facturaId", "prestamoId", "pieza", "parteId", "repuestoId", "monto", "categoria", "medio", "documento"] as const;
 type ClaveQ = (typeof CLAVES_Q)[number];
 /** Lo que llega en la URL de /anotar (todo texto; "" = no vino). */
 export type Q = Record<ClaveQ, string> & { parcial: boolean };
@@ -44,7 +44,7 @@ const otroTipo = (q: Q, tipo: TipoAnotar) => urlAnotar({ tipo, volver: q.volver,
 export interface PartesForm {
   campos: Child;
   /** Bloque azul «Se pone solo» con su «cambiar» plegado. */
-  solo?: { texto: string; cambiar?: Child };
+  solo?: { texto: string; cambiar?: Child; abierto?: boolean };
   /** Sub-opciones del tipo (por ejemplo «Una factura» / «Otro ingreso»). */
   modos?: Array<{ modo: string; etiqueta: string }>;
   /** En vez del formulario, solo este mensaje (por ejemplo: nadie te debe). */
@@ -84,11 +84,11 @@ const FotoOpcional: FC = () => (
   <label class="foto-opcional"><Icono n="camara" t={20} /><span>Foto del voucher (opcional)</span><input type="file" name="foto" accept="image/*,application/pdf" /></label>
 );
 
-const SePoneSolo: FC<PropsWithChildren<{ texto: string }>> = (p) => (
+const SePoneSolo: FC<PropsWithChildren<{ texto: string; abierto?: boolean }>> = (p) => (
   <div class="se-pone-solo">
     <b class="lbl">Se pone solo</b>
     <span>{p.texto}</span>
-    {p.children ? <details><summary>cambiar</summary><div class="filas">{p.children}</div></details> : null}
+    {p.children ? <details open={p.abierto}><summary>cambiar</summary><div class="filas">{p.children}</div></details> : null}
   </div>
 );
 
@@ -512,26 +512,48 @@ async function parteAnotarPrestamo(_c: C, d: Deps, q: Q): Promise<PartesForm> {
 
 /** Lo que mandó el chofer por Telegram y no se pudo guardar solo: mismo formulario, precargado. */
 async function parteDocumento(d: Deps, q: Q, pedido: string | undefined): Promise<PartesForm | null> {
+  const ctx = d.ctx;
   const id = num(q.documento);
-  const item = id === null ? undefined : (await listarPorRevisar(d.ctx)).find((x) => x.documentoId === id);
+  const item = id === null ? undefined : (await listarPorRevisar(ctx)).find((x) => x.documentoId === id);
   if (!item) return null;
   const v = valoresLectura(item.lectura);
   // Sin «tipo» en la URL manda lo que leyó la IA; con «tipo» manda el botón que tocó el usuario.
   const tipo = pedido === "chofer" || pedido === "gaste" ? pedido : v.tipo === "entrega" ? "chofer" : "gaste";
-  const [categorias, unidades] = await Promise.all([listarCategorias(d.ctx, { soloActivas: true }), listarUnidades(d.ctx)]);
-  // Si volvió porque no se pudo guardar, lo escrito manda sobre lo que leyó la IA.
+  const [categorias, unidades, enRuta] = await Promise.all([listarCategorias(ctx, { soloActivas: true }), listarUnidades(ctx), viajesEnRuta(ctx)]);
+  // El camión: el que se eligió (si volvió por un error); si no, la placa escrita, el viaje de quien lo mandó o su último camión.
+  const pedidoCamion = num(q.vehiculoId) ?? (await camionDeMensaje(ctx, item))?.vehiculoId ?? null;
+  const unidad = unidades.find((u) => u.id === pedidoCamion) ?? null;
+  const viajeDe = (vehiculoId: number) => enRuta.find((x) => x.vehiculoId === vehiculoId) ?? null;
+  const vj = unidad ? viajeDe(unidad.id) : null;
+  const dia = `hoy ${fechaCorta(hoy(ctx)).toLowerCase()}`;
+  const texto = !unidad
+    ? "¿De qué camión es? Elígelo abajo"
+    : vj
+      ? unir([`Camión ${unidad.codigo} (${unidad.placa})`, `viaje ${vj.ruta}`, tipo === "chofer" ? vj.chofer : null, dia])
+      : tipo === "chofer"
+        ? `${unidad.codigo} no tiene viaje en curso: elige otro camión o crea el viaje`
+        : unir([`Camión ${unidad.codigo}`, "sin viaje (no tiene uno en curso)", dia]);
+  // Monto y categoría: lo escrito (si volvió por un error) manda sobre lo que leyó la IA.
   const monto = q.monto || v.monto;
   const categoria = q.categoria || v.categoria;
+  const medio = q.medio || v.medio;
+  const l = item.lectura;
+  const leido = l?.tipo === "gasto"
+    ? unir([`S/ ${l.monto.toFixed(2)}`, nombreCategoria(l.categoria, categorias), l.proveedorNombre, l.proveedorRuc && `RUC ${l.proveedorRuc}`, l.comprobante, l.kmOdometro !== null && km(l.kmOdometro)])
+    : l?.tipo === "entrega" ? unir([`S/ ${l.monto.toFixed(2)}`, `plata al chofer (${MEDIOS_ENTREGA[l.medio] ?? l.medio})`]) : null;
   const arriba = (
     <section class="panel llego-telegram">
       <div class="fila-sep"><b>Llegó por Telegram · {fechaCorta(item.desde.toISOString().slice(0, 10))}</b><span class={`chip ${item.estado === "error" ? "cambiar" : "proximo"}`}>{ESTADO_LECTURA[item.estado] ?? item.estado}</span></div>
       {item.texto ? <span>«{item.texto}»</span> : null}
+      {leido ? <span><span class="muted">Se leyó:</span> {leido}</span> : null}
       {item.error ? <span class="muted">{item.error}</span> : null}
       {item.rutaArchivo && item.tipo === "foto" ? (
-        <a href={`/archivo/documento/${item.documentoId}`} target="_blank" class="foto-telegram"><img src={`/archivo/documento/${item.documentoId}`} alt="Foto que mandó el chofer" /></a>
+        <a href={`/archivo/documento/${item.documentoId}`} target="_blank" class="foto-telegram">
+          <img src={`/archivo/documento/${item.documentoId}`} alt="Foto que mandó el chofer" />
+          <span class="solo-movil">Toca para agrandar</span>
+        </a>
       ) : null}
       {item.rutaArchivo && item.tipo === "voz" ? <audio controls src={`/archivo/documento/${item.documentoId}`} style="width:100%"></audio> : null}
-      <span class="muted">Revisa el monto con la foto o el mensaje y guarda.</span>
     </section>
   );
   return {
@@ -547,16 +569,26 @@ async function parteDocumento(d: Deps, q: Q, pedido: string | undefined): Promis
           </label>
         ) : (
           <fieldset class="grupo"><legend class="lbl">¿Cómo se la diste?</legend>
-            <div class="opciones-texto">{Object.entries(MEDIOS_ENTREGA).map(([k, n]) => <OpcionTexto nombre="medio" valor={k} texto={n} marcado={k === v.medio} />)}</div>
+            <div class="opciones-texto">{Object.entries(MEDIOS_ENTREGA).map(([k, n]) => <OpcionTexto nombre="medio" valor={k} texto={n} marcado={k === medio} />)}</div>
           </fieldset>
         )}
       </>
     ),
     solo: {
-      texto: tipo === "chofer" ? "Se anota en el viaje en curso del camión que elijas" : "Se guarda en el viaje en curso del camión que elijas (si no tiene, queda sin viaje)",
+      texto,
+      // Sin camión (o «Plata al chofer» sin viaje) se abre «cambiar» para elegirlo antes de guardar.
+      abierto: !unidad || (tipo === "chofer" && !vj),
       cambiar: (
         <>
-          <SelectUnidad unidades={unidades} elegido={unidades[0]?.id ?? null} />
+          <label class="campo"><span>Camión</span>
+            <select name="vehiculoId" required>
+              {unidad ? null : <option value="" selected>— ¿de qué camión? —</option>}
+              {unidades.map((u) => {
+                const x = viajeDe(u.id);
+                return <option value={u.id} selected={u.id === unidad?.id}>{u.codigo} · {u.placa} · {x ? `viaje ${x.ruta}` : "sin viaje en curso"}</option>;
+              })}
+            </select>
+          </label>
           {tipo === "gaste" ? <label class="campo"><span>Detalle</span><input name="nota" maxlength={200} value={v.nota} /></label> : null}
         </>
       ),
@@ -615,7 +647,7 @@ const FormAnotar: FC<{ q: Q; permitidos: TipoAnotar[]; p: PartesForm; titulo?: s
         {q.modo ? <input type="hidden" name="modo" value={q.modo} /> : null}
         <input type="hidden" name="volver" value={q.volver} />
         {p.campos}
-        {p.solo ? <SePoneSolo texto={p.solo.texto}>{p.solo.cambiar}</SePoneSolo> : null}
+        {p.solo ? <SePoneSolo texto={p.solo.texto} abierto={p.solo.abierto}>{p.solo.cambiar}</SePoneSolo> : null}
         {p.abajo ?? null}
         <button class="btn primario guardar" type="submit">{p.boton ?? "GUARDAR"}</button>
       </form>

@@ -19,10 +19,10 @@ vi.mock("@sunatapp/core", async (importOriginal) => {
 });
 import {
   AVISO_RETORNO_VACIO, emitirFactura, emitirGuia, leerPausaSunat, MAX_INTENTOS, MENSAJE_VERIFICAR_EN_SOL, pausarSunat, prepararFactura, registrarGuiaBorrador, listarValoresReferenciales,
-  buscarUnidad, crearCategoria, crearEnlaceWeb, guardarUsuario, registrarGasto, registrarViajeFlota, listarEventos, listarUsuarios, listarViajesFlota, obtenerEmpresa, partesDeUnidad, crearRepuesto, listarCostosFijos, listarPrestamos, listarReparaciones, listarRepuestos, piezasDeTipo, instalarParte, listarTiposParte, liquidacionViaje,
+  buscarUnidad, crearCategoria, crearUnidad, fijarLectura, crearEnlaceWeb, guardarUsuario, registrarGasto, registrarViajeFlota, listarEventos, listarUsuarios, listarViajesFlota, obtenerEmpresa, partesDeUnidad, crearRepuesto, listarCostosFijos, listarPrestamos, listarReparaciones, listarRepuestos, piezasDeTipo, instalarParte, listarTiposParte, liquidacionViaje,
   type Contexto,
 } from "@sunatapp/core";
-import { crearDb, documentoRecibido, eq, factura, gasto, guiaTransportista, vehiculo } from "../../../packages/db/src/index";
+import { crearDb, documentoRecibido, eq, factura, gasto, guiaTransportista, usuario, vehiculo } from "../../../packages/db/src/index";
 import { crearContextoPrueba, entradaGuia, prepararDatosTransporte } from "../../../packages/core/test/helpers";
 import { crearWeb } from "../src/app";
 import { tiposAnotar } from "../src/lugares";
@@ -683,6 +683,49 @@ describe("web", () => {
       expect(aviso(r)).toContain("ok=Gasto pasado a");
       expect(r.headers.get("location")).toMatch(/^\/\?ver=atencion/);
       expect(await (await app.request("/?ver=atencion", { headers: { cookie } })).text()).not.toContain("Gastos sin viaje");
+    });
+
+    it("por revisar: el camión sale solo (viaje de quien lo mandó o placa), se guarda lo leído y no se duplica", async () => {
+      const cookie = await entrar();
+      const { recibirMensaje, leerDocumento, crearLectorReglas } = await import("./ayuda-revisar");
+      ctx.ia = crearLectorReglas();
+      const viejo = async (id: number) => ctx.db.update(documentoRecibido).set({ creadoEn: new Date(ctx.reloj().getTime() - 2 * 86_400_000) }).where(eq(documentoRecibido.id, id));
+      // Quien lo mandó (usuario 1 = conductor 1) va en un viaje en curso con T-01.
+      await ctx.db.update(usuario).set({ conductorId: 1 }).where(eq(usuario.id, 1));
+      const v = await registrarViajeFlota(ctx, { vehiculoId: 1, origenLugar: "Yura", destinoLugar: "Puno", estado: "en_curso", origen: "web", conductorId: 1 });
+      const m = await recibirMensaje(ctx, { tipo: "texto", texto: "grifo 350", usuarioId: 1, telegramChatId: 5, telegramMessageId: 20 });
+      await leerDocumento(ctx, m.id);
+      await fijarLectura(ctx, m.id, { tipo: "gasto", categoria: "combustible", monto: 350, fecha: null, proveedorRuc: "20100070970", proveedorNombre: "Grifo Primax", comprobante: "B001-4512", nota: null, dudas: [], medioPago: null, kmOdometro: null });
+      await viejo(m.id);
+      let html = await (await app.request(`/anotar?documento=${m.id}`, { headers: { cookie } })).text();
+      expect(html).toContain("Camión T-01 (ABC-123) · viaje Yura → Puno · hoy");
+      expect(html).toMatch(/<option value="1" selected="">T-01 · ABC-123 · viaje Yura → Puno<\/option>/);
+      expect(html).toContain("Se leyó:</span> S/ 350.00 · Combustible · Grifo Primax · RUC 20100070970 · B001-4512");
+      expect(await (await app.request("/?ver=atencion", { headers: { cookie } })).text()).toContain("<b>S/ 350.00 · Combustible</b>");
+      // Guardar cambia solo el monto: el RUC y el comprobante leídos se quedan. Un segundo guardar no duplica.
+      const datos = { tipo: "gasto", categoria: "combustible", monto: "340", vehiculoId: "1", nota: "" };
+      expect(aviso(await post(cookie, `/revisar/${m.id}`, datos))).toContain(`ok=Gasto guardado en ${v.codigo}`);
+      expect(aviso(await post(cookie, `/revisar/${m.id}`, { ...datos, monto: "999" }))).toContain("ok=Ya estaba guardado");
+      expect(aviso(await post(cookie, `/revisar/${m.id}/descartar`, {}))).toContain("ok=Ya estaba guardado");
+      const gs = await ctx.db.select().from(gasto).where(eq(gasto.documentoId, m.id));
+      expect(gs.map((g) => [g.monto, g.proveedorRuc, g.comprobante])).toEqual([[34000, "20100070970", "B001-4512"]]);
+      // Plata al chofer de un camión sin viaje: se avisa antes de guardar. Sin cómo saber el camión: se pregunta.
+      const p = await recibirMensaje(ctx, { tipo: "texto", texto: "me yapearon 200 placa XYZ-987", telegramChatId: 5, telegramMessageId: 21 });
+      await leerDocumento(ctx, p.id);
+      await viejo(p.id);
+      const t2 = await crearUnidad(ctx, { placa: "XYZ-987" });
+      html = await (await app.request(`/anotar?documento=${p.id}`, { headers: { cookie } })).text();
+      expect(html).toContain(`${t2.codigo} no tiene viaje en curso: elige otro camión o crea el viaje`);
+      expect(html).toContain("<details open=\"\">");
+      const s = await recibirMensaje(ctx, { tipo: "texto", texto: "peaje 15", telegramChatId: 5, telegramMessageId: 22 });
+      await leerDocumento(ctx, s.id);
+      await viejo(s.id);
+      html = await (await app.request(`/anotar?documento=${s.id}`, { headers: { cookie } })).text();
+      expect(html).toContain("¿De qué camión es? Elígelo abajo");
+      expect(html).toContain('<select name="vehiculoId" required=""><option value="" selected="">— ¿de qué camión? —</option>');
+      // El taller no abre las boletas por número.
+      await guardarUsuario(ctx, { nombre: "Taller", email: "taller@demo.pe", rol: "taller", clave: "clave-segura" });
+      expect((await app.request(`/archivo/documento/${m.id}`, { headers: { cookie: await entrar("taller@demo.pe") } })).status).toBe(403);
     });
 
     it("rutas: plantilla, usar el promedio y editar el presupuesto de un viaje", async () => {

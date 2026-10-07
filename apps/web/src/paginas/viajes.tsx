@@ -1,6 +1,6 @@
 /** @jsxRuntime automatic @jsxImportSource hono/jsx */
 import {
-  editarViajeFlota, emitirFactura, enlazarGuia, ErrorNegocio, finalizarViajeFlota, hoy, listarCobrosPendientes, listarGuias,
+  AVISO_RETORNO_VACIO, editarViajeFlota, emitirFactura, guiasConAvisoRetornoVacio, enlazarGuia, ErrorNegocio, finalizarViajeFlota, hoy, listarCobrosPendientes, listarGuias,
   listarUnidades, listarViajesFlota, parsearMonto, FaltaDatoTransporteError, prepararFactura, puedeEditar, rangoMes, registrarCobro, registrarViajeFlota,
   sumarDias, formatearSoles, archivosDocumento, contarPorRevisar, puedeVer,
 } from "@sunatapp/core";
@@ -33,6 +33,7 @@ async function vista(c: C, d: Deps) {
   const km = viajes.reduce((s, v) => s + (v.km ?? 0), 0);
   const edita = puedeEditar(c.get("usuario").rol, "viajes");
   const viajesSinGuia = (await listarViajesFlota(ctx, { desde: sumarDias(h, -60), hasta: h })).filter((v) => v.guia === "—" || !v.facturas.length);
+  const retornoVacio = await guiasConAvisoRetornoVacio(ctx, guias.filter((g) => g.estado === "aceptada" && !g.facturada).map((g) => g.id));
 
   return pagina(c, d, { titulo: "Viajes, guías y facturas", seccion: "viajes" }, (
     <>
@@ -142,6 +143,7 @@ async function vista(c: C, d: Deps) {
                           {g.estado === "aceptada" && !g.facturada ? (
                             <details class="plegable"><summary><span class="btn chico">+ FACTURA</span></summary>
                               <form method="post" action={`/guias/${g.id}/facturar`} class="filas" style="margin-top:6px;min-width:220px">
+                                {retornoVacio.has(g.id) ? <span class="aviso info" style="font-size:12px">⚠️ {AVISO_RETORNO_VACIO}</span> : null}
                                 <label class="campo"><span>Monto S/</span><input name="monto" inputmode="decimal" required /></label>
                                 <label class="campo"><span>El monto…</span><select name="igv"><option value="sin">no incluye IGV</option><option value="con">ya incluye IGV</option></select></label>
                                 <label class="campo"><span>Pago</span><select name="pago"><option value="contado">Contado</option><option value="credito">Crédito</option></select></label>

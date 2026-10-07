@@ -4,6 +4,7 @@ import {
   calcularMontosFactura,
   cargarGuiaCompleta,
   actualizarUnidad,
+  avisoRetornoVacio,
   emitirFactura,
   esPrimeraReal,
   FaltaDatoTransporteError,
@@ -161,11 +162,14 @@ async function mostrarResumen(c: Ctx, deps: Dependencias, f: EstadoFlujoFactura)
   const detraccion = { porcentaje: d.empresa.detraccionPorcentaje, umbralCentimos: d.empresa.detraccionUmbral };
   // Igual que prepararFactura: la detracción se calcula con la base mínima del valor referencial.
   let montos = calcularMontosFactura({ montoCentimos: f.montoCentimos!, incluyeIgv: f.incluyeIgv!, detraccion });
+  let retornoVacio: string | null = null;
   if (montos.detraccionMonto > 0) {
     const { vr } = await transporteDeGuia(deps.ctx, f.guiaId);
     montos = calcularMontosFactura({
       montoCentimos: f.montoCentimos!, incluyeIgv: f.incluyeIgv!, detraccion, baseMinimaDetraccion: vr.vrServicio,
     });
+    // Solo un aviso: el factor 1.4 del retorno al vacío no se calcula.
+    retornoVacio = await avisoRetornoVacio(deps.ctx, f.guiaId);
   }
   const aviso = (await esPrimeraReal(deps.ctx, "factura")) ? `${textos.primeraReal("factura")}
 
@@ -178,7 +182,9 @@ async function mostrarResumen(c: Ctx, deps: Dependencias, f: EstadoFlujoFactura)
       montos,
       formaPago: f.formaPago!,
       ...(f.diasCredito !== undefined ? { diasCredito: f.diasCredito } : {}),
-    }),
+    }) + (retornoVacio ? `
+
+⚠️ ${retornoVacio}` : ""),
     { reply_markup: new InlineKeyboard().text("✅ Emitir", "f:emitir").text("❌ Cancelar", "f:cancelar") },
   );
 }

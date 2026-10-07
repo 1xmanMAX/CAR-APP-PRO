@@ -28,7 +28,7 @@ export function etiquetaEstadoGuia(estado: string): string {
 
 export const textos = {
   preguntaVr: (partida: string, llegada: string) =>
-    `Para la factura con detracción necesito el valor referencial MTC por tonelada de ${partida} → ${llegada} (tabla del D.S. 010-2006-MTC). Escríbelo en soles, p. ej. 85.50. Lo guardo para las siguientes.`,
+    `Para la factura con detracción necesito el valor referencial MTC por tonelada de ${partida} → ${llegada}, según el Anexo II del D.S. 020-2021-MTC (actualizado por el D.S. 011-2023-MTC). Escríbelo en soles, p. ej. 85.50. Lo guardo para las siguientes.`,
   preguntaCargaUtil: (placa: string) =>
     `¿Cuál es la carga útil (en toneladas) de la unidad ${placa} con su carreta? P. ej. 30. Lo guardo para las siguientes.`,
   vrMuyAlto: "Ese valor parece muy alto. Escríbelo por tonelada, p. ej. 85.50",

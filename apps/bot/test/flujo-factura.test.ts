@@ -359,6 +359,24 @@ describe("flujo de factura: valor referencial y primera real", () => {
     expect(a.ultimoTexto()).toContain("PRIMERA factura REAL");
   });
 
+  it("si la unidad jala una cisterna, avisa del retorno al vacío (solo aviso, sin calcular)", async () => {
+    const a = await arnes();
+    await guiaAceptada(a.ctx);
+    await a.ctx.db.update(vehiculo).set({ semirremolque: "cisterna" });
+    await hastaPago(a);
+    expect(a.ultimoTexto()).toContain("Para cisternas en rutas largas la norma multiplica el valor referencial por 1.4: revisa el monto antes de emitir");
+    expect(a.ultimoTexto()).toContain("Detracción 4%: S/ 72.00");
+  });
+
+  it("el pedido del valor referencial cita la norma vigente", async () => {
+    const a = await arnes();
+    await guiaAceptada(a.ctx);
+    for (const v of await listarValoresReferenciales(a.ctx)) await borrarValorReferencial(a.ctx, v.partidaUbigeo, v.llegadaUbigeo);
+    await hastaPago(a);
+    expect(a.ultimoTexto()).toContain("Anexo II del D.S. 020-2021-MTC (actualizado por el D.S. 011-2023-MTC)");
+    expect(a.ultimoTexto()).not.toContain("010-2006");
+  });
+
   it("no avisa de primera real en modo simulado", async () => {
     const a = await arnes();
     await guiaAceptada(a.ctx);

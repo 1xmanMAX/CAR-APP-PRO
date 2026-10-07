@@ -1,7 +1,7 @@
 /** @jsxRuntime automatic @jsxImportSource hono/jsx */
 import { readFile } from "node:fs/promises";
 import {
-  activarFacturaAutomatica, costoIaDelMes, ErrorNegocio, facturaAutomaticaActiva, FORMULA_VR_VERIFICADA, hoy, huellaPrueba, leerPausaSunat,
+  activarFacturaAutomatica, contarDocumentosEnCurso, costoIaDelMes, ErrorNegocio, facturaAutomaticaActiva, FORMULA_VR_VERIFICADA, hoy, huellaPrueba, leerPausaSunat,
   probarConexionSunat, reanudarSunat, type DatosPrueba, type ResultadoPruebaSunat,
 } from "@sunatapp/core";
 import { accion, formularioMultiparte, pagina, type App, type C, type Deps, type EstadoServicios } from "../base";
@@ -56,7 +56,7 @@ async function datosDePrueba(f: Record<string, string>, actual: Record<string, s
   };
 }
 
-async function vista(c: C, d: Deps, resultado?: ResultadoPruebaSunat) {
+async function vista(c: C, d: Deps, resultado?: ResultadoPruebaSunat, nota?: string) {
   const s = d.servicios;
   if (!s) {
     return pagina(c, d, { titulo: "Este dispositivo", seccion: "ajustes" }, (
@@ -137,6 +137,7 @@ async function vista(c: C, d: Deps, resultado?: ResultadoPruebaSunat) {
             <button class="btn chico" type="submit" formaction="/ajustes/dispositivo/probar" style="min-height:44px">PROBAR CONEXIÓN</button>
             {resultado ? (
               <div class="filas" style="gap:4px">
+                {nota ? <span class="aviso error">{nota}</span> : null}
                 {([["Certificado", resultado.certificado], ["Usuario y clave SOL", resultado.claveSol], ["Credenciales de guías", resultado.credencialesGre]] as const).map(([n, p]) => (
                   <span class={`aviso ${p.ok ? "info" : "error"}`}>{p.ok ? "✅" : "❌"} <b>{n}:</b> {p.mensaje}</span>
                 ))}
@@ -150,8 +151,8 @@ async function vista(c: C, d: Deps, resultado?: ResultadoPruebaSunat) {
             <li><b>Certificado digital gratis:</b> SOL → Empresas → Comprobantes de Pago → Certificado Digital Tributario → «Solicitar Certificado Digital Tributario». Te llega al Buzón SOL; al descargarlo creas su clave y obtienes <code>certificado.p12</code>.</li>
             <li><b>Emisor desde tu sistema:</b> en SOL, inscríbete en «SEE - Del Contribuyente» subiendo ese certificado y tu correo. Rige desde el día siguiente.</li>
             <li><b>Credenciales de guías:</b> SOL → Empresas → Credenciales de API SUNAT → Gestión de Credenciales → registra una aplicación tipo <b>Desktop</b> marcando «GRE Emisión de Comprobantes». Copia el ID (client_id) y la CLAVE (client_secret).</li>
-            <li><b>Usuario SOL:</b> si SUNAT responde «el usuario debe ser secundario» (0112), crea un usuario secundario con perfil de emisión electrónica y úsalo aquí.</li>
-            <li>Escribe tus datos y toca <b>PROBAR CONEXIÓN</b> (se guardan al probar, sin cambiar el modo). Si sale todo ✅, cambia el modo a <b>Real</b> y guarda.</li>
+            <li><b>Usuario SOL:</b> si SUNAT responde «el usuario debe ser secundario» (0112), crea un usuario secundario con perfil de emisión electrónica y úsalo aquí. Dale también el permiso de <b>consulta de comprobantes / CDR</b>: con él la app recupera el CDR de una factura que SUNAT ya tiene.</li>
+            <li>Escribe tus datos y toca <b>PROBAR CONEXIÓN</b> (se guardan al probar, sin cambiar el modo; ya en modo Real, solo se guardan si sale todo ✅). Si sale todo ✅, cambia el modo a <b>Real</b> y guarda.</li>
           </ol>
           <span class="muted" style="font-size:11px">No hay ambiente de pruebas de SUNAT para guías: la primera guía en modo Real ya es real. Hasta el 28-02-2027 SUNAT no sanciona errores en guías de transportista.</span>
         </Panel>
@@ -196,6 +197,9 @@ async function vista(c: C, d: Deps, resultado?: ResultadoPruebaSunat) {
 export function rutasDispositivo(app: App, d: Deps): void {
   let ultimaPrueba: UltimaPrueba | null = null;
   const VIGENCIA_PRUEBA_MS = 15 * 60 * 1000;
+  // Cada prueba es un login en SUNAT: probar seguido con una clave mala puede bloquear el usuario SOL.
+  const ESPERA_ENTRE_PRUEBAS_MS = 60 * 1000;
+  let ultimoIntento = 0;
   app.get("/ajustes/dispositivo", (c) => vista(c, d));
   app.post("/ajustes/dispositivo/probar", async (c) => {
     const { campos: f, archivos } = await formularioMultiparte(c);
@@ -203,11 +207,27 @@ export function rutasDispositivo(app: App, d: Deps): void {
     if (!s || c.get("usuario").rol !== "dueno") {
       return accion(c, "/ajustes/dispositivo", async () => { throw new ErrorNegocio("Solo el dueño puede probar la conexión con SUNAT"); });
     }
-    // Primero se guarda lo escrito (vacío = no cambiar) pero NUNCA el modo: así lo probado es lo guardado.
+    if (Date.now() - ultimoIntento < ESPERA_ENTRE_PRUEBAS_MS) {
+      return accion(c, "/ajustes/dispositivo", async () => {
+        throw new ErrorNegocio("Espera un minuto antes de volver a probar: cada prueba entra a SUNAT con tu usuario SOL y muchos intentos seguidos lo pueden bloquear");
+      });
+    }
+    ultimoIntento = Date.now();
     const cambios: Record<string, string | null> = {};
     for (const k of ["SUNAT_SOL_USUARIO", "SUNAT_SOL_CLAVE", "SUNAT_GRE_CLIENT_ID", "SUNAT_GRE_CLIENT_SECRET", "SUNAT_CERT_PASSWORD"]) if (f[k]) cambios[k] = f[k]!;
     const cert = archivos.certificado ? Buffer.from(await archivos.certificado.arrayBuffer()) : undefined;
-    if (cert || Object.keys(cambios).length) await s.guardarAjustes(cambios, cert);
+    const hayCambios = !!cert || Object.keys(cambios).length > 0;
+    const actual = s.ajustes();
+    if (actual.SUNAT_MODO === "real") {
+      // En modo Real lo guardado se usa al momento para enviar: se prueba lo escrito SIN guardarlo y
+      // solo se guarda si sale todo ✅ (si no, el fondo seguiría entrando a SUNAT con datos malos).
+      const r = await probarConexionSunat(d.ctx, await datosDePrueba(f, actual, archivos.certificado));
+      ultimaPrueba = { huella: r.huella, todoOk: r.todoOk, en: Date.now() };
+      if (r.todoOk && hayCambios) await s.guardarAjustes(cambios, cert);
+      return vista(c, d, r, !r.todoOk && hayCambios ? "Como estás en modo Real, lo que escribiste no se guardó: corrígelo y vuelve a probar." : undefined);
+    }
+    // Fuera de Real se guarda lo escrito (vacío = no cambiar) pero NUNCA el modo: así lo probado es lo guardado.
+    if (hayCambios) await s.guardarAjustes(cambios, cert);
     const datos = await datosDePrueba({}, s.ajustes(), undefined);
     const r = await probarConexionSunat(d.ctx, datos);
     ultimaPrueba = { huella: r.huella, todoOk: r.todoOk, en: Date.now() };
@@ -215,6 +235,9 @@ export function rutasDispositivo(app: App, d: Deps): void {
   });
   app.post("/ajustes/dispositivo/reanudar", async (c) => accion(c, "/ajustes/dispositivo", async () => {
     if (!d.servicios || c.get("usuario").rol !== "dueno") throw new ErrorNegocio("Solo el dueño puede reanudar SUNAT");
+    // Si la configuración pedida no carga, la app está en simulado: reanudar mandaría los pendientes al simulador.
+    const error = d.servicios.estado().sunat.error;
+    if (error) throw new ErrorNegocio(`Primero corrige los ajustes de SUNAT: ${error}`);
     await reanudarSunat(d.ctx);
     return "SUNAT reanudada";
   }));
@@ -237,6 +260,11 @@ export function rutasDispositivo(app: App, d: Deps): void {
       if (f.BOT_HORA_AVISO && !/^([01]\d|2[0-3]):[0-5]\d$/.test(f.BOT_HORA_AVISO)) throw new ErrorNegocio("La hora del aviso debe ser HH:MM");
       for (const k of ["BOT_HORA_AVISO", "EXTRACTOR", "SUNAT_MODO", "SUNAT_AMBIENTE_FACTURA", "SUNAT_SOL_USUARIO", "SUNAT_GRE_CLIENT_ID", "IA_PROVEEDOR", "WHISPER_BIN", "WHISPER_MODELO"]) if (k in f) cambios[k] = f[k] || null;
       if (!["simulado", "beta", "real"].includes(f.SUNAT_MODO ?? "simulado")) throw new ErrorNegocio("Modo SUNAT no válido");
+      // Cambiar de modo con documentos en camino los mandaría a otro SUNAT (o al simulador).
+      if ("SUNAT_MODO" in f && (f.SUNAT_MODO || "simulado") !== (actual.SUNAT_MODO || "simulado")) {
+        const enCurso = await contarDocumentosEnCurso(d.ctx);
+        if (enCurso > 0) throw new ErrorNegocio(`Primero termina de enviar los documentos pendientes (${enCurso})`);
+      }
       const cert = archivos.certificado ? Buffer.from(await archivos.certificado.arrayBuffer()) : undefined;
       if (f.SUNAT_MODO === "real") {
         const final: Record<string, string | null | undefined> = { ...actual, ...cambios, ...(cert ? { SUNAT_CERT_PATH: "nuevo" } : {}) };

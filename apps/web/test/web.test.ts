@@ -3,24 +3,27 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-const prueba = vi.hoisted(() => ({ simularTodoOk: false }));
+const prueba = vi.hoisted(() => ({ simularTodoOk: false, llamadasSunat: 0 }));
 vi.mock("@sunatapp/core", async (importOriginal) => {
   const real = await importOriginal<typeof import("@sunatapp/core")>();
   return {
     ...real,
     probarConexionSunat: async (ctx: Parameters<typeof real.probarConexionSunat>[0], datos: Parameters<typeof real.probarConexionSunat>[1], o?: Parameters<typeof real.probarConexionSunat>[2]) => {
-      if (!prueba.simularTodoOk) return real.probarConexionSunat(ctx, datos, o);
+      // Nunca se llama a SUNAT de verdad: un fetch falso que rechaza la clave (HTTP 401).
+      const falso = (async () => { prueba.llamadasSunat++; return new Response("", { status: 401 }); }) as typeof fetch;
+      if (!prueba.simularTodoOk) return real.probarConexionSunat(ctx, datos, { ...o, fetch: falso });
       const ok = { ok: true, mensaje: "ok" };
       return { certificado: ok, claveSol: ok, credencialesGre: ok, todoOk: true, huella: real.huellaPrueba(datos) };
     },
   };
 });
 import {
+  AVISO_RETORNO_VACIO, emitirGuia, leerPausaSunat, pausarSunat, registrarGuiaBorrador,
   buscarUnidad, listarValoresReferenciales, crearCategoria, crearEnlaceWeb, guardarUsuario, registrarGasto, registrarViajeFlota, listarEventos, listarUsuarios, listarViajesFlota, obtenerEmpresa, partesDeUnidad, instalarParte, listarTiposParte,
   type Contexto,
 } from "@sunatapp/core";
-import { crearDb, gasto } from "../../../packages/db/src/index";
-import { crearContextoPrueba } from "../../../packages/core/test/helpers";
+import { crearDb, eq, gasto, guiaTransportista, vehiculo } from "../../../packages/db/src/index";
+import { crearContextoPrueba, entradaGuia } from "../../../packages/core/test/helpers";
 import { crearWeb } from "../src/app";
 
 let ctx: Contexto;
@@ -461,6 +464,106 @@ describe("web", () => {
       fd.set("certificado", new File([Buffer.from("no-es-pfx")], "c.pfx"));
       const r = await app.request("/ajustes/dispositivo", { method: "POST", headers: { cookie, origin: ORIGEN }, body: fd });
       expect(decodeURIComponent(aviso(r).replace(/\+/g, " "))).toContain("toca PROBAR CONEXIÓN");
+    });
+
+    /** Servicios que guardan en memoria, como el `.env` real. */
+    function serviciosEnMemoria(guardado: Record<string, string>, error?: string) {
+      return {
+        ...servicios,
+        estado: () => ({ ...servicios.estado(), sunat: { modo: (guardado.SUNAT_MODO ?? "simulado") as "simulado" | "beta" | "real", ...(error ? { error } : {}) } }),
+        ajustes: () => ({ ...guardado }),
+        guardarAjustes: async (cambios: Record<string, string | null>) => {
+          for (const [k, v] of Object.entries(cambios)) { if (v === null) delete guardado[k]; else guardado[k] = v; }
+        },
+      };
+    }
+    const texto = (r: Response) => decodeURIComponent(aviso(r).replace(/\+/g, " "));
+
+    it("probar conexión nunca llama a SUNAT de verdad en las pruebas y no repite el login de guías si la clave SOL falla", async () => {
+      prueba.llamadasSunat = 0;
+      app = crearWeb(ctx, { servicios: serviciosEnMemoria({ SUNAT_MODO: "simulado" }) });
+      const cookie = await entrar();
+      const r = await postForm(cookie, "/ajustes/dispositivo/probar", { ...claves, SUNAT_MODO: "simulado" });
+      expect(await r.text()).toContain("No se probó: primero corrige usuario/clave SOL");
+      expect(prueba.llamadasSunat).toBe(1);
+    });
+
+    it("probar conexión: como mucho una vez por minuto", async () => {
+      const cookie = await entrar();
+      expect((await postForm(cookie, "/ajustes/dispositivo/probar", { ...claves })).status).toBe(200);
+      const r = await postForm(cookie, "/ajustes/dispositivo/probar", { ...claves });
+      expect(r.status).toBe(303);
+      expect(texto(r)).toContain("Espera un minuto antes de volver a probar");
+    });
+
+    it("en modo Real, probar no guarda lo escrito si la prueba falla; si sale todo bien, sí", async () => {
+      const guardado: Record<string, string> = {
+        SUNAT_MODO: "real", SUNAT_SOL_USUARIO: "USU1", SUNAT_SOL_CLAVE: "buena", SUNAT_GRE_CLIENT_ID: "id", SUNAT_GRE_CLIENT_SECRET: "sec",
+        SUNAT_CERT_PASSWORD: "c", SUNAT_CERT_PATH: "no-existe.pfx",
+      };
+      app = crearWeb(ctx, { servicios: serviciosEnMemoria(guardado) });
+      const cookie = await entrar();
+      const r = await postForm(cookie, "/ajustes/dispositivo/probar", { SUNAT_SOL_CLAVE: "mala" });
+      expect(r.status).toBe(200);
+      expect(await r.text()).toContain("no se guardó");
+      expect(guardado.SUNAT_SOL_CLAVE).toBe("buena");
+
+      app = crearWeb(ctx, { servicios: serviciosEnMemoria(guardado) });
+      prueba.simularTodoOk = true;
+      try {
+        expect((await postForm(cookie, "/ajustes/dispositivo/probar", { SUNAT_SOL_CLAVE: "nueva" })).status).toBe(200);
+      } finally {
+        prueba.simularTodoOk = false;
+      }
+      expect(guardado.SUNAT_SOL_CLAVE).toBe("nueva");
+      expect(guardado.SUNAT_MODO).toBe("real");
+    });
+
+    it("no deja cambiar el modo SUNAT con documentos pendientes de envío", async () => {
+      const guardado: Record<string, string> = { SUNAT_MODO: "simulado" };
+      app = crearWeb(ctx, { servicios: serviciosEnMemoria(guardado) });
+      const guiaId = await registrarGuiaBorrador(ctx, entradaGuia());
+      await ctx.db.update(guiaTransportista).set({ estado: "pendiente_envio" }).where(eq(guiaTransportista.id, guiaId));
+      const cookie = await entrar();
+      const r = await postForm(cookie, "/ajustes/dispositivo", { SUNAT_MODO: "beta" });
+      expect(texto(r)).toContain("Primero termina de enviar los documentos pendientes (1)");
+      expect(guardado.SUNAT_MODO).toBe("simulado");
+      // Sin cambiar el modo, el resto de ajustes sí se guarda.
+      expect(texto(await postForm(cookie, "/ajustes/dispositivo", { SUNAT_MODO: "simulado", BOT_HORA_AVISO: "07:00" }))).toContain("Ajustes guardados");
+      expect(guardado.BOT_HORA_AVISO).toBe("07:00");
+    });
+
+    it("REINTENTAR AHORA no reanuda si la configuración de SUNAT no carga", async () => {
+      app = crearWeb(ctx, { servicios: serviciosEnMemoria({ SUNAT_MODO: "real" }, "No se pudo usar SUNAT real: certificado") });
+      await pausarSunat(ctx, "No se pudo usar SUNAT real: certificado", { porConfig: true });
+      const cookie = await entrar();
+      const r = await postForm(cookie, "/ajustes/dispositivo/reanudar", {});
+      expect(texto(r)).toContain("Primero corrige los ajustes de SUNAT");
+      expect(await leerPausaSunat(ctx)).not.toBeNull();
+    });
+
+    it("la guía para sacar tus accesos pide también el permiso de consulta del usuario SOL", async () => {
+      const cookie = await entrar();
+      expect(await (await app.request("/ajustes/dispositivo", { headers: { cookie } })).text()).toContain("consulta de comprobantes");
+    });
+
+    it("valor referencial: mismo tope que el bot (más de cero y hasta S/ 1,000 por TM)", async () => {
+      const cookie = await entrar();
+      const alto = await post(cookie, "/rutas/vr", { partidaUbigeo: "040101", llegadaUbigeo: "210101", vrPorTm: "1000.01" });
+      expect(texto(alto)).toContain("Ese valor parece muy alto. Escríbelo por tonelada, p. ej. 85.50");
+      // Cero ya no pasa parsearMonto ("no válido"): tampoco se guarda.
+      expect(texto(await post(cookie, "/rutas/vr", { partidaUbigeo: "040101", llegadaUbigeo: "210101", vrPorTm: "0" }))).toContain("error=");
+      expect(await listarValoresReferenciales(ctx)).toEqual([]);
+      expect(texto(await post(cookie, "/rutas/vr", { partidaUbigeo: "040101", llegadaUbigeo: "210101", vrPorTm: "1000" }))).toContain("Valor");
+    });
+
+    it("avisa del retorno al vacío al facturar una guía de cisterna", async () => {
+      const guiaId = await registrarGuiaBorrador(ctx, entradaGuia());
+      await emitirGuia(ctx, guiaId);
+      const cookie = await entrar();
+      expect(await (await app.request("/viajes", { headers: { cookie } })).text()).not.toContain(AVISO_RETORNO_VACIO);
+      await ctx.db.update(vehiculo).set({ semirremolque: "cisterna" });
+      expect(await (await app.request("/viajes", { headers: { cookie } })).text()).toContain(AVISO_RETORNO_VACIO);
     });
 
     it("guarda y borra un valor referencial por ruta", async () => {

@@ -131,6 +131,8 @@ export function rutasRutas(app: App, d: Deps): void {
     return accion(c, "/rutas", async () => {
       const vr = parsearMonto(f.vrPorTm ?? "");
       if (vr === null) throw new ErrorNegocio("Valor referencial no válido");
+      // Mismo tope que el bot: es por tonelada (más de cero y hasta S/ 1,000), no el total del viaje.
+      if (vr <= 0 || vr > 100000) throw new ErrorNegocio("Ese valor parece muy alto. Escríbelo por tonelada, p. ej. 85.50");
       await guardarValorReferencial(d.ctx, { partidaUbigeo: (f.partidaUbigeo ?? "").trim(), llegadaUbigeo: (f.llegadaUbigeo ?? "").trim(), vrPorTmCentimos: vr, ...(f.fuente ? { fuente: f.fuente } : {}) });
       return "Valor referencial guardado";
     });

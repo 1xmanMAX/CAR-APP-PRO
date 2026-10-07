@@ -142,6 +142,17 @@ async function datosViaje(d: Deps, enRuta: ViajeEnRuta[], viajeId: number): Prom
 
 // ── «Así queda después de guardar» ───────────────────────────────────────────
 
+/** «a Juan» / «al chofer» (sin nombre, primerNombre da «el chofer»). */
+const aQuien = (nombre: string) => (nombre === "el chofer" ? "al chofer" : `a ${nombre}`);
+const AQuien = (nombre: string) => (nombre === "el chofer" ? "Al chofer" : `A ${nombre}`);
+
+/** «El viaje deja S/ 2,510 (antes S/ 2,860)»; si queda en negativo, «pierde». */
+function textoViaje(v: NonNullable<AsiQueda["viaje"]>): string {
+  if (v.dejaDespues >= 0) return `El viaje deja ${soles(v.dejaDespues)} (antes ${soles(v.dejaAntes)})`;
+  const antes = v.dejaAntes >= 0 ? `antes dejaba ${soles(v.dejaAntes)}` : `antes perdía ${soles(-v.dejaAntes)}`;
+  return `El viaje pierde ${soles(-v.dejaDespues)} (${antes})`;
+}
+
 /** «Así queda después de guardar» (solo en la PC: en el celular satura). Solo cuentas que ya se pueden calcular. */
 export const AsiQuedaBloque: FC<{ r: AsiQueda | null; sinViaje?: boolean }> = ({ r, sinViaje }) => (
   <div class="asi-queda solo-pc" id="asi-queda" aria-live="polite">
@@ -152,10 +163,10 @@ export const AsiQuedaBloque: FC<{ r: AsiQueda | null; sinViaje?: boolean }> = ({
       <ul>
         {r.chofer ? (
           <li>{r.chofer.quedaDespues >= 0
-            ? `A ${r.chofer.nombre} le quedan ${soles(r.chofer.quedaDespues)} de ${soles(r.chofer.entregado)}`
-            : `Le debes ${soles(-r.chofer.quedaDespues)} a ${r.chofer.nombre}`}</li>
+            ? `${AQuien(r.chofer.nombre)} le quedan ${soles(r.chofer.quedaDespues)} de ${soles(r.chofer.entregado)}`
+            : `Le debes ${soles(-r.chofer.quedaDespues)} ${aQuien(r.chofer.nombre)}`}</li>
         ) : null}
-        {r.viaje ? <li>El viaje deja {soles(r.viaje.dejaDespues)} <span class="antes">(antes {soles(r.viaje.dejaAntes)})</span></li> : null}
+        {r.viaje ? <li class={r.viaje.dejaDespues < 0 ? "t-cambiar" : undefined}>{textoViaje(r.viaje)}</li> : null}
         {r.categoria ? (
           <li class={r.categoria.presupuesto > 0 && r.categoria.realDespues > r.categoria.presupuesto ? "t-cambiar" : undefined}>
             {r.categoria.nombre} del viaje: {soles(r.categoria.realDespues)}{r.categoria.presupuesto > 0 ? ` · presupuesto ${soles(r.categoria.presupuesto)}` : " · sin presupuesto"}
@@ -167,11 +178,11 @@ export const AsiQuedaBloque: FC<{ r: AsiQueda | null; sinViaje?: boolean }> = ({
 );
 
 /** null si falta el monto o el viaje (o el viaje no existe). */
-async function calcularAsiQueda(d: Deps, tipo: string, monto: string, viajeId: string, categoria: string): Promise<AsiQueda | null> {
+async function calcularAsiQueda(d: Deps, tipo: string, monto: string, viajeId: string, categoria: string, medioPago = ""): Promise<AsiQueda | null> {
   const m = parsearMonto(monto);
   const v = num(viajeId);
   if (!m || v === null || (tipo !== "gaste" && tipo !== "chofer")) return null;
-  return asiQueda(d.ctx, { tipo: tipo === "gaste" ? "gasto" : "entrega", monto: m, viajeId: v, categoria: categoria || null }).catch(() => null);
+  return asiQueda(d.ctx, { tipo: tipo === "gaste" ? "gasto" : "entrega", monto: m, viajeId: v, categoria: categoria || null, medioPago: medioPago || null }).catch(() => null);
 }
 
 // ── Cada tipo ────────────────────────────────────────────────────────────────
@@ -585,7 +596,7 @@ export function rutasAnotar(app: App, d: Deps): void {
   app.get("/anotar/asi-queda", async (c) => {
     if (!tiposAnotar(c.get("usuario").rol).some((t) => t === "gaste" || t === "chofer")) return c.text("Tu rol no anota plata", 403);
     const tipo = c.req.query("tipo") ?? "", monto = c.req.query("monto") ?? "", viajeId = c.req.query("viajeId") ?? "";
-    const r = await calcularAsiQueda(d, tipo, monto, viajeId, c.req.query("categoria") ?? "");
+    const r = await calcularAsiQueda(d, tipo, monto, viajeId, c.req.query("categoria") ?? "", c.req.query("medioPago") ?? "");
     return c.html((<AsiQuedaBloque r={r} sinViaje={tipo === "gaste" && !viajeId && parsearMonto(monto) !== null} />).toString());
   });
   app.post("/anotar", async (c) => {

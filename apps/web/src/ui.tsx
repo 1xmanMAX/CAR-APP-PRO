@@ -9,15 +9,17 @@ import { menuDe, tiposAnotar, veAjustes, type EntradaMenu, type Lugar } from "./
 /** Cambia en cada arranque del servidor: evita que el celular use CSS/JS viejos de su caché. */
 export const V = Date.now().toString(36);
 
-/** Céntimos → "S/ 1,234" (sin decimales, para KPIs y gráficos). */
+/** Espacio duro entre «S/» y la cifra: un monto nunca se parte en dos líneas. */
+const NBSP = " ";
+/** Céntimos → "S/ 1,234" (sin decimales, para KPIs y gráficos; el espacio es duro). */
 export function soles(centimos: number): string {
   const s = Math.round(centimos / 100);
-  return `${s < 0 ? "-" : ""}S/ ${Math.abs(s).toLocaleString("en-US")}`;
+  return `${s < 0 ? "-" : ""}S/${NBSP}${Math.abs(s).toLocaleString("en-US")}`;
 }
-/** Céntimos → "S/ 1,234.50". */
+/** Céntimos → "S/ 1,234.50" (espacio duro). */
 export function soles2(centimos: number): string {
   const n = centimos / 100;
-  return `${n < 0 ? "-" : ""}S/ ${Math.abs(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  return `${n < 0 ? "-" : ""}S/${NBSP}${Math.abs(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 export const miles = (n: number | null | undefined) => (n === null || n === undefined ? "—" : Math.round(n).toLocaleString("en-US"));
 const MESES = ["ENE", "FEB", "MAR", "ABR", "MAY", "JUN", "JUL", "AGO", "SET", "OCT", "NOV", "DIC"];

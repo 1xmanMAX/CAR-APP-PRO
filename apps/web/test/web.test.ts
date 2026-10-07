@@ -8,6 +8,7 @@ import { crearContextoPrueba } from "../../../packages/core/test/helpers";
 import { crearWeb } from "../src/app";
 import { tiposAnotar } from "../src/lugares";
 import { atenciones, elegirAvisos, enOracion, textoGanancia } from "../src/paginas/dashboard";
+import { AsiQuedaBloque } from "../src/paginas/anotar";
 import { conParametros } from "../src/redirecciones";
 
 let ctx: Contexto;
@@ -67,11 +68,11 @@ describe("web", () => {
   });
 
   it("inicio: la tarjeta dice ganaste o perdiste y compara bien con el mes anterior", () => {
-    expect(textoGanancia(845000, 712000, "2026-09")).toEqual({ etiqueta: "Ganaste este mes", monto: "S/ 8,450", sub: "Mejor que septiembre (ganaste S/ 7,120)", perdida: false });
-    expect(textoGanancia(-2825400, 5559900, "2026-09")).toEqual({ etiqueta: "Perdiste este mes", monto: "S/ 28,254", sub: "Peor que septiembre (ganaste S/ 55,599)", perdida: true });
-    expect(textoGanancia(-10000, -50000, "2026-09").sub).toBe("Mejor que septiembre (perdiste S/ 500)");
-    expect(textoGanancia(0, 0, "2026-08").sub).toBe("Igual que agosto (S/ 0)");
-    expect(textoGanancia(30000, 30000, "2026-08").sub).toBe("Igual que agosto (ganaste S/ 300)");
+    expect(textoGanancia(845000, 712000, "2026-09")).toEqual({ etiqueta: "Ganaste este mes", monto: "S/\u00a08,450", sub: "Mejor que septiembre (ganaste S/\u00a07,120)", perdida: false });
+    expect(textoGanancia(-2825400, 5559900, "2026-09")).toEqual({ etiqueta: "Perdiste este mes", monto: "S/\u00a028,254", sub: "Peor que septiembre (ganaste S/\u00a055,599)", perdida: true });
+    expect(textoGanancia(-10000, -50000, "2026-09").sub).toBe("Mejor que septiembre (perdiste S/\u00a0500)");
+    expect(textoGanancia(0, 0, "2026-08").sub).toBe("Igual que agosto (S/\u00a00)");
+    expect(textoGanancia(30000, 30000, "2026-08").sub).toBe("Igual que agosto (ganaste S/\u00a0300)");
   });
 
   it("inicio: las fotos por confirmar nunca se quedan fuera; luego lo urgente; todos con ?ver=atencion", () => {
@@ -164,16 +165,37 @@ describe("web", () => {
         const frag = await (await app.request(`/anotar?parcial=1&viajeId=${v.id}`, { headers: { cookie } })).text();
         expect(frag).not.toContain("<html");
         expect(frag).toContain('id="asi-queda"');
-        const q = await (await app.request(`/anotar/asi-queda?tipo=gaste&monto=350&viajeId=${v.id}&categoria=combustible`, { headers: { cookie } })).text();
+        // Los montos llevan espacio duro después de «S/» (nunca se parten en dos líneas).
+        const asi = async (qs: string) => (await (await app.request(`/anotar/asi-queda?${qs}`, { headers: { cookie } })).text());
+        const q = await asi(`tipo=gaste&monto=350&viajeId=${v.id}&categoria=combustible`);
         expect(q).toContain("Así queda después de guardar");
-        expect(q).toContain("El viaje deja S/ 3,150");
-        expect(q).toContain("Combustible del viaje: S/ 350");
+        expect(q).toContain("El viaje deja S/\u00a03,150");
+        expect(q).toContain("Combustible del viaje: S/\u00a0350");
+        expect(q).not.toMatch(/S\/ \d/);
+        // Sin plata entregada: con su efectivo (automático) se le debe al chofer; con tarjeta, no hay línea del chofer.
+        expect(q).toContain("Le debes S/\u00a0350 a Jhon");
+        const tarjeta = await asi(`tipo=gaste&monto=350&viajeId=${v.id}&categoria=combustible&medioPago=tarjeta`);
+        expect(tarjeta).not.toContain("Le debes");
+        expect(tarjeta).not.toContain("le quedan");
+        expect(tarjeta).toContain("El viaje deja");
+        // Si el gasto se come todo el flete: «pierde», no «deja -S/».
+        const pierde = await asi(`tipo=gaste&monto=3,550&viajeId=${v.id}&categoria=combustible`);
+        expect(pierde).toContain("El viaje pierde S/\u00a050 (antes dejaba S/\u00a03,500)");
         // Plata al chofer: solo cuánto le queda; sin monto, solo la explicación.
-        const e = await (await app.request(`/anotar/asi-queda?tipo=chofer&monto=100&viajeId=${v.id}`, { headers: { cookie } })).text();
-        expect(e).toContain("le quedan S/ 100 de S/ 100");
+        const e = await asi(`tipo=chofer&monto=100&viajeId=${v.id}`);
+        expect(e).toContain("A Jhon le quedan S/\u00a0100 de S/\u00a0100");
         expect(e).not.toContain("El viaje deja");
         const vacio = await (await app.request(`/anotar/asi-queda?tipo=gaste&monto=&viajeId=${v.id}`, { headers: { cookie } })).text();
         expect(vacio).toContain("Escribe el monto");
+      });
+
+      it("Así queda: sin nombre del chofer dice «al chofer», nunca «a el chofer»", async () => {
+        const chofer = (quedaDespues: number) => ({ chofer: { nombre: "el chofer", entregado: 10000, quedaAntes: 10000, quedaDespues }, viaje: null, categoria: null });
+        const queda = String(await AsiQuedaBloque({ r: chofer(4000) }));
+        expect(queda).toContain("Al chofer le quedan S/\u00a040 de S/\u00a0100");
+        const debe = String(await AsiQuedaBloque({ r: chofer(-4000) }));
+        expect(debe).toContain("Le debes S/\u00a040 al chofer");
+        expect(queda + debe).not.toMatch(/a el chofer|A el chofer/);
       });
 
       it("Gasté: se pide monto y en qué; viaje, camión y fecha se ponen solos; vuelve a donde estaba", async () => {
@@ -203,7 +225,7 @@ describe("web", () => {
         const html = await (await app.request("/anotar?tipo=chofer", { headers: { cookie } })).text();
         expect(html).toContain("¿Cómo se la diste?");
         const r = await enviar(cookie, { tipo: "chofer", volver: `/viajes/${v.id}`, monto: "500", medio: "yape", viajeId: String(v.id) });
-        expect(aviso(r)).toContain("ok=Entrega de S/ 500.00 anotada");
+        expect(aviso(r)).toContain("ok=Entrega de S/\u00a0500.00 anotada");
         expect((await liquidacionViaje(ctx, v.id)).entregado).toBe(50000);
       });
 
@@ -483,7 +505,7 @@ describe("web", () => {
       expect(aviso(r)).toContain("ok=");
       expect(aviso(await post(cookie, `/viajes/${v.id}/entrega`, { monto: "abc" }))).toContain("error=");
       const html = await (await app.request(`/viajes/${v.id}`, { headers: { cookie } })).text();
-      expect(html).toContain("El chofer tiene S/ 150.00 por rendir o devolver");
+      expect(html).toContain("El chofer tiene S/\u00a0150.00 por rendir o devolver");
       expect(html).toContain("Combustible");
       expect(html).toContain("Adelanto");
       const lista = await (await app.request("/viajes", { headers: { cookie } })).text();
@@ -523,11 +545,11 @@ describe("web", () => {
       const v = await registrarViajeFlota(ctx, { vehiculoId: 1, origenLugar: "Puno", destinoLugar: "Lima", estado: "en_curso", origen: "web" });
       html = await (await app.request(`/viajes/${v.id}`, { headers: { cookie } })).text();
       expect(html).toContain("PRESUPUESTO DEL VIAJE");
-      expect(html).toContain("S/ 800.00");
+      expect(html).toContain("S/\u00a0800.00");
       r = await post(cookie, `/viajes/${v.id}/presupuesto`, { m_combustible: "1000", m_viaticos: "50" });
       expect(aviso(r)).toContain("ok=");
       html = await (await app.request(`/viajes/${v.id}`, { headers: { cookie } })).text();
-      expect(html).toContain("S/ 1,050.00 previstos");
+      expect(html).toContain("S/\u00a01,050.00 previstos");
     });
 
     it("detalle del viaje: corregir y borrar gastos, cerrar y reabrir", async () => {
@@ -538,8 +560,8 @@ describe("web", () => {
       expect(aviso(await post(cookie, `/viajes/${v.id}/gasto/${g1.id}`, { categoria: "combustible", monto: "305", fecha: "2026-09-13" }))).toContain("ok=");
       expect(aviso(await post(cookie, `/viajes/${v.id}/gasto/${g2.id}/borrar`, {}))).toContain("ok=");
       let html = await (await app.request(`/viajes/${v.id}`, { headers: { cookie } })).text();
-      expect(html).toContain("S/ 305.00");
-      expect(html).not.toContain("S/ 50.00");
+      expect(html).toContain("S/\u00a0305.00");
+      expect(html).not.toContain("S/\u00a050.00");
       expect(aviso(await post(cookie, `/viajes/${v.id}/cerrar`, { km: "380", flete: "1200" }))).toContain("ok=");
       html = await (await app.request(`/viajes/${v.id}`, { headers: { cookie } })).text();
       expect(html).toContain("REABRIR VIAJE");

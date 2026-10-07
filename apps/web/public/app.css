@@ -304,10 +304,10 @@ body.sin-inferior .contenido { padding-bottom: 24px; }
 }
 
 /* ── Inicio ── */
-.tarjeta-oscura { background: var(--dark); color: var(--dark-text); border-radius: 8px; padding: 18px; display: flex; flex-direction: column; gap: 6px; }
+.tarjeta-oscura { background: var(--dark); color: var(--dark-text); border-radius: 8px; padding: 18px; display: flex; flex-direction: column; gap: 6px; container-type: inline-size; }
 .tarjeta-oscura .lbl, .tarjeta-oscura .sub { color: var(--dark-muted); }
 .tarjeta-oscura .sub { font-size: 13px; }
-.cifra-grande { font-family: var(--f-title); font-size: 36px; line-height: 1.1; color: var(--accent-on-dark); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.cifra-grande { font-family: var(--f-title); font-size: 36px; font-size: min(36px, 14cqi); white-space: nowrap; line-height: 1.1; color: var(--accent-on-dark); font-variant-numeric: tabular-nums; }
 .cifra-grande.neg { color: var(--accent-on-dark-2); }
 .tarjeta-oscura.perdida { box-shadow: inset 4px 0 0 var(--accent-on-dark-2); }
 .tres-cifras { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
@@ -403,7 +403,6 @@ body.sin-inferior .contenido { padding-bottom: 24px; }
 .asi-queda { background: var(--ok-bg); color: var(--ok); border-radius: 8px; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
 .asi-queda .lbl { color: var(--ok); font-weight: 700; }
 .asi-queda ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; }
-.asi-queda .antes { opacity: .8; }
 .asi-queda .t-cambiar { color: var(--accent); font-weight: 600; }
 @media (min-width: 900px) {
   .panel-anotar:not([hidden]) { display: block; position: fixed; top: 0; right: 0; bottom: 0; width: 400px; z-index: 30; overflow-y: auto; background: var(--panel); border-left: 1px solid var(--border); box-shadow: -8px 0 24px rgba(18, 23, 25, .12); padding: 20px; }

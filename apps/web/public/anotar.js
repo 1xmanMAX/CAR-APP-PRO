@@ -6,15 +6,20 @@
   const panel = document.getElementById("panel-anotar");
   const ancho = window.matchMedia("(min-width: 900px)");
 
+  const enlazados = new WeakSet();
+  // «Así queda» es solo de la PC: en el celular no se escucha ni se pide nada.
   function enlazarAsiQueda(raiz) {
+    if (!ancho.matches) return;
     const form = raiz.querySelector("form[data-asi-queda]");
-    if (!form) return;
+    if (!form || enlazados.has(form)) return;
+    enlazados.add(form);
     let espera = null;
     let vuelta = 0;
     const refrescar = async () => {
+      if (!ancho.matches) return;
       const f = new FormData(form);
       const cat = f.get("categoria") === "otro" ? f.get("categoriaOtra") : f.get("categoria");
-      const q = new URLSearchParams({ tipo: f.get("tipo") || "", monto: f.get("monto") || "", viajeId: f.get("viajeId") || "", categoria: cat || "" });
+      const q = new URLSearchParams({ tipo: f.get("tipo") || "", monto: f.get("monto") || "", viajeId: f.get("viajeId") || "", categoria: cat || "", medioPago: f.get("medioPago") || "" });
       const esta = ++vuelta;
       try {
         const r = await fetch(`/anotar/asi-queda?${q}`, { credentials: "same-origin" });
@@ -48,8 +53,11 @@
       panel.hidden = false;
       document.body.classList.add("con-panel");
       enlazarAsiQueda(panel);
+      // Al monto; si el tipo no tiene (cobro sin facturas, cuotas…), al título del panel.
       const monto = panel.querySelector("input[name=monto], input[name=manoObra], input[name=costo]");
+      const titulo = panel.querySelector("h1");
       if (monto) monto.focus();
+      else if (titulo) { titulo.setAttribute("tabindex", "-1"); titulo.focus(); }
     } catch (e) {
       location.href = url;
     } finally {
@@ -80,16 +88,11 @@
         abrir(a.href);
       }
     });
-    document.addEventListener("submit", (e) => {
-      const f = e.target;
-      if (!ancho.matches || !f.matches || !f.matches("form[data-panel-form]")) return;
-      e.preventDefault();
-      const q = new URLSearchParams(new FormData(f));
-      abrir(`${f.getAttribute("action")}?${q}`);
-    });
     document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !panel.hidden) cerrar(); });
     // Si la ventana se achica a tamaño celular, el panel se cierra (en el celular Anotar es su propia página).
     ancho.addEventListener("change", () => { if (!ancho.matches && !panel.hidden) cerrar(); });
   }
   enlazarAsiQueda(document);
+  // Si la ventana pasa a tamaño PC con /anotar abierto, «Así queda» empieza a escuchar.
+  ancho.addEventListener("change", () => enlazarAsiQueda(document));
 })();

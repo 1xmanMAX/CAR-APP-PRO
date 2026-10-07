@@ -66,4 +66,17 @@ describe("consultas de Inicio", () => {
     expect(e.viaje).toBeNull();
     expect(e.categoria).toBeNull();
   });
+
+  it("así queda: la línea del chofer solo si le diste plata o el gasto es con su efectivo", async () => {
+    const v = await registrarViajeFlota(ctx, { vehiculoId: 1, origenLugar: "Yura", destinoLugar: "Puno", estado: "en_curso", origen: "web" });
+    // Sin entregas: con tarjeta o crédito no se le debe nada al chofer.
+    expect((await asiQueda(ctx, { tipo: "gasto", monto: 5000, viajeId: v.id, categoria: "peaje", medioPago: "tarjeta" })).chofer).toBeNull();
+    expect((await asiQueda(ctx, { tipo: "gasto", monto: 5000, viajeId: v.id, categoria: "peaje", medioPago: "credito" })).chofer).toBeNull();
+    // Con su efectivo (o automático: con viaje es efectivo del chofer), sí.
+    expect((await asiQueda(ctx, { tipo: "gasto", monto: 5000, viajeId: v.id, medioPago: "efectivo_chofer" })).chofer).toMatchObject({ quedaDespues: -5000 });
+    expect((await asiQueda(ctx, { tipo: "gasto", monto: 5000, viajeId: v.id })).chofer).toMatchObject({ quedaDespues: -5000 });
+    // Si ya le diste plata, siempre se muestra cuánto le queda.
+    await registrarEntrega(ctx, { viajeId: v.id, monto: 20000, medio: "efectivo" });
+    expect((await asiQueda(ctx, { tipo: "gasto", monto: 5000, viajeId: v.id, medioPago: "tarjeta" })).chofer).toMatchObject({ entregado: 20000, quedaDespues: 15000 });
+  });
 });

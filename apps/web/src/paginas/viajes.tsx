@@ -1,236 +1,172 @@
 /** @jsxRuntime automatic @jsxImportSource hono/jsx */
+import type { FC } from "hono/jsx";
 import {
-  AVISO_RETORNO_VACIO, editarViajeFlota, emitirFactura, guiasConAvisoRetornoVacio, enlazarGuia, ErrorNegocio, finalizarViajeFlota, hoy, listarCobrosPendientes, listarGuias,
-  listarUnidades, listarViajesFlota, parsearMonto, FaltaDatoTransporteError, prepararFactura, puedeEditar, rangoMes, registrarViajeFlota,
-  sumarDias, formatearSoles, archivosDocumento, contarPorRevisar, puedeVer, listarDocumentosAtascados, confirmarFacturaEnSol, reconsultarGuia,
+  AVISO_RETORNO_VACIO, editarViajeFlota, emitirFactura, guiasConAvisoRetornoVacio, enlazarGuia, ErrorNegocio, finalizarViajeFlota, hoy, listarCobrosPendientes,
+  listarGuias, listarGuiasSinViaje, listarUnidades, listarViajesFlota, parsearMonto, FaltaDatoTransporteError, prepararFactura, puedeEditar, rangoMes,
+  registrarViajeFlota, sumarDias, formatearSoles, archivosDocumento, viajesEnRuta, listarDocumentosAtascados, confirmarFacturaEnSol, reconsultarGuia,
+  type Contexto,
 } from "@sunatapp/core";
 import { guardarCobro } from "../acciones";
 import { accion, formulario, pagina, servirDeAlmacen, volverA, type App, type C, type Deps } from "../base";
 import { enteroONull } from "./flota";
-import { fechaCorta, Kpi, miles, Origen, Panel, soles, soles2, Vacio } from "../ui";
+import { Cabecera, diasEntre, ESTADO_GUIA, fechaCorta, ListaViajes, mesLargo, TarjetaEnRuta, Vacio } from "../ui";
 
-const CHIP_FACTURA: Record<string, string> = { PAGADA: "ok", PENDIENTE: "proximo", VENCIDA: "cambiar", "SIN FACTURA": "neutro" };
-const ESTADO_GUIA: Record<string, string> = { borrador: "neutro", pendiente_envio: "proximo", enviada: "proximo", aceptada: "ok", rechazada: "cambiar" };
+/** Formulario de «Facturar» de una guía aceptada (también lo usa el detalle del viaje). */
+export const FormFacturar: FC<{ guiaId: number; etiqueta: string; volver: string; aviso?: string | null }> = (p) => (
+  <details class="plegable">
+    <summary class="btn chico primario">{p.etiqueta}</summary>
+    <form method="post" action={`/guias/${p.guiaId}/facturar`} class="filas sub-form">
+      <input type="hidden" name="volver" value={p.volver} />
+      {p.aviso ? <span class="aviso info">⚠️ {p.aviso}</span> : null}
+      <label class="campo"><span>Monto S/</span><input name="monto" inputmode="decimal" required /></label>
+      <label class="campo"><span>El monto…</span><select name="igv"><option value="sin">no incluye IGV</option><option value="con">ya incluye IGV</option></select></label>
+      <label class="campo"><span>Pago</span><select name="pago"><option value="contado">Contado</option><option value="credito">Crédito</option></select></label>
+      <label class="campo"><span>Días de crédito</span><input name="dias" inputmode="numeric" placeholder="30" /></label>
+      <button class="btn primario" type="submit">Emitir factura</button>
+    </form>
+  </details>
+);
 
-function diasEntre(a: string, b: string) {
-  return Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86_400_000);
+/** Ids de las guías (de [guias]) aceptadas y sin facturar cuya unidad jala una cisterna (aviso del ×1.4). */
+export async function avisosRetornoVacio(ctx: Contexto, guias: Array<{ id: number; estado: string }>): Promise<Set<number>> {
+  return guiasConAvisoRetornoVacio(ctx, guias.filter((g) => g.estado === "aceptada").map((g) => g.id));
 }
+
+type Atascados = Awaited<ReturnType<typeof listarDocumentosAtascados>>;
+
+/** Facturas y guías de SUNAT que el fondo ya no mueve solo: el dueño las resuelve aquí (también se avisa en Inicio). */
+const DocumentosAtascados: FC<{ a: Atascados }> = ({ a }) => (
+  <section class="col" id="sunat-atascados">
+    <h2 class="titulo-seccion">Documentos que esperan tu ayuda · SUNAT</h2>
+    <div class="lista-filas">
+      {a.facturas.map((f) => (
+        <form method="post" action={`/facturas/${f.id}/en-sol`} class="fila-atascado">
+          <span><b>Factura {f.serieNumero}</b>: SUNAT dice que ya la tiene, pero no mandó su constancia. Entra a SOL, busca esta factura y dinos qué ves.</span>
+          <span class="aviso info">Si acabas de emitirla, espera unos minutos antes de responder: SOL puede tardar en mostrarla.</span>
+          <div class="linea">
+            <button class="btn primario" type="submit" name="enSol" value="si">YA LA VERIFIQUÉ EN SOL: ESTÁ ACEPTADA</button>
+            <button class="btn" type="submit" name="enSol" value="no">NO ESTÁ EN SOL</button>
+          </div>
+        </form>
+      ))}
+      {a.porReemitir.map((f) => (
+        <form method="post" action={`/facturas/${f.id}/reemitir`} class="fila-atascado">
+          <span><b>Factura {f.serieNumero}</b>: no está en SOL. Vuelve a emitirla; saldrá con otro número.</span>
+          <div class="linea"><button class="btn primario" type="submit">VOLVER A EMITIR</button></div>
+        </form>
+      ))}
+      {a.guias.map((g) => (
+        <form method="post" action={`/guias/${g.id}/reconsultar`} class="fila-atascado">
+          <span><b>Guía {g.serieNumero}</b>: SUNAT no respondió y dejamos de preguntar.</span>
+          <div class="linea"><button class="btn primario" type="submit">VOLVER A CONSULTAR</button></div>
+        </form>
+      ))}
+    </div>
+  </section>
+);
 
 async function vista(c: C, d: Deps) {
   const ctx = d.ctx;
-  const porRevisar = puedeVer(c.get("usuario").rol, "viajes") ? await contarPorRevisar(ctx) : 0;
   const h = hoy(ctx);
-  const mes = c.req.query("mes") ?? h.slice(0, 7);
+  const q = c.req.query("mes") ?? "";
+  const mes = /^\d{4}-\d{2}$/.test(q) ? q : h.slice(0, 7);
   const { desde, hasta } = rangoMes(`${mes}-01`);
   const unidadId = c.req.query("unidad") ? Number(c.req.query("unidad")) : undefined;
-  const [unidades, viajes, cobros, guias, enCurso] = await Promise.all([
-    listarUnidades(ctx),
-    listarViajesFlota(ctx, { desde, hasta, vehiculoId: unidadId }),
-    listarCobrosPendientes(ctx),
-    listarGuias(ctx, 15),
-    listarViajesFlota(ctx, { desde: sumarDias(h, -120), hasta: h }).then((v) => v.filter((x) => x.estado === "en_curso")),
-  ]);
-  const conFlete = viajes.filter((v) => v.flete > 0);
-  const km = viajes.reduce((s, v) => s + (v.km ?? 0), 0);
   const edita = puedeEditar(c.get("usuario").rol, "viajes");
-  const viajesSinGuia = (await listarViajesFlota(ctx, { desde: sumarDias(h, -60), hasta: h })).filter((v) => v.guia === "—" || !v.facturas.length);
+  const [unidades, viajes, enRuta, guias, sinViaje, recientes, cobros] = await Promise.all([
+    listarUnidades(ctx), listarViajesFlota(ctx, { desde, hasta, vehiculoId: unidadId }), viajesEnRuta(ctx), listarGuias(ctx, 15),
+    listarGuiasSinViaje(ctx), listarViajesFlota(ctx, { desde: sumarDias(h, -60), hasta: h }), listarCobrosPendientes(ctx),
+  ]);
   // Documentos que el fondo ya no mueve solo: solo el dueño los resuelve.
   const atascados = c.get("usuario").rol === "dueno" ? await listarDocumentosAtascados(ctx) : null;
   const hayAtascados = !!atascados && atascados.facturas.length + atascados.guias.length + atascados.porReemitir.length > 0;
-  const retornoVacio = await guiasConAvisoRetornoVacio(ctx, guias.filter((g) => g.estado === "aceptada" && !g.facturada).map((g) => g.id));
-
-  return pagina(c, d, { titulo: "Viajes, guías y facturas", seccion: "viajes" }, (
+  const retornoVacio = await avisosRetornoVacio(ctx, guias.filter((g) => !g.facturada));
+  const delMes = viajes.filter((v) => v.estado !== "en_curso");
+  return pagina(c, d, { titulo: "Viajes", seccion: "viajes" }, (
     <>
-      {porRevisar > 0 ? <a class="aviso info" href="/revisar" style="display:block;text-decoration:none">🔎 <b>{porRevisar} por revisar</b>: mensajes de Telegram sin confirmar o gastos sin viaje. Revisar →</a> : null}
-      {hayAtascados && atascados ? (
-        <Panel titulo="DOCUMENTOS QUE ESPERAN TU AYUDA · SUNAT">
-          <div class="filas">
-            {atascados.facturas.map((f) => (
-              <form method="post" action={`/facturas/${f.id}/en-sol`} class="filas" style="gap:6px">
-                <span><b>Factura {f.serieNumero}</b>: SUNAT dice que ya la tiene, pero no mandó su constancia. Entra a SOL, busca esta factura y dinos qué ves.</span>
-                <span class="aviso info" style="font-size:12px">Si acabas de emitirla, espera unos minutos antes de responder: SOL puede tardar en mostrarla.</span>
-                <div class="linea">
-                  <button class="btn primario chico" type="submit" name="enSol" value="si" style="min-height:44px">YA LA VERIFIQUÉ EN SOL: ESTÁ ACEPTADA</button>
-                  <button class="btn chico" type="submit" name="enSol" value="no" style="min-height:44px">NO ESTÁ EN SOL</button>
-                </div>
-              </form>
-            ))}
-            {atascados.porReemitir.map((f) => (
-              <form method="post" action={`/facturas/${f.id}/reemitir`} class="linea">
-                <span style="flex:1"><b>Factura {f.serieNumero}</b>: no está en SOL. Vuelve a emitirla; saldrá con otro número.</span>
-                <button class="btn primario chico" type="submit" style="min-height:44px">VOLVER A EMITIR</button>
-              </form>
-            ))}
-            {atascados.guias.map((g) => (
-              <form method="post" action={`/guias/${g.id}/reconsultar`} class="linea">
-                <span style="flex:1"><b>Guía {g.serieNumero}</b>: SUNAT no respondió y dejamos de preguntar.</span>
-                <button class="btn primario chico" type="submit" style="min-height:44px">VOLVER A CONSULTAR</button>
-              </form>
-            ))}
-          </div>
-        </Panel>
+      <Cabecera titulo="Viajes" der={edita ? <a class="btn primario" href="#nuevo-viaje">+ Nuevo viaje</a> : null} />
+      {hayAtascados && atascados ? <DocumentosAtascados a={atascados} /> : null}
+      {enRuta.length ? (
+        <section class="col">
+          <h2 class="titulo-seccion">En ruta</h2>
+          <div class="grid-tarjetas">{enRuta.map((v) => <TarjetaEnRuta v={v} />)}</div>
+        </section>
       ) : null}
-      <section class="kpis">
-        <Kpi oscuro etiqueta="VIAJES DEL MES" valor={viajes.length} sub={mes} />
-        <Kpi etiqueta="KM RECORRIDOS" valor={miles(km)} />
-        <Kpi etiqueta="FLETE PROMEDIO" valor={soles(conFlete.length ? conFlete.reduce((s, v) => s + v.flete, 0) / conFlete.length : 0)} />
-        <Kpi etiqueta="POR COBRAR" valor={soles(cobros.totalPendiente)} sub={cobros.totalVencido ? `${soles(cobros.totalVencido)} vencido` : undefined} negativo={cobros.totalVencido > 0} />
-      </section>
-
-      <div class="grid g-lado">
-        <div class="filas" style="gap:10px;min-width:0">
-          <Panel titulo="VIAJES · CADA VIAJE SUMA KM Y 1 VIAJE A LAS PARTES DE SU UNIDAD" der={
-            <>
-              <form method="get" action="/viajes" class="linea">
-                <input type="month" name="mes" value={mes} aria-label="Mes" style="width:auto" />
-                <select name="unidad" aria-label="Unidad" style="width:auto"><option value="">TODAS</option>{unidades.map((u) => <option value={u.id} selected={u.id === unidadId}>{u.codigo}</option>)}</select>
-                <button class="btn chico" type="submit">VER</button>
-              </form>
-              <a class="btn chico" href="/rutas">RUTAS Y PRESUPUESTOS</a>
-              <a class="btn chico" href="/revisar">🔎 POR REVISAR</a>
-              {edita ? <a class="btn primario chico" href="#nuevo-viaje">+ VIAJE</a> : null}
-            </>
-          }>
-            <div class="tabla-wrap">
-              <table class="t">
-                <thead><tr><th>Guía</th><th>Unid.</th><th>Ruta</th><th class="num">Km</th><th class="num">Ton</th><th class="num">Flete</th><th class="num">Costo</th><th class="num">Marg.</th><th>Factura</th><th>Origen</th></tr></thead>
-                <tbody>
-                  {viajes.length === 0 ? <tr><td colspan={10}><Vacio>Sin viajes en {mes}.</Vacio></td></tr> : viajes.map((v) => (
-                    <tr>
-                      <td class="nowrap"><b>{v.guia}</b><div class="muted" style="font-size:12px"><a href={`/viajes/${v.id}`} title="Liquidación del viaje">{v.codigo}</a> · {fechaCorta(v.fecha)}</div></td>
-                      <td><b>{v.unidad}</b></td>
-                      <td>{v.ruta}{v.estado === "en_curso" ? <> <span class="chip ok">EN CURSO</span></> : null}</td>
-                      <td class="num">{miles(v.km)}</td>
-                      <td class="num">{v.toneladas ?? "—"}</td>
-                      <td class="num">{v.flete ? soles(v.flete) : "—"}</td>
-                      <td class="num"><a href={`/viajes/${v.id}`} title="Liquidación: entregado, gastos y semáforo">{soles(v.costo)}</a></td>
-                      <td class={`num ${v.margenPct !== null && v.margenPct < 0 ? "t-cambiar" : ""}`}>{v.margenPct === null ? "—" : `${v.margenPct}%`}</td>
-                      <td><span class={`chip ${CHIP_FACTURA[v.factura]}`}>{v.factura}</span>{v.facturas.length ? <div class="muted" style="font-size:12px">{v.facturas.join(", ")}</div> : null}</td>
-                      <td><Origen origen={v.origen} /></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </Panel>
-
-          {edita ? (
-            <div class="grid g-2">
-              <Panel titulo="+ REGISTRAR VIAJE" id="nuevo-viaje">
-                <form method="post" action="/viajes" class="filas">
-                  <div class="form-grid">
-                    <label class="campo"><span>Unidad</span><select name="vehiculoId">{unidades.map((u) => <option value={u.id}>{u.codigo} · {u.placa}</option>)}</select></label>
-                    <label class="campo"><span>Fecha</span><input type="date" name="fecha" value={h} /></label>
-                    <label class="campo"><span>Origen *</span><input name="origen" required placeholder="Juliaca" /></label>
-                    <label class="campo"><span>Destino *</span><input name="destino" required placeholder="Arequipa" /></label>
-                    <label class="campo"><span>Km</span><input name="km" inputmode="numeric" placeholder="1290" /></label>
-                    <label class="campo"><span>Toneladas</span><input name="toneladas" inputmode="decimal" /></label>
-                    <label class="campo"><span>Flete S/ (sin IGV)</span><input name="flete" inputmode="decimal" /></label>
-                    <label class="campo"><span>Guía</span><input name="guia" placeholder="T001-0214" /></label>
-                  </div>
-                  <fieldset class="campo" style="border:0;padding:0;margin:0"><legend class="lbl">ESTADO</legend>
-                    <div class="radios">
-                      <label><input type="radio" name="estado" value="cerrado" checked /><span>YA SE HIZO (suma los km)</span></label>
-                      <label><input type="radio" name="estado" value="en_curso" /><span>SALE AHORA</span></label>
-                    </div>
-                  </fieldset>
-                  <button class="btn primario" type="submit">REGISTRAR VIAJE</button>
-                </form>
-              </Panel>
-              <Panel titulo="CERRAR VIAJE EN CURSO">
-                {enCurso.length === 0 ? <Vacio>No hay viajes en curso.</Vacio> : (
-                  <form method="post" action="/viajes/fin" class="filas">
-                    <label class="campo"><span>Viaje</span><select name="viajeId">{enCurso.map((v) => <option value={v.id}>{v.unidad} · {v.codigo} · {v.ruta}</option>)}</select></label>
-                    <div class="form-grid">
-                      <label class="campo"><span>Odómetro final (km)</span><input name="odometro" inputmode="numeric" /></label>
-                      <label class="campo"><span>o km recorridos</span><input name="km" inputmode="numeric" /></label>
-                      <label class="campo"><span>Flete S/</span><input name="flete" inputmode="decimal" /></label>
-                    </div>
-                    <button class="btn primario" type="submit">CERRAR VIAJE</button>
-                  </form>
-                )}
-                <hr style="border:0;border-top:1px solid var(--divider);width:100%" />
-                <b class="lbl-12">CORREGIR FLETE DE UN VIAJE</b>
-                <form method="post" action="/viajes/flete" class="linea">
-                  <select name="viajeId" aria-label="Viaje" style="flex:2">{viajes.map((v) => <option value={v.id}>{v.codigo} · {v.unidad} · {v.ruta}</option>)}</select>
-                  <input name="flete" inputmode="decimal" placeholder="S/" aria-label="Flete" style="flex:1" />
-                  <button class="btn chico" type="submit">GUARDAR</button>
-                </form>
-              </Panel>
-            </div>
-          ) : null}
-
-          <Panel titulo="GUÍAS DE REMISIÓN · SUNAT" der={<span class="lbl">SE EMITEN DESDE EL BOT: ENVÍALE EL PDF DEL REMITENTE</span>}>
-            <div class="tabla-wrap">
-              <table class="t">
-                <thead><tr><th>Guía</th><th>Traslado</th><th>Remitente</th><th>Destinatario</th><th>Estado</th><th>Archivos</th>{edita ? <th>Acciones</th> : null}</tr></thead>
-                <tbody>
-                  {guias.length === 0 ? <tr><td colspan={7}><Vacio>Sin guías todavía.</Vacio></td></tr> : guias.map((g) => (
-                    <tr>
-                      <td class="nowrap"><b>{g.serieNumero}</b></td><td>{fechaCorta(g.fechaTraslado)}</td><td>{g.remitente}</td><td>{g.destinatario}</td>
-                      <td><span class={`chip ${ESTADO_GUIA[g.estado]}`}>{g.estado.toUpperCase().replace("_", " ")}</span>{g.facturada ? <span class="chip ok" style="margin-left:4px">FACTURADA</span> : null}</td>
-                      <td class="nowrap"><a href={`/guias/${g.id}/pdf`}>PDF</a> · <a href={`/guias/${g.id}/xml`}>XML</a> · <a href={`/guias/${g.id}/cdr`}>CDR</a></td>
-                      {edita ? (
-                        <td>
-                          {g.estado === "aceptada" && !g.facturada ? (
-                            <details class="plegable"><summary><span class="btn chico">+ FACTURA</span></summary>
-                              <form method="post" action={`/guias/${g.id}/facturar`} class="filas" style="margin-top:6px;min-width:220px">
-                                {retornoVacio.has(g.id) ? <span class="aviso info" style="font-size:12px">⚠️ {AVISO_RETORNO_VACIO}</span> : null}
-                                <label class="campo"><span>Monto S/</span><input name="monto" inputmode="decimal" required /></label>
-                                <label class="campo"><span>El monto…</span><select name="igv"><option value="sin">no incluye IGV</option><option value="con">ya incluye IGV</option></select></label>
-                                <label class="campo"><span>Pago</span><select name="pago"><option value="contado">Contado</option><option value="credito">Crédito</option></select></label>
-                                <label class="campo"><span>Días de crédito</span><input name="dias" inputmode="numeric" placeholder="30" /></label>
-                                <button class="btn primario chico" type="submit">EMITIR FACTURA</button>
-                              </form>
-                            </details>
-                          ) : null}
-                          <details class="plegable"><summary><span class="lbl-12" style="text-decoration:underline;cursor:pointer">enlazar a viaje</span></summary>
-                            <form method="post" action={`/guias/${g.id}/enlazar`} class="linea" style="margin-top:6px">
-                              <select name="viajeId" aria-label="Viaje">{viajesSinGuia.map((v) => <option value={v.id}>{v.codigo} · {v.unidad} · {v.ruta}</option>)}</select>
-                              <select name="tramo" aria-label="Tramo"><option value="ida">ida</option><option value="retorno">retorno</option></select>
-                              <button class="btn chico" type="submit">ENLAZAR</button>
-                            </form>
-                          </details>
-                        </td>
-                      ) : null}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </Panel>
+      <section class="col">
+        <div class="fila-sep">
+          <h2 class="titulo-seccion">{mesLargo(mes)} {mes.slice(0, 4)} · {delMes.length} {delMes.length === 1 ? "viaje" : "viajes"}</h2>
+          <form method="get" action="/viajes" class="linea filtro">
+            <input type="month" name="mes" value={mes} aria-label="Mes" />
+            <select name="unidad" aria-label="Camión"><option value="">Todos</option>{unidades.map((u) => <option value={u.id} selected={u.id === unidadId}>{u.codigo}</option>)}</select>
+            <button class="btn chico" type="submit">Ver</button>
+          </form>
         </div>
-
-        <Panel clase="oscuro" titulo="POR COBRAR · ANTIGÜEDAD">
-          {cobros.filas.length === 0 ? <span class="muted">No hay facturas por cobrar. 👌</span> : (
-            <div class="filas">
-              {[...cobros.filas].sort((a, b) => a.fechaVencimiento.localeCompare(b.fechaVencimiento)).map((f) => {
-                const dias = diasEntre(f.fechaVencimiento, h);
-                return (
-                  <div style="border-bottom:1px solid #243034;padding-bottom:8px">
-                    <div style="display:flex;justify-content:space-between;gap:6px"><b>{f.serieNumero}</b><b style="color:var(--accent-on-dark)">{soles2(f.saldo)}</b></div>
-                    <div style="display:flex;justify-content:space-between;gap:6px;font-size:12px"><span class="muted">{f.cliente}</span>
-                      <span style={dias > 0 ? "color:var(--accent-on-dark-2)" : dias === 0 ? "color:var(--amber-dark)" : "color:var(--ok-dark)"}>{dias > 0 ? `${dias} DÍAS VENCIDA` : dias === 0 ? "VENCE HOY" : `VENCE EN ${-dias} DÍAS`}</span>
-                    </div>
-                    {edita ? (
-                      <details class="plegable"><summary><span class="lbl" style="text-decoration:underline;cursor:pointer;color:var(--dark-text)">registrar cobro</span></summary>
-                        <form method="post" action={`/cobros/${f.facturaId}`} class="linea" style="margin-top:6px">
-                          <input name="monto" inputmode="decimal" placeholder={String(f.saldo / 100)} aria-label="Monto cobrado" style="flex:1" />
-                          <select name="medio" aria-label="Medio" style="flex:1"><option value="transferencia">Transferencia</option><option value="efectivo">Efectivo</option><option value="otro">Otro</option></select>
-                          <button class="btn chico" type="submit">OK</button>
-                        </form>
-                      </details>
-                    ) : null}
-                  </div>
-                );
-              })}
+        {delMes.length === 0 ? <div class="lista-filas"><Vacio>Sin viajes cerrados en {mesLargo(mes)}.</Vacio></div> : <ListaViajes viajes={delMes} />}
+      </section>
+      {edita ? (
+        <details class="plegable panel" id="nuevo-viaje">
+          <summary class="ver-mas">+ Nuevo viaje</summary>
+          <form method="post" action="/viajes" class="filas">
+            <p class="muted nota-saldo">Los viajes también nacen solos de la guía que le mandas al bot.</p>
+            <div class="form-grid">
+              <label class="campo"><span>Camión</span><select name="vehiculoId">{unidades.map((u) => <option value={u.id}>{u.codigo} · {u.placa}</option>)}</select></label>
+              <label class="campo"><span>Origen *</span><input name="origen" required placeholder="Juliaca" /></label>
+              <label class="campo"><span>Destino *</span><input name="destino" required placeholder="Arequipa" /></label>
+              <label class="campo"><span>Flete S/ (sin IGV)</span><input name="flete" inputmode="decimal" /></label>
             </div>
+            <fieldset class="grupo"><legend class="lbl">¿Ya se hizo o sale ahora?</legend>
+              <div class="radios">
+                <label><input type="radio" name="estado" value="en_curso" checked /><span>Sale ahora</span></label>
+                <label><input type="radio" name="estado" value="cerrado" /><span>Ya se hizo (suma los km)</span></label>
+              </div>
+            </fieldset>
+            <details class="plegable"><summary class="ver-mas">Más datos</summary>
+              <div class="form-grid">
+                <label class="campo"><span>Fecha</span><input type="date" name="fecha" value={h} /></label>
+                <label class="campo"><span>Km</span><input name="km" inputmode="numeric" placeholder="1290" /></label>
+                <label class="campo"><span>Toneladas</span><input name="toneladas" inputmode="decimal" /></label>
+                <label class="campo"><span>Guía</span><input name="guia" placeholder="T001-0214" /></label>
+              </div>
+            </details>
+            <button class="btn primario" type="submit">Guardar viaje</button>
+          </form>
+        </details>
+      ) : null}
+      <details class="plegable panel">
+        <summary class="ver-mas">Ver más · guías, cobros y rutas</summary>
+        <div class="filas">
+          <h3 class="titulo-seccion">Guías de remisión (SUNAT)</h3>
+          {guias.length === 0 ? <Vacio>Sin guías todavía: se emiten desde el bot mandándole el PDF del remitente.</Vacio> : (
+            <div class="lista-filas">{guias.map((g) => (
+              <div class="fila-papel">
+                <span class={`chip ${ESTADO_GUIA[g.estado] ?? "neutro"}`}>{g.facturada ? "FACTURADA" : g.estado.toUpperCase().replace("_", " ")}</span>
+                <span><b>{g.serieNumero}</b> · {fechaCorta(g.fechaTraslado)} · {g.destinatario}</span>
+                <span class="archivos"><a href={`/guias/${g.id}/pdf`}>PDF</a> · <a href={`/guias/${g.id}/xml`}>XML</a> · <a href={`/guias/${g.id}/cdr`}>CDR</a></span>
+                {edita && g.estado === "aceptada" && !g.facturada
+                  ? <FormFacturar guiaId={g.id} etiqueta="Facturar" volver="/viajes" aviso={retornoVacio.has(g.id) ? AVISO_RETORNO_VACIO : null} /> : null}
+              </div>
+            ))}</div>
           )}
-          {edita && cobros.filas.length ? (
-            <form method="post" action="/cobros/recordar"><button class="btn primario" type="submit" style="width:100%">RECORDAR COBRO POR TELEGRAM</button></form>
+          {edita && sinViaje.length ? (
+            <>
+              <h3 class="titulo-seccion">Guías sin viaje</h3>
+              <div class="lista-filas">{sinViaje.map((g) => (
+                <form method="post" action={`/guias/${g.id}/enlazar`} class="linea fila-papel">
+                  <input type="hidden" name="volver" value="/viajes" />
+                  <span><b>{g.serieNumero}</b> · {fechaCorta(g.fechaTraslado)}</span>
+                  <select name="viajeId" aria-label="Viaje">{recientes.map((v) => <option value={v.id}>{v.codigo} · {v.unidad} · {v.ruta}</option>)}</select>
+                  <select name="tramo" aria-label="Tramo"><option value="ida">ida</option><option value="retorno">retorno</option></select>
+                  <button class="btn chico" type="submit">Enlazar</button>
+                </form>
+              ))}</div>
+            </>
           ) : null}
-        </Panel>
-      </div>
+          {edita && cobros.filas.length ? (
+            <form method="post" action="/cobros/recordar"><button class="btn" type="submit">Recordar los cobros por Telegram ({cobros.filas.length})</button></form>
+          ) : null}
+          <a class="ver-mas" href="/rutas">Rutas y presupuestos →</a>
+        </div>
+      </details>
     </>
   ));
 }
@@ -265,7 +201,7 @@ export function rutasViajes(app: App, d: Deps): void {
   });
   app.post("/viajes/flete", async (c) => {
     const f = await formulario(c);
-    return accion(c, "/viajes", async () => {
+    return accion(c, volverA(f.volver, "/viajes"), async () => {
       const flete = f.flete ? parsearMonto(f.flete) : null;
       await editarViajeFlota(d.ctx, Number(f.viajeId), { flete }, c.get("usuario").id);
       return "Flete actualizado";
@@ -273,7 +209,7 @@ export function rutasViajes(app: App, d: Deps): void {
   });
   app.post("/guias/:id/facturar", async (c) => {
     const f = await formulario(c);
-    return accion(c, "/viajes", async () => {
+    return accion(c, volverA(f.volver, "/viajes"), async () => {
       const monto = parsearMonto(f.monto ?? "");
       if (monto === null) throw new ErrorNegocio("Monto no válido");
       const credito = f.pago === "credito";
@@ -284,7 +220,7 @@ export function rutasViajes(app: App, d: Deps): void {
           diasCredito: credito ? (enteroONull(f.dias) ?? 30) : undefined,
         }, c.get("usuario").id));
       } catch (error) {
-        if (error instanceof FaltaDatoTransporteError) throw new ErrorNegocio(`${error.message} — complétalo en Rutas (valor referencial) o en Flota (carga útil)`);
+        if (error instanceof FaltaDatoTransporteError) throw new ErrorNegocio(`${error.message} — complétalo en Ajustes › Rutas (valor referencial) o en Camiones (carga útil)`);
         throw error;
       }
       const r = await emitirFactura(d.ctx, facturaId);
@@ -318,7 +254,7 @@ export function rutasViajes(app: App, d: Deps): void {
   }));
   app.post("/guias/:id/enlazar", async (c) => {
     const f = await formulario(c);
-    return accion(c, "/viajes", async () => {
+    return accion(c, volverA(f.volver, "/viajes"), async () => {
       await enlazarGuia(d.ctx, Number(c.req.param("id")), Number(f.viajeId), f.tramo === "retorno" ? "retorno" : "ida", c.get("usuario").id);
       return "Guía enlazada al viaje";
     });

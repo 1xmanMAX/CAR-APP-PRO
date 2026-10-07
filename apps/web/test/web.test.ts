@@ -450,7 +450,7 @@ describe("web", () => {
       html = await (await app.request("/rentabilidad?vista=mes", { headers: { cookie } })).text();
       expect(html).toContain("GANANCIA NETA");
       html = await (await app.request(`/viajes/${v.id}`, { headers: { cookie } })).text();
-      expect(html).toContain("FIJO ASIGNADO");
+      expect(html).toContain("Fijo asignado");
       const x = await app.request("/estadisticas.xlsx?desde=2026-09-01&hasta=2026-09-30", { headers: { cookie } });
       expect(x.status).toBe(200);
     });
@@ -516,6 +516,22 @@ describe("web", () => {
       expect(datos.repuestosPieza["retrovisor-der"]).toEqual([expect.objectContaining({ id, stock: 0 })]);
     });
 
+    it("viajes: en ruta arriba, lista del mes y el detalle con todo del viaje", async () => {
+      const cookie = await entrar();
+      const cerrado = await registrarViajeFlota(ctx, { vehiculoId: 1, origenLugar: "Arequipa", destinoLugar: "Juliaca", estado: "cerrado", km: 300, flete: 320000, origen: "web" });
+      await registrarGasto(ctx, { viajeId: cerrado.id, categoria: "combustible", monto: 106000, origen: "web" });
+      const enRuta = await registrarViajeFlota(ctx, { vehiculoId: 1, origenLugar: "Yura", destinoLugar: "Puno", estado: "en_curso", flete: 350000, origen: "web" });
+      const lista = await (await app.request("/viajes", { headers: { cookie } })).text();
+      for (const t of ["En ruta", "Yura → Puno", "Arequipa → Juliaca", "S/ 2,140", "+ Nuevo viaje"]) expect(lista, t).toContain(t);
+      const det = await (await app.request(`/viajes/${enRuta.id}`, { headers: { cookie } })).text();
+      for (const t of ["Este viaje te deja", "S/ 3,500", "Le diste a Jhon", "Le queda", "Gastos del viaje", "Papeles y cobro", "+ Anotar", "Cerrar viaje", "Ver más"]) expect(det, t).toContain(t);
+      expect(det).toContain(`/anotar?tipo=gaste&amp;viajeId=${enRuta.id}`);
+      // El cierre pide solo lo que falta: este viaje ya tiene flete pero no km.
+      const cierre = det.slice(det.indexOf(`action="/viajes/${enRuta.id}/cerrar"`), det.indexOf("Cerrar el viaje"));
+      expect(cierre).toContain('name="km"');
+      expect(cierre).not.toContain('name="flete"');
+    });
+
     it("liquidación del viaje: entregas, gastos, saldo y semáforo", async () => {
       const cookie = await entrar();
       const v = await registrarViajeFlota(ctx, { vehiculoId: 1, origenLugar: "Juliaca", destinoLugar: "Arequipa", estado: "en_curso", origen: "web" });
@@ -563,7 +579,7 @@ describe("web", () => {
       expect(aviso(r)).toContain("promedio");
       const v = await registrarViajeFlota(ctx, { vehiculoId: 1, origenLugar: "Puno", destinoLugar: "Lima", estado: "en_curso", origen: "web" });
       html = await (await app.request(`/viajes/${v.id}`, { headers: { cookie } })).text();
-      expect(html).toContain("PRESUPUESTO DEL VIAJE");
+      expect(html).toContain("Presupuesto del viaje");
       expect(html).toContain("S/\u00a0800.00");
       r = await post(cookie, `/viajes/${v.id}/presupuesto`, { m_combustible: "1000", m_viaticos: "50" });
       expect(aviso(r)).toContain("ok=");
@@ -583,10 +599,10 @@ describe("web", () => {
       expect(html).not.toContain("S/\u00a050.00");
       expect(aviso(await post(cookie, `/viajes/${v.id}/cerrar`, { km: "380", flete: "1200" }))).toContain("ok=");
       html = await (await app.request(`/viajes/${v.id}`, { headers: { cookie } })).text();
-      expect(html).toContain("REABRIR VIAJE");
+      expect(html).toContain("Reabrir viaje");
       expect(html).toContain("margen 75%");
       expect(aviso(await post(cookie, `/viajes/${v.id}/reabrir`, {}))).toContain("ok=");
-      expect(await (await app.request(`/viajes/${v.id}`, { headers: { cookie } })).text()).toContain("CERRAR ESTE VIAJE");
+      expect(await (await app.request(`/viajes/${v.id}`, { headers: { cookie } })).text()).toContain("Cerrar viaje");
     });
 
     it("estadísticas y Excel con montos numéricos", async () => {
@@ -927,6 +943,8 @@ describe("web", () => {
         const html = await (await app.request("/viajes", { headers: { cookie } })).text();
         expect(html).toContain("YA LA VERIFIQUÉ EN SOL: ESTÁ ACEPTADA");
         expect(html).toContain("NO ESTÁ EN SOL");
+        // Inicio avisa (solo al dueño) y lleva al panel de Viajes.
+        expect(await (await app.request("/", { headers: { cookie } })).text()).toContain("/viajes#sunat-atascados");
         expect(texto(await postForm(cookie, "/ajustes/dispositivo", { SUNAT_MODO: "beta" }))).toContain("Ajustes guardados");
         expect(guardado.SUNAT_MODO).toBe("beta");
         const r = await post(cookie, `/facturas/${facturaId}/en-sol`, { enSol: "si" });

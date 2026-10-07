@@ -267,7 +267,7 @@ svg.graf { width: 100%; height: auto; display: block; }
 /* Respaldo para WebViews viejos sin `gap` en flex (lo detecta app.js dentro de la app Android). */
 /* ── Rediseño: marco con menú lateral (PC ≥ 900 px) y barra inferior (celular) ── */
 .marco { display: block; }
-.contenido { max-width: 1180px; margin: 0 auto; padding: 16px 16px 100px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.contenido { width: 100%; max-width: 1180px; margin: 0 auto; padding: 16px 16px 100px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 body.sin-inferior .contenido { padding-bottom: 24px; }
 .lateral { display: none; }
 .inferior { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; display: grid; grid-template-columns: repeat(var(--n, 5), minmax(0, 1fr)); align-items: center; background: var(--panel); border-top: 1px solid var(--border); padding: 6px 4px calc(10px + env(safe-area-inset-bottom)); }
@@ -418,6 +418,37 @@ body.sin-inferior .contenido { padding-bottom: 24px; }
 }
 .inferior .mas { display: flex; align-items: center; justify-content: center; }
 .inferior .mas span { width: 58px; height: 58px; border-radius: 50%; background: var(--accent); color: var(--white); display: flex; align-items: center; justify-content: center; margin-top: -26px; border: 4px solid var(--bg); }
+
+/* ── Viajes ── */
+.grid-tarjetas { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
+.filtro { gap: 6px; }
+.filtro input, .filtro select { width: auto; }
+.viaje-cols { display: flex; flex-direction: column; gap: 12px; }
+.fila-barra { padding: 10px 14px; border-bottom: 1px solid var(--divider); display: flex; flex-direction: column; gap: 6px; }
+.fila-barra:last-child { border-bottom: 0; }
+.fila-papel { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; padding: 10px 14px; min-height: 48px; border-bottom: 1px solid var(--divider); }
+.fila-papel:last-child { border-bottom: 0; }
+.fila-papel > span:nth-child(2) { flex: 1; min-width: 140px; }
+.fila-papel .archivos a { display: inline-flex; align-items: center; min-height: 44px; }
+.fila-atascado { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--divider); }
+.fila-atascado:last-child { border-bottom: 0; }
+.fila-atascado .linea { display: flex; gap: 8px; flex-wrap: wrap; }
+.fila-atascado .btn { white-space: normal; text-align: center; }
+.nota-saldo { margin: 0; font-size: 13px; }
+.acciones-viaje { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; align-items: start; }
+.acciones-viaje > details > summary { width: 100%; }
+.acciones-viaje.una { grid-template-columns: minmax(0, 1fr); }
+.btn.grande { min-height: 52px; font-size: 15px; width: 100%; }
+.sub-form { margin-top: 8px; min-width: 220px; }
+summary.ver-mas { cursor: pointer; }
+details.panel { display: block; padding: 2px 14px; }
+details.panel[open] { padding-bottom: 14px; }
+details.panel > summary { list-style: none; }
+details.panel[open] > summary { margin-bottom: 8px; }
+@media (min-width: 900px) {
+  .grid-tarjetas { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .viaje-cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }
+}
 
 .sin-gap .pagina > * + *, .sin-gap .panel > * + *, .sin-gap .filas > * + * { margin-top: 10px; }
 .sin-gap .header > * + *, .sin-gap .header .datos > * + *, .sin-gap .acciones > * + *, .sin-gap .nav a + a,

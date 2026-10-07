@@ -33,6 +33,13 @@
     u.searchParams.delete("ok"); u.searchParams.delete("error");
     history.replaceState(null, "", u.pathname + (u.search || "") + u.hash);
   }
+  // «+ Nuevo viaje» (#nuevo-viaje) y similares: abre el plegable con ese id.
+  const abrirDelHash = () => {
+    const el = location.hash ? document.getElementById(decodeURIComponent(location.hash.slice(1))) : null;
+    if (el && el.tagName === "DETAILS") { el.open = true; el.scrollIntoView({ block: "start" }); }
+  };
+  window.addEventListener("hashchange", abrirDelHash);
+  abrirDelHash();
 })();
 
 // App instalable (PWA): registra el service worker y ofrece el botón "Instalar app".

@@ -1,7 +1,7 @@
 /** @jsxRuntime automatic @jsxImportSource hono/jsx */
 import type { FC } from "hono/jsx";
 import {
-  hoy, listarCobrosPendientes, listarEventos, listarPorRevisar, listarViajesFlota, primerNombre, puedeVer, resumenInicio, saludFlota,
+  hoy, listarCobrosPendientes, listarDocumentosAtascados, listarEventos, listarPorRevisar, listarViajesFlota, primerNombre, puedeVer, resumenInicio, saludFlota,
   viajesEnRuta, viajesPorRevisar, type Contexto, type RolUsuario,
 } from "@sunatapp/core";
 import { pagina, type App, type C, type Deps } from "../base";
@@ -81,6 +81,11 @@ export async function atenciones(ctx: Contexto, rol: RolUsuario, cab: DatosCabec
         r.push({ color: "cambiar", texto: `${enOracion(p.nombreCorto)} de ${s.unidad.codigo}: cambiar ya`, href: RUTA.camion(s.unidad.id, `?parte=${p.id}`) });
       }
     }
+  }
+  if (rol === "dueno") {
+    const a = await listarDocumentosAtascados(ctx);
+    const n = a.facturas.length + a.porReemitir.length + a.guias.length;
+    if (n) r.push({ color: "cambiar", fijo: true, texto: `${n} ${n === 1 ? "documento de SUNAT espera" : "documentos de SUNAT esperan"} tu ayuda`, href: "/viajes#sunat-atascados" });
   }
   if (cab.simulado && puedeVer(rol, "ajustes")) r.push({ color: "proximo", texto: "SUNAT en modo simulado: las guías y facturas no son reales", href: "/ajustes/dispositivo" });
   if (!cab.botEnLinea) r.push({ color: "proximo", texto: "El bot de Telegram está desconectado", href: "/telegram" });

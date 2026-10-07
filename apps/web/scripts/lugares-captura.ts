@@ -26,6 +26,8 @@ export const LUGARES: LugarCaptura[] = [
   { nombre: "anotar-empresa", ruta: "/anotar?tipo=empresa" },
   { nombre: "anotar-prestamo", ruta: "/anotar?tipo=prestamo" },
   { nombre: "viajes", ruta: "/viajes" },
+  { nombre: "viaje", ruta: "/viajes", seguir: ".tarjeta-ruta, .fila-viaje:not(.cab)" },
+  { nombre: "viaje-cerrado", ruta: "/viajes", seguir: ".fila-viaje:not(.cab)" },
   { nombre: "camiones", ruta: "/trailer", espera: 1500 },
   { nombre: "numeros", ruta: "/finanzas" },
   { nombre: "ajustes", ruta: "/ajustes" },

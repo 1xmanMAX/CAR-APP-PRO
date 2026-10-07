@@ -47,6 +47,8 @@ export const pct = (n: number | null | undefined) => (n === null || n === undefi
 export const ETIQUETA_ESTADO: Record<EstadoDesgaste, string> = { ok: "OK", proximo: "PRÓXIMO", cambiar: "CAMBIAR YA" };
 export const ESTADO_UNIDAD: Record<string, string> = { en_ruta: "EN RUTA", en_base: "EN BASE", en_taller: "EN TALLER", inactivo: "INACTIVO" };
 export const CHIP_UNIDAD: Record<string, string> = { en_ruta: "ok", en_base: "neutro", en_taller: "proximo", inactivo: "neutro" };
+export const CHIP_FACTURA: Record<string, string> = { PAGADA: "ok", PENDIENTE: "proximo", VENCIDA: "cambiar", "SIN FACTURA": "neutro" };
+export const ESTADO_GUIA: Record<string, string> = { borrador: "neutro", pendiente_envio: "proximo", enviada: "proximo", aceptada: "ok", rechazada: "cambiar" };
 
 // ── Navegación ───────────────────────────────────────────────────────────────
 

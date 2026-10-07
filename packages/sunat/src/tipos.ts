@@ -37,6 +37,17 @@ export class SunatNoDisponibleError extends Error {
   }
 }
 
+/**
+ * SUNAT dice que ese número ya está registrado (1032/1033) y no se pudo recuperar su CDR: no es
+ * un rechazo (puede estar aceptado) ni se debe reenviar solo. El dueño lo verifica en SOL.
+ */
+export class SunatYaRegistradoError extends Error {
+  constructor(readonly codigo: string, mensaje: string) {
+    super(mensaje);
+    this.name = "SunatYaRegistradoError";
+  }
+}
+
 export function nombreArchivo(ruc: string, tipo: "01" | "31", serie: string, numero: number): string {
   return `${ruc}-${tipo}-${serie}-${numero}`;
 }

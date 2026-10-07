@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { leerCdrZip } from "./cdr";
 import { clasificarFault } from "./faults";
-import { SunatCredencialesError, SunatNoDisponibleError, type DocumentoFirmado, type RespuestaSunat, type SunatGateway } from "./tipos";
+import { SunatCredencialesError, SunatNoDisponibleError, SunatYaRegistradoError, type DocumentoFirmado, type RespuestaSunat, type SunatGateway } from "./tipos";
 import { zipArchivo } from "./zip";
 
 export interface CredencialesSunat {
@@ -135,10 +135,16 @@ export class SunatReal implements SunatGateway {
   private async soap(url: string, accion: string, cuerpo: string): Promise<{ texto: string; fault?: { codigo: string; mensaje: string } }> {
     const resp = await this.llamar(url, { method: "POST", headers: { "Content-Type": "text/xml; charset=utf-8", SOAPAction: accion }, body: this.sobre(cuerpo) });
     const texto = await resp.text();
+    // 401/403 en el servicio SOAP: el usuario/clave SOL no pasó (con o sin Fault). Reintentar bloquea el usuario.
+    if (resp.status === 401 || resp.status === 403) {
+      throw new SunatCredencialesError(`SUNAT rechazó el usuario o la clave SOL (HTTP ${resp.status})`);
+    }
     const m = texto.match(/<faultcode[^>]*>([\s\S]*?)<\/faultcode>[\s\S]*?<faultstring[^>]*>([\s\S]*?)<\/faultstring>/);
     if (m) {
-      const codigo = m[1]!.match(/(\d{4})\s*$/)?.[1] ?? m[1]!.trim();
       const mensaje = m[2]!.trim();
+      // El código suele venir al final del faultcode («soap-env:Client.0102»); si no, al inicio del
+      // faultstring («0102 Usuario o contraseña incorrectos»).
+      const codigo = m[1]!.match(/(\d{4})\s*$/)?.[1] ?? mensaje.match(/\b(\d{4})\b/)?.[1] ?? m[1]!.trim();
       const clase = clasificarFault(codigo);
       if (clase === "credenciales") throw new SunatCredencialesError(`SUNAT rechazó el usuario o la clave SOL (${codigo}: ${mensaje})`);
       if (clase === "no_disponible") throw new SunatNoDisponibleError(`SUNAT no disponible (${codigo}: ${mensaje})`);
@@ -159,7 +165,9 @@ export class SunatReal implements SunatGateway {
         const cdr = this.cred.ambienteFactura === "produccion" && ruc && serie && numero
           ? await this.consultarCdrFactura({ ruc, serie, numero: Number(numero) })
           : null;
-        return cdr ?? { estado: "rechazada", codigo: fault.codigo, mensaje: fault.mensaje, notas: [] };
+        if (cdr) return cdr;
+        // Sin CDR no se sabe si quedó aceptada: ni rechazo ni reenvío automático.
+        throw new SunatYaRegistradoError(fault.codigo, `SUNAT ya tiene este número (${fault.codigo}: ${fault.mensaje})`);
       }
       if (clase === "rechazo") return { estado: "rechazada", codigo: fault.codigo, mensaje: fault.mensaje, notas: [] };
       throw new Error(`SUNAT SOAP ${fault.codigo}: ${fault.mensaje}`);
@@ -178,7 +186,7 @@ export class SunatReal implements SunatGateway {
   }
 
   /** Comprueba usuario y clave SOL sin emitir nada: consulta un comprobante que no existe. */
-  async probarClaveSol(): Promise<{ ok: boolean; mensaje: string }> {
+  async probarClaveSol(): Promise<{ ok: boolean; mensaje: string; credenciales?: true }> {
     try {
       const { texto, fault } = await this.soap(ENDPOINT_CONSULTA_CDR, "urn:getStatusCdr",
         `<ser:getStatusCdr><rucComprobante>${escape(this.cred.ruc)}</rucComprobante><tipoComprobante>01</tipoComprobante><serieComprobante>F999</serieComprobante><numeroComprobante>99999999</numeroComprobante></ser:getStatusCdr>`);
@@ -186,7 +194,7 @@ export class SunatReal implements SunatGateway {
       if (/<statusCode>/.test(texto) || claseFault === "rechazo" || claseFault === "ya_registrado") return { ok: true, mensaje: "Usuario y clave SOL correctos" };
       return { ok: false, mensaje: "SUNAT respondió algo inesperado; vuelve a probar en unos minutos" };
     } catch (e) {
-      if (e instanceof SunatCredencialesError) return { ok: false, mensaje: `SUNAT no aceptó tu usuario o clave SOL. ${e.message}` };
+      if (e instanceof SunatCredencialesError) return { ok: false, credenciales: true, mensaje: `SUNAT no aceptó tu usuario o clave SOL. ${e.message}` };
       return { ok: false, mensaje: `No se pudo conectar con SUNAT: ${(e as Error).message}` };
     }
   }

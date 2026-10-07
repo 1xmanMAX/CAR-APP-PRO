@@ -2,8 +2,8 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { GrammyError, HttpError, type Bot } from "grammy";
 import {
-  cargarConfig, crearContexto, duenoTelegramId, encolarAviso, generarFijosDelMes, guardarEnv, hayDueno, hoy, hayUsuarios, leerEnv, marcarLatidoBot,
-  obtenerUbigeo, procesarLecturasPendientes, reconfigurarSunat, tomarAvisos, validarRuc, type Config, type Contexto, type ResultadoEmision,
+  aplicarConfigSunat, cargarConfig, crearContexto, duenoTelegramId, encolarAviso, generarFijosDelMes, guardarEnv, hayDueno, hoy, hayUsuarios, leerEnv, marcarLatidoBot,
+  obtenerUbigeo, procesarLecturasPendientes, tomarAvisos, validarRuc, type Config, type Contexto, type ResultadoEmision,
 } from "@sunatapp/core";
 import { cargarConfigIa, crearLectorReglas, crearProveedorIA, crearTranscriptor } from "@sunatapp/ia";
 import { crearExtractor } from "@sunatapp/extractor";
@@ -98,35 +98,28 @@ export async function arrancarApp(o: OpcionesArranque): Promise<AppEnMarcha> {
     }
   };
 
-  /** La configuración de SUNAT pedida y, si no es válida, la simulada (con el motivo en `estado`). */
-  const leerConfig = (): { pedida: Config | null; segura: Config; error?: string } => {
+  /** La configuración de arranque (datos, almacenamiento) con SUNAT siempre simulada: la pedida se aplica después. */
+  const configSegura = (): Config => {
     try {
-      const pedida = cargarConfig();
-      return { pedida, segura: { ...pedida, sunatModo: "simulado" } };
-    } catch (e) {
-      return { pedida: null, segura: cargarConfig({ ...process.env, SUNAT_MODO: "simulado" }), error: (e as Error).message };
+      return { ...cargarConfig(), sunatModo: "simulado" };
+    } catch {
+      return cargarConfig({ ...process.env, SUNAT_MODO: "simulado" });
     }
   };
+  /**
+   * La conexión con SUNAT que pide el `.env`. Si Real (o Beta) no carga, la web sigue en simulado pero
+   * SUNAT queda EN PAUSA: los documentos pendientes nunca los "acepta" el simulador.
+   */
   const aplicarSunat = async (ctx: Contexto): Promise<void> => {
-    const c = leerConfig();
-    estado.sunat = { modo: "simulado", ...(c.error ? { error: c.error } : {}) };
-    if (!c.pedida || c.pedida.sunatModo === "simulado") {
-      await reconfigurarSunat(ctx, c.segura);
-      return;
-    }
-    try {
-      await reconfigurarSunat(ctx, c.pedida);
-      estado.sunat = { modo: c.pedida.sunatModo };
-    } catch (e) {
-      await reconfigurarSunat(ctx, c.segura);
-      estado.sunat = { modo: "simulado", error: `No se pudo usar SUNAT ${c.pedida.sunatModo}: ${(e as Error).message}. Mientras tanto, modo simulado.` };
-    }
+    const r = await aplicarConfigSunat(ctx, process.env);
+    estado.sunat = { modo: r.modo, ...(r.error ? { error: r.error } : {}) };
   };
 
-  const inicial = leerConfig();
-  const dirDatos = inicial.segura.dataDir;
+  const inicial = configSegura();
+  const dirDatos = inicial.dataDir;
   const log: Logger = crearLogger(process.env.LOG_DIR?.trim() || join(dirDatos, "logs"));
-  const { ctx, cerrar } = await crearContexto(inicial.segura);
+  // Provisional y simulada: no toca la pausa de SUNAT (la decide aplicarSunat con la configuración pedida).
+  const { ctx, cerrar } = await crearContexto(inicial, { conservarPausa: true });
   ctx.log = (n, m, d) => log[n](m, d);
   await aplicarSunat(ctx);
 

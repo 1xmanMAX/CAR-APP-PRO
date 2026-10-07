@@ -3,7 +3,13 @@ import {
   buscarGuiaPorSerieNumero,
   calcularMontosFactura,
   cargarGuiaCompleta,
+  actualizarUnidad,
+  avisoRetornoVacio,
   emitirFactura,
+  esPrimeraReal,
+  FaltaDatoTransporteError,
+  guardarValorReferencial,
+  transporteDeGuia,
   ErrorNegocio,
   listarGuiasSinFacturar,
   parsearMonto,
@@ -124,26 +130,61 @@ async function avanzar(c: Ctx, deps: Dependencias, f: EstadoFlujoFactura): Promi
     await c.reply(textos.preguntaDias);
     return;
   }
+  const d = await cargarGuiaCompleta(deps.ctx.db, f.guiaId);
+  const montos = calcularMontosFactura({
+    montoCentimos: f.montoCentimos!, incluyeIgv: f.incluyeIgv!,
+    detraccion: { porcentaje: d.empresa.detraccionPorcentaje, umbralCentimos: d.empresa.detraccionUmbral },
+  });
+  if (montos.detraccionMonto > 0) {
+    try {
+      await transporteDeGuia(deps.ctx, f.guiaId);
+    } catch (error) {
+      if (!(error instanceof FaltaDatoTransporteError)) throw error;
+      const falta = error.falta;
+      if (falta.tipo === "vr_ruta") {
+        f.paso = "vr";
+        f.falta = { tipo: "vr_ruta", partidaUbigeo: falta.partidaUbigeo, llegadaUbigeo: falta.llegadaUbigeo };
+        await c.reply(textos.preguntaVr(falta.partida, falta.llegada));
+      } else {
+        f.paso = "carga_util";
+        f.falta = { tipo: "carga_util", vehiculoId: falta.vehiculoId };
+        await c.reply(textos.preguntaCargaUtil(falta.placa));
+      }
+      return;
+    }
+  }
   await mostrarResumen(c, deps, f);
 }
 
 async function mostrarResumen(c: Ctx, deps: Dependencias, f: EstadoFlujoFactura): Promise<void> {
   f.paso = "resumen";
   const d = await cargarGuiaCompleta(deps.ctx.db, f.guiaId);
-  const montos = calcularMontosFactura({
-    montoCentimos: f.montoCentimos!,
-    incluyeIgv: f.incluyeIgv!,
-    detraccion: { porcentaje: d.empresa.detraccionPorcentaje, umbralCentimos: d.empresa.detraccionUmbral },
-  });
+  const detraccion = { porcentaje: d.empresa.detraccionPorcentaje, umbralCentimos: d.empresa.detraccionUmbral };
+  // Igual que prepararFactura: la detracción se calcula con la base mínima del valor referencial.
+  let montos = calcularMontosFactura({ montoCentimos: f.montoCentimos!, incluyeIgv: f.incluyeIgv!, detraccion });
+  let retornoVacio: string | null = null;
+  if (montos.detraccionMonto > 0) {
+    const { vr } = await transporteDeGuia(deps.ctx, f.guiaId);
+    montos = calcularMontosFactura({
+      montoCentimos: f.montoCentimos!, incluyeIgv: f.incluyeIgv!, detraccion, baseMinimaDetraccion: vr.vrServicio,
+    });
+    // Solo un aviso: el factor 1.4 del retorno al vacío no se calcula.
+    retornoVacio = await avisoRetornoVacio(deps.ctx, f.guiaId);
+  }
+  const aviso = (await esPrimeraReal(deps.ctx, "factura")) ? `${textos.primeraReal("factura")}
+
+` : "";
   const cliente = f.cliente ?? { numeroDoc: d.remitente.numeroDoc, razonSocial: d.remitente.razonSocial };
   await c.reply(
-    resumenFactura({
+    aviso + resumenFactura({
       serieNumeroGuia: `${d.guia.serie}-${d.guia.numero}`,
       cliente,
       montos,
       formaPago: f.formaPago!,
       ...(f.diasCredito !== undefined ? { diasCredito: f.diasCredito } : {}),
-    }),
+    }) + (retornoVacio ? `
+
+⚠️ ${retornoVacio}` : ""),
     { reply_markup: new InlineKeyboard().text("✅ Emitir", "f:emitir").text("❌ Cancelar", "f:cancelar") },
   );
 }
@@ -255,6 +296,33 @@ export async function manejarTextoFactura(c: CtxTexto, deps: Dependencias, next:
       return;
     }
     f.montoCentimos = monto;
+    await avanzar(c, deps, f);
+    return;
+  }
+  if (f.paso === "vr" && f.falta?.tipo === "vr_ruta") {
+    const vr = parsearMonto(texto);
+    if (vr === null) {
+      await c.reply(textos.vrNoEntendido);
+      return;
+    }
+    if (vr <= 0 || vr > 100000) {
+      await c.reply(textos.vrMuyAlto);
+      return;
+    }
+    await guardarValorReferencial(deps.ctx, { partidaUbigeo: f.falta.partidaUbigeo, llegadaUbigeo: f.falta.llegadaUbigeo, vrPorTmCentimos: vr, fuente: "Telegram" });
+    delete f.falta;
+    await avanzar(c, deps, f);
+    return;
+  }
+  if (f.paso === "carga_util" && f.falta?.tipo === "carga_util") {
+    const limpio = texto.trim();
+    const tm = /^\d+([.,]\d{1,2})?$/.test(limpio) ? Number(limpio.replace(",", ".")) : 0;
+    if (!(tm >= 1 && tm <= 100)) {
+      await c.reply(textos.cargaUtilNoEntendida);
+      return;
+    }
+    await actualizarUnidad(deps.ctx, f.falta.vehiculoId, { cargaUtilTm: tm }, c.session.usuarioId);
+    delete f.falta;
     await avanzar(c, deps, f);
     return;
   }

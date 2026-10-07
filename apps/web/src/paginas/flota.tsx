@@ -66,6 +66,8 @@ async function vista(c: C, d: Deps) {
                       <label class="campo"><span>Placa carreta</span><input name="placaCarreta" value={u.carreta?.placa ?? ""} /></label>
                       <label class="campo"><span>Semirremolque</span><select name="semirremolque">{(Object.keys(TIPOS_SEMIRREMOLQUE) as TipoSemirremolque[]).map((t) => <option value={t} selected={t === u.semirremolque}>{TIPOS_SEMIRREMOLQUE[t]}</option>)}</select></label>
                       <label class="campo"><span>Rendimiento km/gal</span><input name="rendimiento" inputmode="decimal" value={u.rendimientoKmGal ?? ""} /></label>
+                      <label class="campo"><span>Configuración vehicular</span><input name="configuracionVehicular" value={u.configuracionVehicular ?? ""} placeholder="T3S3" /></label>
+                      <label class="campo"><span>Carga útil (TM)</span><input name="cargaUtilTm" inputmode="decimal" value={u.cargaUtilTm ?? ""} placeholder="30" /></label>
                       <button class="btn chico" type="submit">GUARDAR</button>
                     </form>
                   </details>
@@ -117,9 +119,13 @@ export function rutasFlota(app: App, d: Deps): void {
     return accion(c, "/flota", async () => {
       const rend = f.rendimiento ? Number(f.rendimiento.replace(",", ".")) : null;
       if (rend !== null && !(rend > 0)) throw new ErrorNegocio("Rendimiento no válido");
+      const carga = f.cargaUtilTm ? Number(f.cargaUtilTm.replace(",", ".")) : null;
+      if (carga !== null && !(carga > 0)) throw new ErrorNegocio("Carga útil no válida");
       await actualizarUnidad(d.ctx, Number(c.req.param("id")), {
         estado: f.estado as EstadoUnidad, marca: f.marca || null, modelo: f.modelo || null, anio: enteroONull(f.anio),
         placaCarreta: f.placaCarreta || null, rendimientoKmGal: rend,
+        configuracionVehicular: f.configuracionVehicular ?? null,
+        cargaUtilTm: carga,
         ...(f.semirremolque ? { semirremolque: f.semirremolque as TipoSemirremolque } : {}),
       }, c.get("usuario").id);
       return "Unidad actualizada";

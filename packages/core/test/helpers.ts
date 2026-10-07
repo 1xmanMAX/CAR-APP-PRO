@@ -1,7 +1,7 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { crearDb } from "@sunatapp/db";
+import { crearDb, valorReferencialRuta, vehiculo } from "@sunatapp/db";
 import { cargarPfx, generarCertificadoPrueba, SunatSimulado, type Certificado, type SunatGateway } from "@sunatapp/sunat";
 import { crearAlmacenLocal } from "../src/infra/almacen";
 import type { Contexto } from "../src/infra/contexto";
@@ -54,4 +54,10 @@ export function entradaGuia(): EntradaGuia {
     greRemitenteRef: "EG01-123",
     items: [{ descripcion: "CAJAS DE CERAMICA", cantidad: "120", unidadMedida: "BX" }],
   };
+}
+
+/** Deja listo el valor referencial de la ruta de entradaGuia() y la carga útil del vehículo sembrado. */
+export async function prepararDatosTransporte(ctx: Contexto): Promise<void> {
+  await ctx.db.insert(valorReferencialRuta).values({ partidaUbigeo: "150115", llegadaUbigeo: "250101", vrPorTm: 8550 });
+  await ctx.db.update(vehiculo).set({ configuracionVehicular: "T3S3", cargaUtilTm: "30" });
 }

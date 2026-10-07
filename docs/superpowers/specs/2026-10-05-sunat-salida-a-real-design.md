@@ -127,7 +127,7 @@ Salidas, en céntimos y redondeadas al céntimo:
 - **Base de detracción:** `max(total de la factura, VR 01)`.
 - **Detracción:** `round(4 % × base)`, redondeada a soles enteros como hoy.
 
-**Fórmula de VR 01 — verificación obligatoria.** El D.S. 010-2006-MTC define cómo se combinan carga efectiva y carga útil nominal para el valor referencial del servicio. Por ejemplo, puede haber un mínimo de carga efectiva respecto de la útil. La investigación no pudo leer el texto vigente. La **primera tarea del plan** es descargar el D.S. 010-2006-MTC y sus modificatorias y fijar la fórmula de VR 01 con un caso de prueba numérico tomado de la norma. Mientras no esté verificada, la función usa `VR 01 = max(VR 02, 0.9 × VR 03)` y el modo Real muestra "fórmula de valor referencial sin verificar". Ese 0.9 es provisional y explícito en el código, en una sola constante.
+**Fórmula de VR 01 — verificada (2026-10-05).** La norma vigente es el **D.S. 020-2021-MTC** (deroga el 010-2006 y el 033-2006). Su art. 3: el valor referencial del servicio es el valor por TM × la carga efectiva, y "en ningún caso puede ser inferior al 70 % de la capacidad de carga útil nominal". La app usa `VR 01 = max(VR 02, 0.7 × VR 03)` (constante `FACTOR_CARGA_UTIL_MINIMA = 0.7`, `FORMULA_VR_VERIFICADA = true`), en céntimos enteros. Detalle y caso numérico: `docs/superpowers/notas/2026-10-05-valor-referencial-mtc.md`. **No implementado:** el factor de retorno al vacío 1.4 (art. 4: cisternas, tolvas, contenedores, carga peligrosa… en rutas > 200 km virtuales); la app siempre declara `ReturnabilityIndicator=false`.
 
 ### 5.3 Datos nuevos (una sola vez)
 
@@ -161,8 +161,11 @@ Salidas, en céntimos y redondeadas al céntimo:
 
 **Reanudación.**
 
-- **Automática:** al guardar ajustes de SUNAT (`reconfigurarSunat`), que limpia la pausa.
-- **Manual:** botón "Reintentar ahora" en la web.
+- **Automática:** `reconfigurarSunat` la limpia solo si cambió una credencial (usuario/clave SOL, client_id/secret, ruta o contenido del certificado, su clave), el modo o el ambiente respecto de la configuración anterior (huella en `ajuste.sunat_config_huella`), o si la pausa fue porque la configuración pedida no cargaba. Rearmar con lo mismo (cada arranque, guardar otro ajuste) no la limpia. *(Revisión final: reemplaza a "se limpia en cada reconfiguración".)*
+- **Manual:** botón "Reintentar ahora" en la web (no anda mientras la configuración pedida no cargue).
+- **Configuración que no carga:** si Real/Beta no carga, la app queda en simulado para la web pero SUNAT en pausa (nunca el simulador "acepta" pendientes reales). Cambiar el modo está bloqueado mientras haya guías o facturas pendientes de envío o enviadas.
+- **Respuestas raras:** 3 errores de SUNAT sin clasificar seguidos (entre documentos) pausan con "SUNAT responde de forma inesperada; revisa tus claves antes de seguir". Un Fault sin código en `faultcode` toma el primer código de 4 cifras del `faultstring`; HTTP 401/403 del SOAP es error de credenciales.
+- **Certificado vencido:** en modo real, antes de firmar no se reserva número y SUNAT queda en pausa ("Tu certificado digital venció el …").
 
 **Por qué:** varios intentos con clave mala pueden bloquear el usuario SOL. Hoy cada documento reintentaría cada 5 minutos.
 
@@ -171,7 +174,7 @@ Salidas, en céntimos y redondeadas al céntimo:
 | Código | Tratamiento |
 |---|---|
 | 2000–3999 | Rechazo (igual que hoy) |
-| 1032, 1033 ("ya informado" / "registrado previamente") | `getStatusCdr` en `billConsultService` (solo producción) → se aplica el CDR recuperado; si SUNAT no lo devuelve, rechazo con el código original |
+| 1032, 1033 ("ya informado" / "registrado previamente") | `getStatusCdr` en `billConsultService` (solo producción) → se aplica el CDR recuperado; si SUNAT no lo devuelve, la factura queda `pendiente_envio` con ese código, sin reintento automático, y el mensaje "SUNAT dice que ya tiene esta factura: verifícala en SOL antes de volver a emitir" (revisión final). Reemitir una factura que SUNAT rechazó toma un número nuevo |
 | Otros 1000–1999 y 0150–0199 (contenido, nombre o ZIP inválido) | Rechazo: reintentar no lo arregla |
 | 0101–0106, 0110–0113 (autenticación, perfil, usuario secundario) | `SunatCredencialesError` → pausa |
 | 0109, 0130–0149, 0200–0299 (servicio no disponible / error interno) | `SunatNoDisponibleError` → reintento normal |
@@ -193,6 +196,8 @@ Devuelve `{ certificado, claveSol, credencialesGre }`. Cada punto es `{ ok, mens
 3. **Credenciales GRE:** pide el token OAuth y lo descarta.
 
 Las pruebas 2 y 3 se hacen con los valores **escritos en el formulario**, antes de guardarlos. Un fallo aquí no activa la pausa global: la prueba se hace a pedido y una sola vez.
+
+*(Revisión final.)* Si la prueba 2 falla por credenciales, la 3 no se hace ("No se probó: primero corrige usuario/clave SOL"). Se permite una prueba por minuto. En modo Real se prueba lo escrito sin guardarlo y solo se guarda si sale todo ✅; fuera de Real se guarda lo escrito (sin el modo) y luego se prueba.
 
 ### 7.2 Pantalla Ajustes → Este dispositivo
 
@@ -253,4 +258,5 @@ Mientras este dispositivo no haya tenido aceptada ninguna guía (o factura) en m
 - SIRE (compras y ventas), consulta de validez y consulta RUC.
 - Pago de detracciones y GRE por evento: no tienen API.
 - Varias guías en una misma factura (solo la primera aporta origen y destino).
+- Recuperar el CDR de una guía que SUNAT ya tiene (1033 en la GRE): no hay consulta de CDR por número para guías; se trata como un rechazo más y el dueño la verifica en SOL. (En facturas, un 1032/1033 sin CDR recuperado queda pendiente "por verificar en SOL" y no se reenvía solo.)
 - Unir la rama de la beta 12 con `main` (choque de la migración 0012).

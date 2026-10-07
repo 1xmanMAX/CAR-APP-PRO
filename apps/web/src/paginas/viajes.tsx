@@ -1,7 +1,7 @@
 /** @jsxRuntime automatic @jsxImportSource hono/jsx */
 import {
-  editarViajeFlota, emitirFactura, enlazarGuia, ErrorNegocio, finalizarViajeFlota, hoy, listarCobrosPendientes, listarGuias,
-  listarUnidades, listarViajesFlota, parsearMonto, prepararFactura, puedeEditar, rangoMes, registrarViajeFlota,
+  AVISO_RETORNO_VACIO, editarViajeFlota, emitirFactura, guiasConAvisoRetornoVacio, enlazarGuia, ErrorNegocio, finalizarViajeFlota, hoy, listarCobrosPendientes, listarGuias,
+  listarUnidades, listarViajesFlota, parsearMonto, FaltaDatoTransporteError, prepararFactura, puedeEditar, rangoMes, registrarViajeFlota,
   sumarDias, formatearSoles, archivosDocumento, contarPorRevisar, puedeVer,
 } from "@sunatapp/core";
 import { guardarCobro } from "../acciones";
@@ -34,6 +34,7 @@ async function vista(c: C, d: Deps) {
   const km = viajes.reduce((s, v) => s + (v.km ?? 0), 0);
   const edita = puedeEditar(c.get("usuario").rol, "viajes");
   const viajesSinGuia = (await listarViajesFlota(ctx, { desde: sumarDias(h, -60), hasta: h })).filter((v) => v.guia === "—" || !v.facturas.length);
+  const retornoVacio = await guiasConAvisoRetornoVacio(ctx, guias.filter((g) => g.estado === "aceptada" && !g.facturada).map((g) => g.id));
 
   return pagina(c, d, { titulo: "Viajes, guías y facturas", seccion: "viajes" }, (
     <>
@@ -143,6 +144,7 @@ async function vista(c: C, d: Deps) {
                           {g.estado === "aceptada" && !g.facturada ? (
                             <details class="plegable"><summary><span class="btn chico">+ FACTURA</span></summary>
                               <form method="post" action={`/guias/${g.id}/facturar`} class="filas" style="margin-top:6px;min-width:220px">
+                                {retornoVacio.has(g.id) ? <span class="aviso info" style="font-size:12px">⚠️ {AVISO_RETORNO_VACIO}</span> : null}
                                 <label class="campo"><span>Monto S/</span><input name="monto" inputmode="decimal" required /></label>
                                 <label class="campo"><span>El monto…</span><select name="igv"><option value="sin">no incluye IGV</option><option value="con">ya incluye IGV</option></select></label>
                                 <label class="campo"><span>Pago</span><select name="pago"><option value="contado">Contado</option><option value="credito">Crédito</option></select></label>
@@ -244,10 +246,16 @@ export function rutasViajes(app: App, d: Deps): void {
       const monto = parsearMonto(f.monto ?? "");
       if (monto === null) throw new ErrorNegocio("Monto no válido");
       const credito = f.pago === "credito";
-      const { facturaId } = await prepararFactura(d.ctx, {
-        guiaId: Number(c.req.param("id")), montoCentimos: monto, incluyeIgv: f.igv === "con", formaPago: credito ? "credito" : "contado",
-        diasCredito: credito ? (enteroONull(f.dias) ?? 30) : undefined,
-      }, c.get("usuario").id);
+      let facturaId: number;
+      try {
+        ({ facturaId } = await prepararFactura(d.ctx, {
+          guiaId: Number(c.req.param("id")), montoCentimos: monto, incluyeIgv: f.igv === "con", formaPago: credito ? "credito" : "contado",
+          diasCredito: credito ? (enteroONull(f.dias) ?? 30) : undefined,
+        }, c.get("usuario").id));
+      } catch (error) {
+        if (error instanceof FaltaDatoTransporteError) throw new ErrorNegocio(`${error.message} — complétalo en Rutas (valor referencial) o en Flota (carga útil)`);
+        throw error;
+      }
       const r = await emitirFactura(d.ctx, facturaId);
       return `Factura ${r.serieNumero}: ${r.estado}${r.mensaje ? ` · ${r.mensaje}` : ""}`;
     });

@@ -28,6 +28,8 @@ export interface Unidad {
   carreta: { id: number; placa: string } | null;
   /** Tipo de semirremolque (modelo 3D). */
   semirremolque: TipoSemirremolque;
+  configuracionVehicular: string | null;
+  cargaUtilTm: number | null;
 }
 
 export interface ParteConDesgaste extends ResultadoDesgaste {
@@ -67,6 +69,7 @@ async function aUnidad(db: Ejecutor, f: typeof vehiculo.$inferSelect): Promise<U
     estado: f.estadoUnidad, odometroKm: f.odometroKm, viajesTotales: await viajesTotales(db, f.id),
     rendimientoKmGal: f.rendimientoKmGal === null ? null : Number(f.rendimientoKmGal), carreta,
     semirremolque: esTipoSemirremolque(f.semirremolque) ? f.semirremolque : "furgon",
+    configuracionVehicular: f.configuracionVehicular, cargaUtilTm: f.cargaUtilTm === null ? null : Number(f.cargaUtilTm),
   };
 }
 
@@ -121,6 +124,10 @@ export interface EntradaUnidad {
   rendimientoKmGal?: number | null;
   placaCarreta?: string | null;
   semirremolque?: TipoSemirremolque;
+  /** Configuración vehicular MTC (p. ej. "T3S3"), para la factura 1004. */
+  configuracionVehicular?: string | null;
+  /** Carga útil nominal en toneladas, para el valor referencial de la factura 1004. */
+  cargaUtilTm?: number | null;
 }
 
 async function siguienteCodigoUnidad(db: Ejecutor): Promise<string> {
@@ -145,6 +152,7 @@ export async function crearUnidad(ctx: Contexto, e: EntradaUnidad, usuarioId?: n
   const placa = e.placa.trim().toUpperCase();
   if (!/^[A-Z0-9]{2,3}-?[A-Z0-9]{3}$/.test(placa)) throw new ErrorNegocio("La placa no tiene un formato válido (ej. ABC-123)");
   if ((e.odometroKm ?? 0) < 0 || (e.viajesBase ?? 0) < 0) throw new ErrorNegocio("El odómetro y los viajes no pueden ser negativos");
+  if (e.cargaUtilTm != null && !(e.cargaUtilTm > 0)) throw new ErrorNegocio("La carga útil debe ser mayor que cero");
   if (await buscarUnidad(ctx, placa)) throw new ErrorNegocio(`La placa ${placa} ya está registrada`);
   const id = await ctx.db.transaction(async (tx) => {
     const codigo = e.codigo?.trim().toUpperCase() || (await siguienteCodigoUnidad(tx));
@@ -155,6 +163,8 @@ export async function crearUnidad(ctx: Contexto, e: EntradaUnidad, usuarioId?: n
       placa, codigo, tipo: "tracto", marca: e.marca ?? null, modelo: e.modelo ?? null, anio: e.anio ?? null,
       odometroKm: e.odometroKm ?? 0, viajesBase: e.viajesBase ?? 0,
       rendimientoKmGal: e.rendimientoKmGal == null ? null : String(e.rendimientoKmGal), carretaId, semirremolque: e.semirremolque ?? "furgon",
+      configuracionVehicular: e.configuracionVehicular?.trim().toUpperCase() || null,
+      cargaUtilTm: e.cargaUtilTm == null ? null : String(e.cargaUtilTm),
     }).returning({ id: vehiculo.id });
     await registrarAuditoria(tx, { usuarioId, accion: "unidad_creada", entidad: "vehiculo", entidadId: f!.id, detalle: { codigo, placa } });
     return f!.id;
@@ -180,6 +190,11 @@ export async function actualizarUnidad(
     if (e.semirremolque !== undefined) {
       if (!esTipoSemirremolque(e.semirremolque)) throw new ErrorNegocio("Tipo de semirremolque no válido");
       cambios.semirremolque = e.semirremolque;
+    }
+    if (e.configuracionVehicular !== undefined) cambios.configuracionVehicular = e.configuracionVehicular?.trim().toUpperCase() || null;
+    if (e.cargaUtilTm !== undefined) {
+      if (e.cargaUtilTm !== null && !(e.cargaUtilTm > 0)) throw new ErrorNegocio("La carga útil debe ser mayor que cero");
+      cambios.cargaUtilTm = e.cargaUtilTm === null ? null : String(e.cargaUtilTm);
     }
     const [f] = await tx.update(vehiculo).set(cambios).where(eq(vehiculo.id, id)).returning({ id: vehiculo.id });
     if (!f) throw new ErrorNegocio("La unidad no existe");

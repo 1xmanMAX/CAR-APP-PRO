@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { emitirFactura, emitirGuia, prepararFactura, registrarGuiaBorrador, type Contexto } from "@sunatapp/core";
-import { crearContextoPrueba, entradaGuia } from "../../../packages/core/test/helpers";
+import { crearContextoPrueba, entradaGuia, prepararDatosTransporte } from "../../../packages/core/test/helpers";
 import { msHastaProximoAviso, programarAvisoDiario, textoAvisoDiario } from "../src/aviso-diario";
 
 const cerrables: Array<() => Promise<void>> = [];
@@ -72,6 +72,7 @@ describe("textoAvisoDiario", () => {
     let ahora = new Date("2026-09-13T15:00:00Z");
     const { ctx, cerrar } = await crearContextoPrueba({ reloj: () => ahora });
     cerrables.push(cerrar);
+    await prepararDatosTransporte(ctx);
 
     // Crédito a 2 días emitida el 13/09: vence el 15/09.
     const g1 = await guiaAceptada(ctx, "EG01-101");
@@ -94,7 +95,7 @@ describe("textoAvisoDiario", () => {
         "🔴 Vencidas:",
         "• F001-1 · DISTRIBUIDORA SAC · S/ 2,400.00 (venció 15/09)",
         "🟡 Vencen hoy:",
-        "• F001-2 · DISTRIBUIDORA SAC · S/ 1,133.00",
+        "• F001-2 · DISTRIBUIDORA SAC · S/ 1,108.00",
       ].join("\n"),
     );
   });
@@ -103,6 +104,7 @@ describe("textoAvisoDiario", () => {
     const ahora = new Date("2026-09-13T15:00:00Z");
     const { ctx, cerrar } = await crearContextoPrueba({ reloj: () => ahora });
     cerrables.push(cerrar);
+    await prepararDatosTransporte(ctx);
 
     const g = await guiaAceptada(ctx, "EG01-103");
     const { facturaId } = await prepararFactura(ctx, {

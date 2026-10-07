@@ -2,7 +2,7 @@ import type { Update, UserFromGetMe } from "grammy/types";
 import { crearExtractor } from "@sunatapp/extractor";
 import { crearLectorReglas } from "@sunatapp/ia";
 import { obtenerUbigeo, validarRuc, type Contexto } from "@sunatapp/core";
-import { crearContextoPrueba, DATOS_INICIALES } from "../../../packages/core/test/helpers";
+import { crearContextoPrueba, DATOS_INICIALES, prepararDatosTransporte } from "../../../packages/core/test/helpers";
 import { crearBot, type Dependencias } from "../src/bot";
 
 /** El bot no depende de @sunatapp/sunat: el tipo del gateway se toma del helper de pruebas. */
@@ -47,6 +47,8 @@ export async function crearArnes(
         ...(o.sinDueno ? { datos: { ...DATOS_INICIALES, usuario: { nombre: "Dueño", email: "d@x.pe" } } } : {}),
       });
   const ctx = o.ctx ?? creado!.ctx;
+  // Valor referencial de la ruta de prueba y carga útil del vehículo: las facturas > S/ 400 son 1004.
+  if (creado) await prepararDatosTransporte(ctx);
   // Lector de boletas por reglas (sin red), como en un dispositivo sin clave de IA.
   ctx.ia ??= crearLectorReglas();
   const llamadas: Llamada[] = [];

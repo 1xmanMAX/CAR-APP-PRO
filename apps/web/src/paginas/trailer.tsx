@@ -312,7 +312,7 @@ export function rutasTrailer(app: App, d: Deps): void {
     return accion(c, p ? `/trailer/${id}?pieza=${p.id}` : `/trailer/${id}`, async () => {
       if (!puedeEditar(c.get("usuario").rol, "reparaciones")) throw new ErrorNegocio("Tu rol no puede registrar reparaciones");
       if (!p) throw new ErrorNegocio("Elige una pieza del modelo");
-      return (await guardarCambio(d, c.get("usuario").id, { ...f, vehiculoId: String(id) }, f.tipo || "correctivo")).ok;
+      return (await guardarCambio(d, c.get("usuario").id, { ...f, vehiculoId: String(id) }, f.tipo || "correctivo", { trabajoEnPieza: true })).ok;
     });
   });
   app.post("/parte/:id/vida", async (c) => {

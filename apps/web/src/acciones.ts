@@ -64,16 +64,19 @@ export async function guardarIngreso(d: Deps, usuarioId: number, f: Campos): Pro
 /**
  * Cambio o reparación (antes: POST /reparaciones y POST /trailer/:id/pieza). Reinicia el contador de
  * la parte si viene `parteId`, saca del stock los repuestos usados, registra el gasto y avisa al grupo.
+ * Si no se escribe «trabajo», el núcleo lo completa («Cambio · parte», «Revisión · pieza» o «Reparación»).
+ * `exigir.trabajoEnPieza`: el panel de la pieza (/trailer/:id/pieza) pide qué pasó, como siempre.
+ * `exigir.algo`: Anotar no guarda un arreglo sin pieza, sin parte y sin texto.
  */
 export async function guardarCambio(
-  d: Deps, usuarioId: number, f: Campos, tipoTexto?: string,
+  d: Deps, usuarioId: number, f: Campos, tipoTexto?: string, exigir: { trabajoEnPieza?: boolean; algo?: boolean } = {},
 ): Promise<{ ok: string; vehiculoId: number; pieza: string | null }> {
   const vehiculoId = idONull(f.vehiculoId);
   if (vehiculoId === null) throw new ErrorNegocio("Elige el camión");
   const p = f.componente ? pieza(f.componente) : null;
   if (f.componente && !p) throw new ErrorNegocio("Elige una pieza del modelo");
-  if (p && !f.trabajo?.trim()) throw new ErrorNegocio("Escribe qué pasó o qué se hizo");
-  if (!p && !f.parteId && !f.trabajo?.trim()) throw new ErrorNegocio("Elige la pieza o escribe qué se hizo");
+  if (exigir.trabajoEnPieza && p && !f.trabajo?.trim()) throw new ErrorNegocio("Escribe qué pasó o qué se hizo");
+  if (exigir.algo && !p && !f.parteId && !f.trabajo?.trim()) throw new ErrorNegocio("Elige la pieza o escribe qué se hizo");
   const tipo = (tipoTexto || (p ? "correctivo" : "preventivo")) as TipoReparacion;
   if (!(tipo in TIPOS_REPARACION)) throw new ErrorNegocio("Tipo no válido");
   const manoObra = f.manoObra ? parsearMonto(f.manoObra) : 0;
@@ -111,8 +114,14 @@ export async function guardarCompra(d: Deps, usuarioId: number, f: Campos): Prom
   return `Compra registrada: +${cantidad} en stock`;
 }
 
+/** Categoría que usan las cuotas pagadas (no se ofrece en «Gasto de la empresa»). */
+export const CATEGORIA_CUOTA = "cuota_prestamo";
+
 /** Gasto de la empresa: si «es mensual», crea el costo fijo (se carga solo cada mes); si no, un gasto sin viaje. */
 export async function guardarGastoEmpresa(d: Deps, usuarioId: number, f: Campos, foto?: File): Promise<string> {
+  if (!f.categoria) throw new ErrorNegocio("Elige en qué se gastó");
+  // Las cuotas ya se cargan solas como gasto al pagarlas: anotarlas aquí las contaría dos veces.
+  if (f.categoria === CATEGORIA_CUOTA) throw new ErrorNegocio("Las cuotas de un préstamo se pagan en «Préstamo o cuota»");
   if (f.mensual === "1") {
     const fijas = await listarCategorias(d.ctx, { tipo: "fijo", soloActivas: true });
     const nombre = fijas.find((k) => k.clave === f.categoria)?.nombre ?? "Gasto fijo";

@@ -2,14 +2,14 @@
 import type { Child, FC, PropsWithChildren } from "hono/jsx";
 import {
   capturarContexto, categoriasMasUsadas, ErrorNegocio, fechaHoraLima, GRUPOS_PIEZA, hoy, listarCategorias, listarCobrosPendientes, listarPrestamos,
-  listarRepuestos, liquidacionViaje, listarUnidades, listarViajesFlota, MEDIOS_ENTREGA, NOMBRE_MEDIO_PAGO, nombreCategoria, partesDeUnidad,
-  piezasDeSemirremolque, puedeEditar, TIPOS_REPARACION, ultimaUnidadDeUsuario, viajesEnRuta,
+  listarRepuestos, liquidacionViaje, listarUnidades, listarViajesFlota, MEDIOS_ENTREGA, NOMBRE_MEDIO_PAGO, nombreCategoria, partesDePieza, partesDeUnidad,
+  pieza, piezasDeSemirremolque, puedeEditar, TIPOS_REPARACION, ultimaUnidadDeUsuario, viajesEnRuta,
   type FilaCobro, type GrupoPieza, type TipoReparacion, type UsuarioWeb, type ViajeEnRuta,
 } from "@sunatapp/core";
 import { accion, formularioMultiparte, pagina, volverA, type App, type C, type Deps } from "../base";
 import {
   guardarCambio, guardarCobro, guardarCompra, guardarEntrega, guardarGasto, guardarGastoEmpresa, guardarIngreso, guardarPrestamo, guardarReinversion,
-  pagarCuotaDe, type Campos,
+  CATEGORIA_CUOTA, pagarCuotaDe, type Campos,
 } from "../acciones";
 import { TIPOS_ANOTAR, tiposAnotar, type TipoAnotar } from "../lugares";
 import { Cabecera, diasEntre, fechaCorta, Icono, miles, soles2, Vacio, type NombreIcono } from "../ui";
@@ -304,11 +304,15 @@ async function parteRepare(c: C, d: Deps, q: Q): Promise<PartesForm> {
       solo: { texto: `Entra al stock hoy ${ahora(d)} · el repuesto nuevo se crea en Camiones › Repuestos`, cambiar: <CampoFecha d={d} /> },
     };
   }
-  const unidad = unidades.find((u) => u.id === num(q.vehiculoId)) ?? unidades[0];
+  const pedido = num(q.vehiculoId) ?? (await ultimaUnidadDeUsuario(ctx, c.get("usuario").id));
+  const unidad = unidades.find((u) => u.id === pedido) ?? unidades[0];
   if (!unidad) return { modos, campos: null, soloMensaje: <div class="lista-filas"><Vacio>Primero agrega un camión.</Vacio></div> };
   const partes = await partesDeUnidad(ctx, unidad.id);
   const piezas = piezasDeSemirremolque(unidad.semirremolque);
-  const parteSel = num(q.parteId);
+  // Si llegó una pieza (desde el 3D) y el camión tiene una parte instalada ahí, su contador se reinicia solo.
+  const piezaPedida = pieza(q.pieza);
+  const parteSel = num(q.parteId) ?? (piezaPedida ? partesDePieza(piezaPedida, partes)[0]?.id ?? null : null);
+  const parteReinicia = partes.find((p) => p.id === parteSel);
   // Sin campo «monto»: el costo es la mano de obra más los repuestos que salen del stock.
   return {
     modos,
@@ -322,7 +326,7 @@ async function parteRepare(c: C, d: Deps, q: Q): Promise<PartesForm> {
           </div>
         </fieldset>
         <input type="hidden" name="vehiculoId" value={unidad.id} />
-        <label class="campo"><span>¿Qué pieza? (o tócala en el 3D de Camiones)</span>
+        <label class="campo"><span>Pieza</span>
           <select name="componente">
             <option value="">— general, sin pieza —</option>
             {(Object.keys(GRUPOS_PIEZA) as GrupoPieza[]).map((g) => (
@@ -330,12 +334,12 @@ async function parteRepare(c: C, d: Deps, q: Q): Promise<PartesForm> {
             ))}
           </select>
         </label>
-        <label class="campo"><span>¿Qué se hizo?</span><input name="trabajo" maxlength={200} placeholder="Cambio de llanta, parchado, se ajustó…" /></label>
+        <label class="campo"><span>¿Qué se hizo?</span><input name="trabajo" maxlength={200} placeholder="Parchado, cambio…" /></label>
         <CampoPlata nombre="manoObra" etiqueta="Mano de obra (si hubo)" />
       </>
     ),
     solo: {
-      texto: `${unidad.codigo} · hoy ${ahora(d)} · ${miles(unidad.odometroKm)} km`,
+      texto: unir([unidad.codigo, `hoy ${ahora(d)}`, `${miles(unidad.odometroKm)} km`, parteReinicia && `Se reinicia el contador de ${parteReinicia.nombre}`]),
       cambiar: (
         <>
           <label class="campo"><span>¿Reinicia el contador de una parte?</span>
@@ -346,7 +350,7 @@ async function parteRepare(c: C, d: Deps, q: Q): Promise<PartesForm> {
           </label>
           <label class="campo"><span>Cantidad</span><input name="cantidad" inputmode="numeric" value="1" /></label>
           <label class="campo"><span>Tipo</span>
-            <select name="tipoReparacion">{(Object.keys(TIPOS_REPARACION) as TipoReparacion[]).map((t) => <option value={t} selected={t === (q.pieza ? "correctivo" : "preventivo")}>{TIPOS_REPARACION[t]}</option>)}</select>
+            <select name="tipoReparacion"><option value="" selected>Automático (con pieza: reparación; sin pieza: preventivo)</option>{(Object.keys(TIPOS_REPARACION) as TipoReparacion[]).map((t) => <option value={t}>{TIPOS_REPARACION[t]}</option>)}</select>
           </label>
           <label class="campo"><span>Taller o mecánico</span><input name="taller" /></label>
           <CampoFecha d={d} />
@@ -357,14 +361,18 @@ async function parteRepare(c: C, d: Deps, q: Q): Promise<PartesForm> {
   };
 }
 
-async function parteEmpresa(_c: C, d: Deps, _q: Q): Promise<PartesForm> {
-  const [fijas, unidades] = await Promise.all([listarCategorias(d.ctx, { tipo: "fijo", soloActivas: true }), listarUnidades(d.ctx)]);
+async function parteEmpresa(_c: C, d: Deps, q: Q): Promise<PartesForm> {
+  const [todas, unidades] = await Promise.all([listarCategorias(d.ctx, { tipo: "fijo", soloActivas: true }), listarUnidades(d.ctx)]);
+  // Las cuotas se pagan en «Préstamo o cuota» (ahí ya quedan como gasto).
+  const fijas = todas.filter((k) => k.clave !== CATEGORIA_CUOTA);
   return {
     campos: (
       <>
-        <CampoMonto />
-        <label class="campo"><span>¿En qué?</span><select name="categoria" required>{fijas.map((k) => <option value={k.clave}>{k.nombre}</option>)}</select></label>
-        <label class="opcion-fila"><input type="checkbox" name="mensual" value="1" /><span>Se repite cada mes (sueldo, alquiler, GPS…): anótalo una vez y se carga solo</span></label>
+        <CampoMonto valor={q.monto} />
+        <label class="campo"><span>¿En qué?</span>
+          <select name="categoria" required><option value="">Elige…</option>{fijas.map((k) => <option value={k.clave} selected={k.clave === q.categoria}>{k.nombre}</option>)}</select>
+        </label>
+        <label class="opcion-fila"><input type="checkbox" name="mensual" value="1" /><span>Se repite cada mes<br /><span class="muted">Sueldo, alquiler, GPS: se carga solo</span></span></label>
         <FotoOpcional />
       </>
     ),
@@ -384,7 +392,7 @@ async function parteEmpresa(_c: C, d: Deps, _q: Q): Promise<PartesForm> {
 }
 
 async function parteAnotarPrestamo(_c: C, d: Deps, q: Q): Promise<PartesForm> {
-  const modos = [{ modo: "", etiqueta: "Pagar una cuota" }, { modo: "nuevo", etiqueta: "Préstamo nuevo" }, { modo: "reinversion", etiqueta: "Reinversión" }];
+  const modos = [{ modo: "", etiqueta: "Pagar cuota" }, { modo: "nuevo", etiqueta: "Préstamo nuevo" }, { modo: "reinversion", etiqueta: "Reinversión" }];
   const unidades = await listarUnidades(d.ctx);
   if (q.modo === "nuevo") {
     return {
@@ -393,7 +401,7 @@ async function parteAnotarPrestamo(_c: C, d: Deps, q: Q): Promise<PartesForm> {
         <>
           <label class="campo"><span>¿Quién te prestó?</span><input name="entidad" required placeholder="Banco, caja, financiera" /></label>
           <CampoMonto etiqueta="¿Cuánto te prestaron?" />
-          <label class="campo"><span>Tasa anual (TEA %)</span><input name="tasa" inputmode="decimal" required /></label>
+          <label class="campo"><span>¿Qué interés al año? (%)</span><input name="tasa" inputmode="decimal" required /></label>
           <label class="campo"><span>¿En cuántas cuotas?</span><input name="cuotas" inputmode="numeric" required /></label>
         </>
       ),
@@ -416,6 +424,7 @@ async function parteAnotarPrestamo(_c: C, d: Deps, q: Q): Promise<PartesForm> {
   const conCuota = (await listarPrestamos(d.ctx)).filter((p) => p.proxima).sort((a, b) => a.proxima!.vencimiento.localeCompare(b.proxima!.vencimiento));
   if (!conCuota.length) return { modos, campos: null, soloMensaje: <div class="lista-filas"><Vacio>No tienes cuotas pendientes. 👌</Vacio></div> };
   const sel = conCuota.find((p) => p.id === num(q.prestamoId)) ?? conCuota[0]!;
+  const h = hoy(d.ctx);
   return {
     modos,
     campos: (
@@ -424,7 +433,10 @@ async function parteAnotarPrestamo(_c: C, d: Deps, q: Q): Promise<PartesForm> {
           <div class="lista-filas">
             {conCuota.map((p) => (
               <a class={`fila-aviso${p.id === sel.id ? " sel" : ""}`} href={urlAnotar({ ...q, prestamoId: p.id })} data-panel-link="" aria-current={p.id === sel.id ? "true" : undefined}>
-                <span class="txt"><b>{p.entidad}</b> · cuota {p.pagadas + 1} de {p.total}<br /><span class="muted">vence {fechaCorta(p.proxima!.vencimiento)}</span></span>
+                <span class="punto" style={`background:var(${p.proxima!.vencimiento < h ? "--accent" : "--amber-bar"})`}></span>
+                <span class="txt"><b>{p.entidad}</b> · cuota {p.pagadas + 1} de {p.total}<br />{p.proxima!.vencimiento < h
+                  ? <span class="vencida">vencida hace {diasEntre(p.proxima!.vencimiento, h)} días</span>
+                  : <span class="muted">vence {fechaCorta(p.proxima!.vencimiento)}</span>}</span>
                 <b>{soles2(p.proxima!.monto)}</b>
               </a>
             ))}
@@ -455,7 +467,7 @@ const FormAnotar: FC<{ q: Q; permitidos: TipoAnotar[]; p: PartesForm }> = ({ q, 
       ))}
     </nav>
     {p.modos ? (
-      <nav class="segmentos" aria-label="Opciones">
+      <nav class={`segmentos${p.modos.length === 3 ? " modos-3" : ""}`} aria-label="Opciones">
         {p.modos.map((m) => (
           <a href={urlAnotar({ ...q, modo: m.modo, facturaId: "", prestamoId: "", monto: "", categoria: "" })} data-panel-link="" class={m.modo === q.modo ? "activo" : undefined} aria-current={m.modo === q.modo ? "true" : undefined}>{m.etiqueta}</a>
         ))}
@@ -513,7 +525,7 @@ async function guardarAnotacion(d: Deps, u: UsuarioWeb, tipo: TipoAnotar, f: Cam
         if (!puedeEditar(u.rol, "inventario")) throw new ErrorNegocio("Tu rol no puede registrar compras");
         return guardarCompra(d, u.id, f);
       }
-      return (await guardarCambio(d, u.id, f, f.tipoReparacion)).ok;
+      return (await guardarCambio(d, u.id, f, f.tipoReparacion, { algo: true })).ok;
     }
     case "empresa":
       return guardarGastoEmpresa(d, u.id, f, archivos.foto);

@@ -353,7 +353,7 @@ body.sin-inferior .contenido { padding-bottom: 24px; }
 }
 
 /* ── Anotar ── */
-.anotar { display: flex; flex-direction: column; gap: 12px; max-width: 560px; width: 100%; margin: 0 auto; }
+.anotar { display: flex; flex-direction: column; gap: 12px; width: 560px; max-width: 100%; margin: 0 auto; }
 .tipos-anotar { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .tipos-anotar a { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; min-height: 76px; padding: 10px 6px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); color: var(--text); text-decoration: none; font-size: 12px; font-weight: 600; text-align: center; }
 .tipos-anotar a:hover { border-color: var(--accent); color: var(--text); }
@@ -361,6 +361,9 @@ body.sin-inferior .contenido { padding-bottom: 24px; }
 .segmentos { display: flex; gap: 6px; flex-wrap: wrap; }
 .segmentos a { display: inline-flex; align-items: center; min-height: 44px; padding: 0 14px; border: 1px solid var(--border); border-radius: 22px; background: var(--panel); color: var(--text); text-decoration: none; font-size: 13px; }
 .segmentos a.activo { background: var(--dark); border-color: var(--dark); color: var(--dark-text); }
+.segmentos.modos-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.segmentos.modos-3 a { justify-content: center; text-align: center; padding: 0 8px; }
+.fila-aviso .vencida { color: var(--accent); font-weight: 600; }
 .form-anotar { display: flex; flex-direction: column; gap: 12px; }
 .grupo { border: 0; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .campo-monto .monto-caja { display: flex; align-items: center; gap: 8px; border: 2px solid var(--text); border-radius: 8px; background: var(--white); padding: 0 14px; }

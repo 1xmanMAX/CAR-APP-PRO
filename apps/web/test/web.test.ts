@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
-  buscarUnidad, crearCategoria, crearEnlaceWeb, guardarUsuario, registrarGasto, registrarViajeFlota, listarEventos, listarUsuarios, listarViajesFlota, obtenerEmpresa, partesDeUnidad, crearRepuesto, listarCostosFijos, listarPrestamos, listarReparaciones, listarRepuestos, instalarParte, listarTiposParte, liquidacionViaje,
+  buscarUnidad, crearCategoria, crearEnlaceWeb, guardarUsuario, registrarGasto, registrarViajeFlota, listarEventos, listarUsuarios, listarViajesFlota, obtenerEmpresa, partesDeUnidad, crearRepuesto, listarCostosFijos, listarPrestamos, listarReparaciones, listarRepuestos, piezasDeTipo, instalarParte, listarTiposParte, liquidacionViaje,
   type Contexto,
 } from "@sunatapp/core";
 import { crearDb, gasto } from "../../../packages/db/src/index";
@@ -308,6 +308,48 @@ describe("web", () => {
         expect(html).not.toContain("Me pagaron");
         expect((await enviar(taller, { tipo: "prestamo", modo: "reinversion", volver: "/", concepto: "X", monto: "1" })).status).toBe(403);
       });
+
+      it("Gasto de la empresa no ofrece cuotas de préstamo (se pagan en «Préstamo o cuota») y empieza sin elegir", async () => {
+        const cookie = await entrar();
+        const html = await (await app.request("/anotar?tipo=empresa", { headers: { cookie } })).text();
+        expect(html).not.toContain('value="cuota_prestamo"');
+        expect(html).toMatch(/<select name="categoria" required=""><option value="">Elige/);
+        const r = await enviar(cookie, { tipo: "empresa", volver: "/", monto: "500", categoria: "cuota_prestamo" });
+        expect(aviso(r)).toContain("error=");
+        expect(aviso(r)).toContain("Préstamo o cuota");
+        expect((await ctx.db.select().from(gasto)).filter((g) => g.categoria === "cuota_prestamo")).toHaveLength(0);
+      });
+
+      it("Reparé con pieza y sin tipo elegido se guarda como reparación (gasto variable), sin exigir qué se hizo", async () => {
+        const cookie = await entrar();
+        const t01 = (await buscarUnidad(ctx, "T-01"))!;
+        const html = await (await app.request(`/anotar?tipo=repare&vehiculoId=${t01.id}`, { headers: { cookie } })).text();
+        expect(html).toMatch(/<select name="tipoReparacion"><option value="" selected="">Automático/);
+        const r = await enviar(cookie, { tipo: "repare", volver: "/", vehiculoId: String(t01.id), componente: "retrovisor-izq", trabajo: "", manoObra: "60", tipoReparacion: "" });
+        expect(aviso(r)).toContain("ok=Guardado en Retrovisor");
+        const [g] = await ctx.db.select().from(gasto);
+        expect(g).toMatchObject({ categoria: "reparacion_ruta", monto: 6000 });
+      });
+
+      it("Reparé desde una pieza del 3D deja elegida la parte que va ahí y lo dice", async () => {
+        const cookie = await entrar();
+        const t01 = (await buscarUnidad(ctx, "T-01"))!;
+        const aceite = (await listarTiposParte(ctx)).find((t) => t.codigo === "aceite")!;
+        await instalarParte(ctx, { vehiculoId: t01.id, tipoParteId: aceite.id });
+        const [p] = await partesDeUnidad(ctx, t01.id);
+        const [idPieza] = piezasDeTipo(aceite);
+        const html = await (await app.request(`/anotar?tipo=repare&vehiculoId=${t01.id}&pieza=${idPieza}`, { headers: { cookie } })).text();
+        expect(html).toMatch(new RegExp(`<option value="${p!.id}" selected`));
+        expect(html).toContain(`Se reinicia el contador de ${p!.nombre}`);
+      });
+
+      it("una cuota vencida se ve en rojo con los días", async () => {
+        const cookie = await entrar();
+        await enviar(cookie, { tipo: "prestamo", modo: "nuevo", volver: "/", entidad: "Caja Tacna", monto: "1000", tasa: "10", cuotas: "6", fecha: "2020-01-01" });
+        const html = await (await app.request("/anotar?tipo=prestamo", { headers: { cookie } })).text();
+        expect(html).toMatch(/class="vencida">vencida hace \d+ días/);
+        expect(await (await app.request("/anotar?tipo=prestamo&modo=nuevo", { headers: { cookie } })).text()).toContain("¿Qué interés al año? (%)");
+      });
     });
 
     it("gasto mínimo: solo monto y categoría; el resto se completa solo", async () => {
@@ -543,6 +585,17 @@ describe("web", () => {
       expect(aviso(r)).toContain("ok=Cambio guardado");
       expect(avisos[0]).toContain("CAMBIO REGISTRADO · T-01");
       expect(await listarEventos(ctx)).toEqual([]);
+    });
+
+    it("/reparaciones no exige «trabajo» (es opcional ahí); /trailer/:id/pieza sí", async () => {
+      const cookie = await entrar();
+      const t01 = (await buscarUnidad(ctx, "T-01"))!;
+      let r = await post(cookie, "/reparaciones", { vehiculoId: String(t01.id), componente: "retrovisor-izq", trabajo: "", tipo: "correctivo", manoObra: "40" });
+      expect(aviso(r)).toContain("ok=Guardado en Retrovisor");
+      r = await post(cookie, "/reparaciones", { vehiculoId: String(t01.id), trabajo: "", tipo: "preventivo", manoObra: "30" });
+      expect(aviso(r)).toContain("ok=Cambio guardado · Reparación");
+      r = await post(cookie, `/trailer/${t01.id}/pieza`, { componente: "retrovisor-izq", trabajo: "" });
+      expect(aviso(r)).toContain("error=Escribe qué pasó");
     });
 
     it("un error de negocio vuelve con el mensaje", async () => {

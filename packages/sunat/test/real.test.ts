@@ -212,7 +212,10 @@ describe("SunatReal — probar conexión", () => {
 describe("SunatReal — correcciones de revisión", () => {
   it("probarClaveSol: fault sin código numérico no es ok; fault de rechazo sí es ok", async () => {
     const sinCodigo = () => new Response(`<soap-env:Envelope xmlns:soap-env="http://schemas.xmlsoap.org/soap/envelope/"><soap-env:Body><soap-env:Fault><faultcode>soap-env:Server</faultcode><faultstring>Error interno</faultstring></soap-env:Fault></soap-env:Body></soap-env:Envelope>`, { status: 500 });
-    expect(await new SunatReal(cred, { fetch: fetchFalso([sinCodigo]).fn }).probarClaveSol()).toMatchObject({ ok: false, mensaje: expect.stringContaining("inesperado") });
+    // Con HTTP 5xx es SUNAT caída (ver «fault sin código + 5xx»); con 200 es una respuesta inesperada.
+    expect(await new SunatReal(cred, { fetch: fetchFalso([sinCodigo]).fn }).probarClaveSol()).toMatchObject({ ok: false, mensaje: expect.stringContaining("No se pudo conectar") });
+    const sinCodigo200 = () => new Response(`<soap-env:Envelope xmlns:soap-env="http://schemas.xmlsoap.org/soap/envelope/"><soap-env:Body><soap-env:Fault><faultcode>soap-env:Server</faultcode><faultstring>Error interno</faultstring></soap-env:Fault></soap-env:Body></soap-env:Envelope>`);
+    expect(await new SunatReal(cred, { fetch: fetchFalso([sinCodigo200]).fn }).probarClaveSol()).toMatchObject({ ok: false, mensaje: expect.stringContaining("inesperado") });
     expect(await new SunatReal(cred, { fetch: fetchFalso([soapFault("2800")]).fn }).probarClaveSol()).toMatchObject({ ok: true });
   });
 
@@ -254,5 +257,51 @@ describe("SunatReal — revisión final (C1, I4)", () => {
     const prod = fetchFalso([soapFault("1032"), statusCdr("0011")]);
     await expect(new SunatReal({ ...cred, ambienteFactura: "produccion" }, { fetch: prod.fn }).enviarFactura({ nombreArchivo: "20606433094-01-F001-7", xml: "<f/>" }))
       .rejects.toBeInstanceOf(SunatYaRegistradoError);
+  });
+});
+
+describe("SunatReal — seguimiento: errores pasajeros y código del faultstring", () => {
+  const faultSinCodigo = (mensaje: string, status = 500) => () =>
+    new Response(`<soap-env:Envelope xmlns:soap-env="http://schemas.xmlsoap.org/soap/envelope/"><soap-env:Body><soap-env:Fault><faultcode>soap-env:Server</faultcode><faultstring>${mensaje}</faultstring></soap-env:Fault></soap-env:Body></soap-env:Envelope>`, { status });
+
+  it("fault sin código de 4 dígitos con HTTP 5xx es SUNAT no disponible (no cuenta para la pausa)", async () => {
+    for (const status of [500, 503]) {
+      await expect(new SunatReal(cred, { fetch: fetchFalso([faultSinCodigo("Internal Error", status)]).fn }).enviarFactura({ nombreArchivo: "a", xml: "<a/>" }))
+        .rejects.toBeInstanceOf(SunatNoDisponibleError);
+    }
+    // Sin 5xx sigue siendo un error raro (no SUNAT caída).
+    const r = new SunatReal(cred, { fetch: fetchFalso([faultSinCodigo("Internal Error", 200)]).fn }).enviarFactura({ nombreArchivo: "a", xml: "<a/>" });
+    await expect(r).rejects.toThrow("SUNAT SOAP");
+  });
+
+  it("fault sin código: solo un faultcode «Server» es pasajero; «Client» con HTTP 500 sigue contando para la pausa", async () => {
+    const fault = (faultcode: string) => () =>
+      new Response(`<soap-env:Envelope xmlns:soap-env="http://schemas.xmlsoap.org/soap/envelope/"><soap-env:Body><soap-env:Fault><faultcode>${faultcode}</faultcode><faultstring>Algo falló</faultstring></soap-env:Fault></soap-env:Body></soap-env:Envelope>`, { status: 500 });
+    for (const faultcode of ["soap-env:Client", "Client", "env:Client.Auth"]) {
+      const r = new SunatReal(cred, { fetch: fetchFalso([fault(faultcode)]).fn }).enviarFactura({ nombreArchivo: "a", xml: "<a/>" });
+      await expect(r).rejects.toThrow("SUNAT SOAP");
+    }
+    for (const faultcode of ["soap-env:Server", "env:Server", "Server"]) {
+      await expect(new SunatReal(cred, { fetch: fetchFalso([fault(faultcode)]).fn }).enviarFactura({ nombreArchivo: "a", xml: "<a/>" }))
+        .rejects.toBeInstanceOf(SunatNoDisponibleError);
+    }
+  });
+
+  it("GRE HTTP 429 (demasiados pedidos) es SUNAT no disponible", async () => {
+    const gre = fetchFalso([token, () => new Response("Too Many Requests", { status: 429 })]);
+    await expect(new SunatReal(cred, { fetch: gre.fn }).enviarGuia({ nombreArchivo: "a", xml: "<a/>" })).rejects.toBeInstanceOf(SunatNoDisponibleError);
+    const ticket = fetchFalso([token, () => new Response("", { status: 429 })]);
+    await expect(new SunatReal(cred, { fetch: ticket.fn }).consultarTicket("T")).rejects.toBeInstanceOf(SunatNoDisponibleError);
+    const oauth = fetchFalso([() => new Response("", { status: 429 })]);
+    await expect(new SunatReal(cred, { fetch: oauth.fn }).enviarGuia({ nombreArchivo: "a", xml: "<a/>" })).rejects.toBeInstanceOf(SunatNoDisponibleError);
+  });
+
+  it("el código del faultstring solo se toma si va al inicio (no un año ni «F001-1234»)", async () => {
+    for (const mensaje of ["El comprobante F001-1234 no existe", "Error del 2026 en el servicio"]) {
+      const r = new SunatReal(cred, { fetch: fetchFalso([faultSinCodigo(mensaje, 200)]).fn }).enviarFactura({ nombreArchivo: "a", xml: "<a/>" });
+      await expect(r).rejects.toThrow("SUNAT SOAP soap-env:Server");
+    }
+    expect(await new SunatReal(cred, { fetch: fetchFalso([faultSinCodigo("  2800 Detalle", 200)]).fn }).enviarFactura({ nombreArchivo: "a", xml: "<a/>" }))
+      .toMatchObject({ estado: "rechazada", codigo: "2800" });
   });
 });

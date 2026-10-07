@@ -1,8 +1,13 @@
 /** @jsxRuntime automatic @jsxImportSource hono/jsx */
 import {
   AVISO_RETORNO_VACIO, editarViajeFlota, emitirFactura, guiasConAvisoRetornoVacio, enlazarGuia, ErrorNegocio, finalizarViajeFlota, hoy, listarCobrosPendientes, listarGuias,
+<<<<<<< HEAD
   listarUnidades, listarViajesFlota, parsearMonto, FaltaDatoTransporteError, prepararFactura, puedeEditar, rangoMes, registrarViajeFlota,
   sumarDias, formatearSoles, archivosDocumento, contarPorRevisar, puedeVer,
+=======
+  listarUnidades, listarViajesFlota, parsearMonto, FaltaDatoTransporteError, prepararFactura, puedeEditar, rangoMes, registrarCobro, registrarViajeFlota,
+  sumarDias, formatearSoles, archivosDocumento, contarPorRevisar, puedeVer, listarDocumentosAtascados, confirmarFacturaEnSol, reconsultarGuia,
+>>>>>>> sunat-salida-real
 } from "@sunatapp/core";
 import { guardarCobro } from "../acciones";
 import { accion, formulario, pagina, servirDeAlmacen, volverA, type App, type C, type Deps } from "../base";
@@ -34,11 +39,41 @@ async function vista(c: C, d: Deps) {
   const km = viajes.reduce((s, v) => s + (v.km ?? 0), 0);
   const edita = puedeEditar(c.get("usuario").rol, "viajes");
   const viajesSinGuia = (await listarViajesFlota(ctx, { desde: sumarDias(h, -60), hasta: h })).filter((v) => v.guia === "—" || !v.facturas.length);
+  // Documentos que el fondo ya no mueve solo: solo el dueño los resuelve.
+  const atascados = c.get("usuario").rol === "dueno" ? await listarDocumentosAtascados(ctx) : null;
+  const hayAtascados = !!atascados && atascados.facturas.length + atascados.guias.length + atascados.porReemitir.length > 0;
   const retornoVacio = await guiasConAvisoRetornoVacio(ctx, guias.filter((g) => g.estado === "aceptada" && !g.facturada).map((g) => g.id));
 
   return pagina(c, d, { titulo: "Viajes, guías y facturas", seccion: "viajes" }, (
     <>
       {porRevisar > 0 ? <a class="aviso info" href="/revisar" style="display:block;text-decoration:none">🔎 <b>{porRevisar} por revisar</b>: mensajes de Telegram sin confirmar o gastos sin viaje. Revisar →</a> : null}
+      {hayAtascados && atascados ? (
+        <Panel titulo="DOCUMENTOS QUE ESPERAN TU AYUDA · SUNAT">
+          <div class="filas">
+            {atascados.facturas.map((f) => (
+              <form method="post" action={`/facturas/${f.id}/en-sol`} class="filas" style="gap:6px">
+                <span><b>Factura {f.serieNumero}</b>: SUNAT dice que ya la tiene, pero no mandó su constancia. Entra a SOL, busca esta factura y dinos qué ves.</span>
+                <div class="linea">
+                  <button class="btn primario chico" type="submit" name="enSol" value="si" style="min-height:44px">YA LA VERIFIQUÉ EN SOL: ESTÁ ACEPTADA</button>
+                  <button class="btn chico" type="submit" name="enSol" value="no" style="min-height:44px">NO ESTÁ EN SOL</button>
+                </div>
+              </form>
+            ))}
+            {atascados.porReemitir.map((f) => (
+              <form method="post" action={`/facturas/${f.id}/reemitir`} class="linea">
+                <span style="flex:1"><b>Factura {f.serieNumero}</b>: no está en SOL. Vuelve a emitirla; saldrá con otro número.</span>
+                <button class="btn primario chico" type="submit" style="min-height:44px">VOLVER A EMITIR</button>
+              </form>
+            ))}
+            {atascados.guias.map((g) => (
+              <form method="post" action={`/guias/${g.id}/reconsultar`} class="linea">
+                <span style="flex:1"><b>Guía {g.serieNumero}</b>: SUNAT no respondió y dejamos de preguntar.</span>
+                <button class="btn primario chico" type="submit" style="min-height:44px">VOLVER A CONSULTAR</button>
+              </form>
+            ))}
+          </div>
+        </Panel>
+      ) : null}
       <section class="kpis">
         <Kpi oscuro etiqueta="VIAJES DEL MES" valor={viajes.length} sub={mes} />
         <Kpi etiqueta="KM RECORRIDOS" valor={miles(km)} />
@@ -260,6 +295,31 @@ export function rutasViajes(app: App, d: Deps): void {
       return `Factura ${r.serieNumero}: ${r.estado}${r.mensaje ? ` · ${r.mensaje}` : ""}`;
     });
   });
+  // Documentos atascados (ver listarDocumentosAtascados): solo el dueño, y queda en la auditoría.
+  const soloDueno = (c: C) => {
+    if (c.get("usuario").rol !== "dueno") throw new ErrorNegocio("Solo el dueño puede resolver documentos de SUNAT");
+  };
+  app.post("/facturas/:id/en-sol", async (c) => {
+    const f = await formulario(c);
+    return accion(c, "/viajes", async () => {
+      soloDueno(c);
+      if (f.enSol !== "si" && f.enSol !== "no") throw new ErrorNegocio("Elige si la factura está o no en SOL");
+      const r = await confirmarFacturaEnSol(d.ctx, Number(c.req.param("id")), f.enSol === "si", c.get("usuario").id);
+      return r.estado === "aceptada" ? `Factura ${r.serieNumero} marcada como aceptada` : `Factura ${r.serieNumero}: no está en SOL. Toca VOLVER A EMITIR`;
+    });
+  });
+  app.post("/facturas/:id/reemitir", async (c) => accion(c, "/viajes", async () => {
+    soloDueno(c);
+    const id = Number(c.req.param("id"));
+    if (!(await listarDocumentosAtascados(d.ctx)).porReemitir.some((f) => f.id === id)) throw new ErrorNegocio("Esa factura no está esperando que la vuelvas a emitir");
+    const r = await emitirFactura(d.ctx, id);
+    return `Factura ${r.serieNumero}: ${r.estado}${r.mensaje ? ` · ${r.mensaje}` : ""}`;
+  }));
+  app.post("/guias/:id/reconsultar", async (c) => accion(c, "/viajes", async () => {
+    soloDueno(c);
+    const r = await reconsultarGuia(d.ctx, Number(c.req.param("id")), c.get("usuario").id);
+    return `Guía ${r.serieNumero}: ${r.mensaje ?? "se volverá a consultar"}`;
+  }));
   app.post("/guias/:id/enlazar", async (c) => {
     const f = await formulario(c);
     return accion(c, "/viajes", async () => {

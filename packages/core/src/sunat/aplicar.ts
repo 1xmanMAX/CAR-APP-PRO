@@ -1,4 +1,6 @@
-import { eq, factura, guiaTransportista, inArray, sql } from "@sunatapp/db";
+import { and, eq, factura, guiaTransportista, isNull, lt, notInArray, or, sql } from "@sunatapp/db";
+import { CODIGOS_VERIFICAR } from "../facturas/emitir";
+import { MAX_INTENTOS } from "../guias/emitir";
 import { cargarConfig, type Config } from "../infra/config";
 import { reconfigurarSunat, type Contexto } from "../infra/contexto";
 import { pausarSunat } from "./pausa";
@@ -42,10 +44,20 @@ async function pausarPorConfig(ctx: Contexto, modo: string, error: string): Prom
   return `${motivo}. Mientras tanto, modo simulado y SUNAT en pausa (no se envía nada).`;
 }
 
-/** Guías y facturas que todavía están en camino a SUNAT (pendientes de envío o esperando respuesta). */
+/**
+ * Guías y facturas que todavía están en camino a SUNAT (pendientes de envío o esperando respuesta).
+ * No cuentan las atascadas que esperan al dueño (ver sunat/atascados): la factura "verifícala en
+ * SOL" (1032/1033) y la guía enviada que ya no se consulta sola; si no, bloquearían el cambio de modo para siempre.
+ */
 export async function contarDocumentosEnCurso(ctx: Contexto): Promise<number> {
-  const [g] = await ctx.db.select({ n: sql<number>`count(*)` }).from(guiaTransportista).where(inArray(guiaTransportista.estado, ["pendiente_envio", "enviada"]));
+  const [g] = await ctx.db.select({ n: sql<number>`count(*)` }).from(guiaTransportista).where(or(
+    eq(guiaTransportista.estado, "pendiente_envio"),
+    and(eq(guiaTransportista.estado, "enviada"), lt(guiaTransportista.intentos, MAX_INTENTOS)),
+  ));
   // Las facturas no tienen estado "enviada": SUNAT contesta en el mismo envío.
-  const [f] = await ctx.db.select({ n: sql<number>`count(*)` }).from(factura).where(eq(factura.estadoSunat, "pendiente_envio"));
+  const [f] = await ctx.db.select({ n: sql<number>`count(*)` }).from(factura).where(and(
+    eq(factura.estadoSunat, "pendiente_envio"),
+    or(isNull(factura.codigoRespuesta), notInArray(factura.codigoRespuesta, CODIGOS_VERIFICAR)),
+  ));
   return Number(g?.n ?? 0) + Number(f?.n ?? 0);
 }

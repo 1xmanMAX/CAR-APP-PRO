@@ -668,6 +668,26 @@ describe("web", () => {
       expect((await app.request(`/archivo/documento/${m.id}`)).status).toBe(302);
     });
 
+    it("por revisar: si no se puede guardar, el error llega al dueño y el mensaje sigue en «Necesita tu atención»", async () => {
+      const cookie = await entrar();
+      const { recibirMensaje, leerDocumento, crearLectorReglas } = await import("./ayuda-revisar");
+      ctx.ia = crearLectorReglas();
+      const m = await recibirMensaje(ctx, { tipo: "voz", contenido: Buffer.from("ogg"), mime: "audio/ogg", telegramChatId: 5, telegramMessageId: 60 });
+      await leerDocumento(ctx, m.id);
+      // Plata al chofer a un camión sin viaje en curso: no se puede guardar.
+      const r = await post(cookie, `/revisar/${m.id}`, { tipo: "entrega", monto: "50", medio: "efectivo", vehiculoId: "1", volver: "/?ver=atencion" });
+      expect(aviso(r)).toContain("error=Esa unidad no tiene un viaje en curso");
+      const vuelta = await app.request(r.headers.get("location")!, { headers: { cookie } });
+      expect(vuelta.status).toBe(200);
+      const html = await vuelta.text();
+      expect(html).toContain("Esa unidad no tiene un viaje en curso");
+      expect(html).not.toContain("ya se guardó");
+      expect(html).toContain("No se pudo leer");
+      const [doc] = await ctx.db.select().from(documentoRecibido).where(eq(documentoRecibido.id, m.id));
+      expect(doc!.estadoLectura).toBe("error");
+      expect(await (await app.request("/?ver=atencion", { headers: { cookie } })).text()).toContain(`/anotar?documento=${m.id}`);
+    });
+
     it("por revisar: Anotar precargado con lo que leyó la IA, descartar, asignar viaje y roles", async () => {
       const cookie = await entrar();
       const { recibirMensaje, leerDocumento, crearLectorReglas } = await import("./ayuda-revisar");

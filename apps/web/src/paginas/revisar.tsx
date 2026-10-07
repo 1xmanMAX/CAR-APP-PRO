@@ -64,9 +64,10 @@ export function rutasRevisar(app: App, d: Deps): void {
       const monto = parsearMonto(f.monto ?? "");
       if (monto === null) throw new ErrorNegocio("Monto no válido");
       try {
-        const base = (await obtenerDocumento(d.ctx, id)).lectura;
-        await fijarLectura(d.ctx, id, lecturaConfirmada(base, f, monto / 100));
-        const r = await confirmarLectura(d.ctx, id, { vehiculoId: Number(f.vehiculoId) || null, usuarioId: c.get("usuario").id });
+        const antes = await obtenerDocumento(d.ctx, id);
+        await fijarLectura(d.ctx, id, lecturaConfirmada(antes.lectura, f, monto / 100));
+        // Si no se puede guardar, vuelve al estado que tenía (un error sigue en «Necesita tu atención»).
+        const r = await confirmarLectura(d.ctx, id, { vehiculoId: Number(f.vehiculoId) || null, usuarioId: c.get("usuario").id, siFalla: antes.estado });
         if (r.tipo === "ya_confirmado") return { ok: "Ya estaba guardado", ruta: destino };
         return { ok: r.tipo === "gasto" ? `Gasto guardado${r.viajeCodigo ? ` en ${r.viajeCodigo}` : ""}` : `Entrega anotada en ${r.viajeCodigo}`, ruta: destino };
       } catch (e) {

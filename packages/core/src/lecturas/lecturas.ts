@@ -207,7 +207,10 @@ export async function fijarLectura(ctx: Contexto, documentoId: number, lectura: 
  * Guarda lo leído como gasto (en la unidad y su viaje en curso) o como entrega de dinero del viaje.
  * El paso «por confirmar → confirmado» es atómico: un segundo clic no duplica nada.
  */
-export async function confirmarLectura(ctx: Contexto, documentoId: number, o: { vehiculoId?: number | null; usuarioId?: number }): Promise<ResultadoConfirmacion> {
+export async function confirmarLectura(
+  ctx: Contexto, documentoId: number,
+  o: { vehiculoId?: number | null; usuarioId?: number; /** Estado al que vuelve si no se puede guardar (el que tenía antes de `fijarLectura`). */ siFalla?: EstadoLectura },
+): Promise<ResultadoConfirmacion> {
   const [d] = await ctx.db.update(documentoRecibido).set({ estadoLectura: "confirmado" })
     .where(and(eq(documentoRecibido.id, documentoId), eq(documentoRecibido.estadoLectura, "por_confirmar")))
     .returning();
@@ -217,7 +220,9 @@ export async function confirmarLectura(ctx: Contexto, documentoId: number, o: { 
     if (existe.estado === "confirmado") return { tipo: "ya_confirmado" };
     throw new ErrorNegocio("Este mensaje todavía no tiene una lectura para confirmar");
   }
-  const devolver = () => ctx.db.update(documentoRecibido).set({ estadoLectura: "por_confirmar" }).where(eq(documentoRecibido.id, documentoId));
+  // Un mensaje con error sigue con error (y en «Necesita tu atención»): un intento fallido no lo pasa a «por confirmar».
+  const siFalla = o.siFalla && !RESUELTOS.includes(o.siFalla) ? o.siFalla : "por_confirmar";
+  const devolver = () => ctx.db.update(documentoRecibido).set({ estadoLectura: siFalla }).where(eq(documentoRecibido.id, documentoId));
   try {
     const l = esquemaLectura.parse(d.datosExtraidos);
     const hoyStr = hoy(ctx);
@@ -322,13 +327,27 @@ export async function listarPorRevisar(ctx: Contexto): Promise<ItemPorRevisar[]>
     ? await ctx.db.select({ documentoId: lecturaIa.documentoId, error: lecturaIa.error }).from(lecturaIa)
       .where(inArray(lecturaIa.documentoId, filas.map((f) => f.id))).orderBy(lecturaIa.id)
     : [];
-  return filas.map((d) => {
-    const l = esquemaLectura.safeParse(d.datosExtraidos);
-    return {
-      documentoId: d.id, usuarioId: d.usuarioId, tipo: d.tipo, estado: d.estadoLectura, desde: d.creadoEn, lectura: l.success ? l.data : null, texto: d.texto,
-      rutaArchivo: d.rutaArchivo, mime: d.mime, error: errores.filter((e) => e.documentoId === d.id && e.error).at(-1)?.error ?? null,
-    };
-  });
+  return filas.map((d) => aItem(d, errores));
+}
+
+function aItem(d: typeof documentoRecibido.$inferSelect, errores: Array<{ documentoId: number; error: string | null }>): ItemPorRevisar {
+  const l = esquemaLectura.safeParse(d.datosExtraidos);
+  return {
+    documentoId: d.id, usuarioId: d.usuarioId, tipo: d.tipo, estado: d.estadoLectura, desde: d.creadoEn, lectura: l.success ? l.data : null, texto: d.texto,
+    rutaArchivo: d.rutaArchivo, mime: d.mime, error: errores.filter((e) => e.documentoId === d.id && e.error).at(-1)?.error ?? null,
+  };
+}
+
+/**
+ * Un mensaje del chofer por su número mientras no esté guardado ni descartado, aunque todavía no
+ * figure en «Necesita tu atención»: así un intento fallido no lo esconde. null si no existe o ya se resolvió.
+ */
+export async function documentoPorConfirmar(ctx: Contexto, documentoId: number): Promise<ItemPorRevisar | null> {
+  const [d] = await ctx.db.select().from(documentoRecibido).where(eq(documentoRecibido.id, documentoId));
+  if (!d || d.tipo === "pdf" || RESUELTOS.includes(d.estadoLectura)) return null;
+  const errores = await ctx.db.select({ documentoId: lecturaIa.documentoId, error: lecturaIa.error }).from(lecturaIa)
+    .where(eq(lecturaIa.documentoId, documentoId)).orderBy(lecturaIa.id);
+  return aItem(d, errores);
 }
 
 /** «V2B-845», «v2b 845» → «V2B845». */

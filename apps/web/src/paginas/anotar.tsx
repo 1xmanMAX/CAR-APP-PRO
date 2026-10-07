@@ -2,7 +2,7 @@
 import type { Child, FC, PropsWithChildren } from "hono/jsx";
 import {
   asiQueda, camionDeMensaje, capturarContexto, categoriasMasUsadas, ErrorNegocio, fechaHoraLima, GRUPOS_PIEZA, hoy, listarCategorias, listarCobrosPendientes, listarPrestamos,
-  listarPorRevisar, listarRepuestos, liquidacionViaje, listarUnidades, listarViajesFlota, MEDIOS_ENTREGA, NOMBRE_MEDIO_PAGO, nombreCategoria, partesDePieza, partesDeUnidad,
+  documentoPorConfirmar, listarRepuestos, liquidacionViaje, listarUnidades, listarViajesFlota, MEDIOS_ENTREGA, NOMBRE_MEDIO_PAGO, nombreCategoria, partesDePieza, partesDeUnidad,
   parsearMonto, pieza, piezasDeSemirremolque, puedeEditar, TIPOS_REPARACION, ultimaUnidadDeUsuario, viajesEnRuta,
   type AsiQueda, type FilaCobro, type GrupoPieza, type TipoReparacion, type UsuarioWeb, type ViajeEnRuta,
 } from "@sunatapp/core";
@@ -514,7 +514,8 @@ async function parteAnotarPrestamo(_c: C, d: Deps, q: Q): Promise<PartesForm> {
 async function parteDocumento(d: Deps, q: Q, pedido: string | undefined): Promise<PartesForm | null> {
   const ctx = d.ctx;
   const id = num(q.documento);
-  const item = id === null ? undefined : (await listarPorRevisar(ctx)).find((x) => x.documentoId === id);
+  // Por su número (no por la lista): un intento fallido o un mensaje recién llegado no se esconde.
+  const item = id === null ? null : await documentoPorConfirmar(ctx, id);
   if (!item) return null;
   const v = valoresLectura(item.lectura);
   // Sin «tipo» en la URL manda lo que leyó la IA; con «tipo» manda el botón que tocó el usuario.

@@ -4,7 +4,7 @@ import { documentoRecibido, entrega, eq, gasto, usuario } from "@sunatapp/db";
 import {
   confirmarLectura, corregirLectura, descartarLectura, fijarLectura, leerDocumento, obtenerDocumento, procesarLecturasPendientes,
   recibirMensaje, registrarViajeFlota, listarPorRevisar, gastosSinViaje, asignarViajeGasto, contarPorRevisar, costoIaDelMes, crearRuta, liquidacionDeUnidad,
-  camionDeMensaje, crearInvitacion, crearUnidad, MENSAJE_YA_RESUELTO, registrarGasto, obtenerUnidad, usarInvitacion, type Contexto,
+  camionDeMensaje, crearInvitacion, crearUnidad, documentoPorConfirmar, MENSAJE_YA_RESUELTO, registrarGasto, obtenerUnidad, usarInvitacion, type Contexto,
 } from "../src/index";
 import { crearContextoPrueba } from "./helpers";
 
@@ -159,6 +159,23 @@ describe("lecturas de mensajes", () => {
     const v = await registrarViajeFlota(ctx, { vehiculoId: 1, origenLugar: "Puno", destinoLugar: "Lima", estado: "en_curso", origen: "web" });
     expect(await confirmarLectura(ctx, id, { vehiculoId: 1 })).toMatchObject({ tipo: "entrega", viajeCodigo: v.codigo, monto: 50000 });
     expect((await ctx.db.select().from(entrega)).map((e) => [e.monto, e.medio])).toEqual([[50000, "yape"]]);
+  });
+
+  it("si guardar falla, el mensaje vuelve al estado que tenía (un error sigue en error) y se puede abrir por su número", async () => {
+    const { id } = await recibirMensaje(ctx, { tipo: "voz", contenido: Buffer.from("ogg"), mime: "audio/ogg", telegramChatId: 111, telegramMessageId: 80 });
+    await leerDocumento(ctx, id);
+    expect((await obtenerDocumento(ctx, id)).estado).toBe("error");
+    await fijarLectura(ctx, id, { tipo: "entrega", monto: 50, medio: "efectivo", fecha: null, dudas: [] });
+    await expect(confirmarLectura(ctx, id, { vehiculoId: 1, siFalla: "error" })).rejects.toThrow(/viaje en curso/);
+    expect((await obtenerDocumento(ctx, id)).estado).toBe("error");
+    expect((await listarPorRevisar(ctx)).map((i) => i.documentoId)).toContain(id);
+    // Por su número sale aunque no esté en la lista (recién llegado); lo ya resuelto no.
+    const reciente = await texto("grifo 30");
+    await leerDocumento(ctx, reciente.id);
+    expect(await documentoPorConfirmar(ctx, reciente.id)).toMatchObject({ documentoId: reciente.id, estado: "por_confirmar" });
+    await descartarLectura(ctx, reciente.id);
+    expect(await documentoPorConfirmar(ctx, reciente.id)).toBeNull();
+    expect(await documentoPorConfirmar(ctx, 99999)).toBeNull();
   });
 
   it("IA caída: queda en cola y se reintenta después; clave mala no se reintenta", async () => {

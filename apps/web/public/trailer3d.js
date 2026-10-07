@@ -187,7 +187,7 @@ function mostrarPanel(id) {
   if (panel.repuestos) {
     panel.repuestos.replaceChildren(...(reps.length ? [
       el("span", { className: "lbl", textContent: "REPUESTOS PARA ESTA PIEZA" }),
-      ...reps.map((r) => el("a", { className: "fila-parte", href: `/inventario?q=${encodeURIComponent(r.codigo)}` },
+      ...reps.map((r) => el("a", { className: "fila-parte", href: `${location.pathname}?tab=repuestos&q=${encodeURIComponent(r.codigo)}` },
         el("span", { style: "font-size:12px", textContent: `${r.codigo} · ${r.nombre}` }),
         el("b", { className: `mono-t ${r.stock > 0 ? "t-ok" : "t-cambiar"}`, textContent: r.stock > 0 ? `stock ${r.stock}` : "agotado" }))),
     ] : []));

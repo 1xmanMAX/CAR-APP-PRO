@@ -14,8 +14,10 @@ export const LUGAR_DE_SECCION: Record<Seccion, Lugar> = {
  * su entrada cuando el lugar nuevo existe (Camiones: tarea 8, Números: 9, Ajustes: 10, Revisar: 11).
  */
 export const RUTA = {
-  camiones: "/trailer",
-  camion: (id: number, q = "") => `/trailer/${id}${q}`,
+  camiones: "/camiones",
+  camion: (id: number, q = "") => `/camiones/${id}${q}`,
+  /** Los repuestos (antes Inventario). */
+  repuestos: "/camiones?tab=repuestos",
   numeros: "/finanzas",
   catalogoPartes: "/ajustes",
   revisar: "/revisar",

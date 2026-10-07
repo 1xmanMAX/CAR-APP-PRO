@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { eq, guiaTransportista } from "@sunatapp/db";
 import {
-  actualizarPresupuestoViaje, asiQueda, categoriasMasUsadas, choferDeViaje, emitirGuia, prepararFactura, primerNombre, registrarEntrega, registrarGasto, registrarGuiaBorrador, registrarIngreso,
+  actualizarPresupuestoViaje, asiQueda, datosSunatVehiculo, categoriasMasUsadas, choferDeViaje, emitirGuia, prepararFactura, primerNombre, registrarEntrega, registrarGasto, registrarGuiaBorrador, registrarIngreso,
   registrarViajeFlota, resumenInicio, viajeDeFactura, viajesEnRuta,
   type Contexto,
 } from "../src";
@@ -79,5 +79,9 @@ describe("consultas de Inicio", () => {
     // Si ya le diste plata, siempre se muestra cuánto le queda.
     await registrarEntrega(ctx, { viajeId: v.id, monto: 20000, medio: "efectivo" });
     expect((await asiQueda(ctx, { tipo: "gasto", monto: 5000, viajeId: v.id, medioPago: "tarjeta" })).chofer).toMatchObject({ entregado: 20000, quedaDespues: 15000 });
+  });
+
+  it("datos SUNAT del vehículo (solo lectura)", async () => {
+    expect(await datosSunatVehiculo(ctx, 1)).toEqual({ configuracionVehicular: null, cargaUtilTm: null });
   });
 });

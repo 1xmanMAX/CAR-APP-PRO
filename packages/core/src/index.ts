@@ -57,3 +57,4 @@ export * from "./sunat/probar";
 export * from "./facturas/automatica";
 export * from "./sunat/aplicar";
 export * from "./sunat/atascados";
+export * from "./consultas/vehiculo";

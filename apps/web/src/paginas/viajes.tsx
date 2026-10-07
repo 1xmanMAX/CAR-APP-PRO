@@ -221,7 +221,7 @@ export function rutasViajes(app: App, d: Deps): void {
           diasCredito: credito ? (enteroONull(f.dias) ?? 30) : undefined,
         }, c.get("usuario").id));
       } catch (error) {
-        if (error instanceof FaltaDatoTransporteError) throw new ErrorNegocio(`${error.message} — complétalo en Ajustes › Rutas (valor referencial) o en Camiones (carga útil)`);
+        if (error instanceof FaltaDatoTransporteError) throw new ErrorNegocio(`${error.message} — complétalo en Ajustes › Rutas (valor referencial) o en Camiones › Datos (carga útil)`);
         throw error;
       }
       const r = await emitirFactura(d.ctx, facturaId);

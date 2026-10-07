@@ -468,7 +468,7 @@ describe("web", () => {
 
     it("todas las pantallas cargan", async () => {
       const cookie = await entrar();
-      for (const ruta of ["/", "/trailer", "/flota", "/inventario", "/reparaciones", "/viajes", "/finanzas", "/rentabilidad", "/telegram", "/ajustes", "/api/feed"]) {
+      for (const ruta of ["/", "/camiones/1", "/camiones/1?tab=historial", "/camiones/1?tab=repuestos", "/camiones/1?tab=datos", "/camiones/nuevo", "/viajes", "/finanzas", "/rentabilidad", "/telegram", "/ajustes", "/api/feed"]) {
         const r = await app.request(ruta, { headers: { cookie } });
         expect(r.status, ruta).toBe(200);
       }
@@ -478,7 +478,7 @@ describe("web", () => {
       const cookie = await entrar();
       // Un incidente sin costo en una pieza concreta.
       let r = await post(cookie, "/trailer/1/pieza", { componente: "retrovisor-izq", tipo: "falla_en_ruta", trabajo: "Se abrió el retrovisor", fecha: "2026-09-10" });
-      expect(r.headers.get("location")).toContain("/trailer/1?pieza=retrovisor-izq");
+      expect(r.headers.get("location")).toContain("/camiones/1?pieza=retrovisor-izq");
       expect(aviso(r)).toContain("ok=");
       // Un cambio de llanta con mano de obra.
       r = await post(cookie, "/trailer/1/pieza", { componente: "llanta-sr2-der-ext", tipo: "correctivo", trabajo: "Cambio de llanta", manoObra: "80" });
@@ -486,15 +486,15 @@ describe("web", () => {
       expect(aviso(await post(cookie, "/trailer/1/pieza", { componente: "no-existe", trabajo: "x" }))).toContain("error=");
       expect(aviso(await post(cookie, "/trailer/1/pieza", { componente: "faro-der", trabajo: "" }))).toContain("error=");
 
-      const pag = await (await app.request("/trailer/1?pieza=llanta-sr2-der-ext", { headers: { cookie } })).text();
+      const pag = await (await app.request("/camiones/1?pieza=llanta-sr2-der-ext", { headers: { cookie } })).text();
       const datos = JSON.parse(pag.match(/<script[^>]*id="datos-visor"[^>]*>([\s\S]*?)<\/script>/)![1]!);
       expect(datos.piezaSeleccionada).toBe("llanta-sr2-der-ext");
       expect(datos.piezas.length).toBeGreaterThan(50);
       expect(datos.historial["retrovisor-izq"][0].trabajo).toBe("Se abrió el retrovisor");
       expect(datos.historial["llanta-sr2-der-ext"][0].costo).toContain("80");
       // En Reparaciones se ve la pieza con el enlace para ubicarla en el modelo.
-      const rep = await (await app.request("/reparaciones", { headers: { cookie } })).text();
-      expect(rep).toContain("/trailer/1?pieza=llanta-sr2-der-ext");
+      const rep = await (await app.request("/camiones/1?tab=historial", { headers: { cookie } })).text();
+      expect(rep).toContain("/camiones/1?pieza=llanta-sr2-der-ext");
       expect(rep).toContain("Llanta semirremolque eje 2 · derecha exterior");
     });
 
@@ -502,15 +502,15 @@ describe("web", () => {
       const cookie = await entrar();
       let r = await post(cookie, "/inventario/repuesto", { nombre: "Luna de retrovisor", categoria: "Otros", piezas: "retrovisor-izq" });
       expect(aviso(r)).toContain("ok=");
-      const inv = await (await app.request("/inventario", { headers: { cookie } })).text();
+      const inv = await (await app.request("/camiones/1?tab=repuestos", { headers: { cookie } })).text();
       expect(inv).toContain("1 pieza: Retrovisor · izquierda");
-      expect(inv).toMatch(/href="\/trailer\?repuesto=\d+"/);
-      const id = Number(/\/trailer\?repuesto=(\d+)/.exec(inv)![1]);
+      expect(inv).toMatch(/href="\/camiones\/1\?repuesto=\d+"/);
+      const id = Number(/\/camiones\/1\?repuesto=(\d+)/.exec(inv)![1]);
       // Cambiar a los dos retrovisores (varios valores del mismo campo).
       const cuerpo = new URLSearchParams([["piezas", "retrovisor-izq"], ["piezas", "retrovisor-der"]]);
       r = await app.request(`/inventario/repuesto/${id}/piezas`, { method: "POST", headers: { cookie, origin: ORIGEN }, body: cuerpo });
       expect(aviso(r)).toContain("ok=");
-      const pag = await (await app.request(`/trailer/1?repuesto=${id}`, { headers: { cookie } })).text();
+      const pag = await (await app.request(`/camiones/1?repuesto=${id}`, { headers: { cookie } })).text();
       const datos = JSON.parse(pag.match(/<script[^>]*id="datos-visor"[^>]*>([\s\S]*?)<\/script>/)![1]!);
       expect(datos.resaltar).toEqual({ titulo: expect.stringContaining("Luna de retrovisor"), piezas: ["retrovisor-izq", "retrovisor-der"] });
       expect(datos.repuestosPieza["retrovisor-der"]).toEqual([expect.objectContaining({ id, stock: 0 })]);
@@ -694,6 +694,32 @@ describe("web", () => {
       expect(aviso(r)).toContain("ok=Cambio guardado · Reparación");
       r = await post(cookie, `/trailer/${t01.id}/pieza`, { componente: "retrovisor-izq", trabajo: "" });
       expect(aviso(r)).toContain("error=Escribe qué pasó");
+    });
+
+    it("camiones: chips, 3D, pestañas y las rutas viejas redirigen", async () => {
+      const cookie = await entrar();
+      const r = await app.request("/camiones?tab=datos", { headers: { cookie } });
+      expect(r.status).toBe(302);
+      expect(r.headers.get("location")).toBe("/camiones/1?tab=datos");
+      const html = await (await app.request("/camiones/1", { headers: { cookie } })).text();
+      for (const t of ["Mis camiones", "Lo que toca", "Historial", "Repuestos", "Datos", 'id="visor"', 'id="datos-visor"', "+ Nuevo", "bien", "pronto", "cambiar ya"]) expect(html, t).toContain(t);
+      const datos = await (await app.request("/camiones/1?tab=datos", { headers: { cookie } })).text();
+      for (const t of ["Placa", "ABC-123", "Odómetro", "Configuración vehicular", "Carga útil"]) expect(datos, t).toContain(t);
+      const viejas: Record<string, string> = {
+        "/trailer": "/camiones", "/trailer/1?pieza=faro-der&ok=x": "/camiones/1?pieza=faro-der", "/flota": "/camiones",
+        "/inventario?q=filtro": "/camiones?tab=repuestos&q=filtro", "/reparaciones?unidad=1": "/camiones/1?tab=historial",
+      };
+      for (const [de, a] of Object.entries(viejas)) {
+        const x = await app.request(de, { headers: { cookie } });
+        expect(x.status, de).toBe(302);
+        expect(x.headers.get("location"), de).toBe(a);
+      }
+    });
+
+    it("el contador no entra a Camiones", async () => {
+      await guardarUsuario(ctx, { nombre: "Conta", email: "conta@demo.pe", rol: "contador", clave: "clave-segura" });
+      const conta = await entrar("conta@demo.pe");
+      expect((await app.request("/camiones/1", { headers: { cookie: conta } })).headers.get("location")).toContain("/?error=");
     });
 
     it("un error de negocio vuelve con el mensaje", async () => {

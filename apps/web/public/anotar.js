@@ -88,6 +88,13 @@
         abrir(a.href);
       }
     });
+    // Un formulario GET hacia /anotar (p. ej. «Registrar un cambio» de la pieza del 3D) también abre el panel.
+    document.addEventListener("submit", (e) => {
+      const f = e.target;
+      if (!ancho.matches || !(f instanceof HTMLFormElement) || !f.matches("form[data-panel-form]")) return;
+      e.preventDefault();
+      abrir(`${f.action}?${new URLSearchParams(new FormData(f))}`);
+    });
     document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !panel.hidden) cerrar(); });
     // Si la ventana se achica a tamaño celular, el panel se cierra (en el celular Anotar es su propia página).
     ancho.addEventListener("change", () => { if (!ancho.matches && !panel.hidden) cerrar(); });

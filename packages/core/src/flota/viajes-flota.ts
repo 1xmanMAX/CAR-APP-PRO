@@ -205,12 +205,13 @@ export async function facturasPorViaje(ctx: Contexto, viajeIds: number[]) {
 }
 
 export async function listarViajesFlota(
-  ctx: Contexto, o: { desde?: string; hasta?: string; vehiculoId?: number; limite?: number } = {},
+  ctx: Contexto, o: { desde?: string; hasta?: string; vehiculoId?: number; limite?: number; /** Solo ese viaje. */ id?: number } = {},
 ): Promise<FilaViajeFlota[]> {
   const filtros = [];
   if (o.desde) filtros.push(sql`${viaje.fechaSalida} >= ${o.desde}`);
   if (o.hasta) filtros.push(sql`${viaje.fechaSalida} <= ${o.hasta}`);
   if (o.vehiculoId !== undefined) filtros.push(eq(viaje.vehiculoId, o.vehiculoId));
+  if (o.id !== undefined) filtros.push(eq(viaje.id, o.id));
   const filas = await ctx.db
     .select({ v: viaje, codigoUnidad: vehiculo.codigo, placa: vehiculo.placa })
     .from(viaje)

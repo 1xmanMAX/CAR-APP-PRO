@@ -121,6 +121,9 @@ describe("flota y desgaste", () => {
     expect(fin.km).toBe(1290);
     const [fila] = await listarViajesFlota(ctx, { vehiculoId: u.id });
     expect(fila).toMatchObject({ km: 1290, flete: 350000, costo: 48000, margenPct: 86, factura: "SIN FACTURA", estado: "cerrado" });
+    // Una sola fila por id (el detalle del viaje no recorre toda la lista).
+    expect(await listarViajesFlota(ctx, { id: v.id })).toEqual([fila]);
+    expect(await listarViajesFlota(ctx, { id: 99999 })).toEqual([]);
     expect((await buscarUnidad(ctx, "t2"))!.estado).toBe("en_base");
     const salud = await saludFlota(ctx);
     expect(salud.length).toBe(2);

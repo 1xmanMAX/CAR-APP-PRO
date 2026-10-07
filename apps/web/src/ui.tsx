@@ -49,6 +49,14 @@ export const ESTADO_UNIDAD: Record<string, string> = { en_ruta: "EN RUTA", en_ba
 export const CHIP_UNIDAD: Record<string, string> = { en_ruta: "ok", en_base: "neutro", en_taller: "proximo", inactivo: "neutro" };
 export const CHIP_FACTURA: Record<string, string> = { PAGADA: "ok", PENDIENTE: "proximo", VENCIDA: "cambiar", "SIN FACTURA": "neutro" };
 export const ESTADO_GUIA: Record<string, string> = { borrador: "neutro", pendiente_envio: "proximo", enviada: "proximo", aceptada: "ok", rechazada: "cambiar" };
+/** Estado de la guía en palabras de la calle (nunca «PENDIENTE ENVIO»). */
+export const TEXTO_GUIA: Record<string, string> = { borrador: "SIN ENVIAR", pendiente_envio: "ENVIANDO", enviada: "ENVIANDO", aceptada: "SUNAT OK", rechazada: "SUNAT LA RECHAZÓ" };
+/** «V001-12» → «Guía V001-12»; sin correlativo todavía («V001-?», «V001-(sin número)») → «Guía (todavía sin número)». */
+export function nombreGuia(serieNumero: string): string {
+  return /-(\?|\(sin número\))$/.test(serieNumero) ? "Guía (todavía sin número)" : `Guía ${serieNumero}`;
+}
+/** "2026-10-03" → "03 oct". */
+export const fechaDia = (f: string | null | undefined) => fechaCorta(f).toLowerCase();
 
 // ── Navegación ───────────────────────────────────────────────────────────────
 
@@ -248,22 +256,23 @@ export const TarjetaEnRuta: FC<{ v: ViajeEnRuta }> = ({ v }) => {
   );
 };
 
-const ESTADO_VIAJE: Record<FilaViajeFlota["estado"], [string, string]> = { en_curso: ["EN RUTA", "ok"], cerrado: ["CERRADO", "neutro"], planificado: ["PLANIFICADO", "proximo"] };
+/** Solo se marca lo que no está cerrado: en una lista de viajes «CERRADO» no dice nada. */
+const ESTADO_VIAJE: Record<FilaViajeFlota["estado"], [string, string] | null> = { en_curso: ["EN RUTA", "ok"], cerrado: null, planificado: ["PLANIFICADO", "proximo"] };
 
 /** Lista de viajes: tarjetas en el celular, tabla corta en la PC (un solo marcado). */
 export const ListaViajes: FC<{ viajes: FilaViajeFlota[] }> = ({ viajes }) => (
-  <div class="lista-viajes" role="table" aria-label="Viajes">
+  <div class={`lista-viajes${viajes.every((v) => !ESTADO_VIAJE[v.estado]) ? " sin-estado" : ""}`} role="table" aria-label="Viajes">
     <div class="fila-viaje cab" role="row">
-      <span role="columnheader">Viaje</span><span role="columnheader">Camión</span><span role="columnheader">Estado</span>
+      <span role="columnheader">Viaje</span><span role="columnheader">Camión</span><span class="estado" role="columnheader">Estado</span>
       <span class="num" role="columnheader">Flete</span><span class="num" role="columnheader">Gastos</span><span class="num" role="columnheader">Dejó</span>
     </div>
     {viajes.map((v) => {
       const dejo = v.flete > 0 ? v.flete - v.costo : null;
       return (
         <a class="fila-viaje" role="row" href={`/viajes/${v.id}`}>
-          <span class="ruta" role="cell"><b>{v.ruta}</b> <span class="muted">· {fechaCorta(v.fecha)}</span></span>
+          <span class="ruta" role="cell"><b>{v.ruta}</b> <span class="muted">· {fechaDia(v.fecha)}</span></span>
           <span role="cell">{v.unidad}</span>
-          <span role="cell"><span class={`chip ${ESTADO_VIAJE[v.estado][1]}`}>{ESTADO_VIAJE[v.estado][0]}</span></span>
+          <span class="estado" role="cell">{ESTADO_VIAJE[v.estado] ? <span class={`chip ${ESTADO_VIAJE[v.estado]![1]}`}>{ESTADO_VIAJE[v.estado]![0]}</span> : null}</span>
           <span class="num" role="cell">{v.flete ? soles(v.flete) : "—"}</span>
           <span class="num" role="cell">{soles(v.costo)}</span>
           <b class={`num${dejo !== null && dejo < 0 ? " t-cambiar" : ""}`} role="cell">{dejo === null ? "falta flete" : soles(dejo)}</b>

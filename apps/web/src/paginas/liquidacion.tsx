@@ -7,17 +7,18 @@ import {
 } from "@sunatapp/core";
 import { accion, formulario, pagina, type App, type C, type Deps } from "../base";
 import { guardarEntrega } from "../acciones";
-import { Barra, Cabecera, CHIP_FACTURA, Cifra, diasEntre, ESTADO_GUIA, fechaCorta, soles, soles2, Vacio } from "../ui";
+import { Barra, Cabecera, CHIP_FACTURA, Cifra, diasEntre, ESTADO_GUIA, fechaDia, nombreGuia, soles, soles2, TEXTO_GUIA, Vacio } from "../ui";
 import { enteroONull } from "./flota";
 import { CamposPlantilla, categoriasDeViaje, plantillaDeFormulario } from "./rutas";
 import { avisosRetornoVacio, FormFacturar } from "./viajes";
 
 const ESTADO_SEMAFORO: Record<Semaforo, "ok" | "proximo" | "cambiar"> = { ok: "ok", alerta: "proximo", excedido: "cambiar" };
 
-function textoSaldo(l: LiquidacionViaje): string {
+function textoSaldo(l: LiquidacionViaje, chofer: string): string {
+  if (l.entregado === 0 && l.gastado === 0) return `Todavía no le diste plata a ${chofer}`;
   if (l.saldo > 0) return `El chofer tiene ${soles2(l.saldo)} por rendir o devolver`;
   if (l.saldo < 0) return `La empresa le debe ${soles2(-l.saldo)} al chofer`;
-  return "Cuentas en cero";
+  return "Gastó justo lo que le diste";
 }
 
 const TablaGastos: FC<{ l: LiquidacionViaje; categorias: Categoria[]; edita: boolean }> = ({ l, categorias, edita }) => (
@@ -25,7 +26,7 @@ const TablaGastos: FC<{ l: LiquidacionViaje; categorias: Categoria[]; edita: boo
     <thead><tr><th>Fecha</th><th>En qué</th><th>Detalle</th><th class="num">Monto</th><th></th>{edita ? <th></th> : null}</tr></thead>
     <tbody>{l.gastos.map((g) => (
       <tr>
-        <td class="nowrap">{fechaCorta(g.fecha)}</td><td>{nombreCategoria(g.categoria, categorias)}</td><td>{g.detalle ?? "—"}</td>
+        <td class="nowrap">{fechaDia(g.fecha)}</td><td>{nombreCategoria(g.categoria, categorias)}</td><td>{g.detalle ?? "—"}</td>
         <td class="num">{soles2(g.monto)}</td><td>{g.conFoto ? <a href={`/archivo/gasto/${g.id}`} title="Ver la boleta">📷</a> : null}</td>
         {edita ? (
           <td>
@@ -55,9 +56,9 @@ async function vista(c: C, d: Deps) {
   const l = await liquidacionViaje(ctx, id);
   const [categorias, variables, sinViaje, rent, chofer, cobros, propios, retornoVacio] = await Promise.all([
     listarCategorias(ctx, { soloActivas: true }), categoriasDeViaje(d), listarGuiasSinViaje(ctx), rentabilidadDeViaje(ctx, id), choferDeViaje(ctx, id),
-    listarCobrosPendientes(ctx), listarViajesFlota(ctx, { vehiculoId: l.viaje.vehiculoId, limite: 500 }), avisosRetornoVacio(ctx, l.guias.filter((g) => g.flete === null)),
+    listarCobrosPendientes(ctx), listarViajesFlota(ctx, { id }), avisosRetornoVacio(ctx, l.guias.filter((g) => g.flete === null)),
   ]);
-  const fila = propios.find((v) => v.id === id);
+  const fila = propios[0];
   const edita = puedeEditar(c.get("usuario").rol, "viajes");
   const enCurso = l.viaje.estado === "en_curso";
   const aqui = `/viajes/${id}`;
@@ -73,21 +74,34 @@ async function vista(c: C, d: Deps) {
   return pagina(c, d, { titulo: `Viaje ${l.viaje.codigo}`, seccion: "viajes" }, (
     <>
       <Cabecera volver="/viajes" titulo={l.viaje.ruta}
-        sub={`${l.viaje.unidad} · ${chofer} · ${enCurso ? `en ruta, día ${diasEntre(l.viaje.fechaSalida, hoy(ctx)) + 1}` : `cerrado el ${fechaCorta(l.viaje.fechaRegreso)}`} · ${l.viaje.codigo}`} />
+        sub={`${l.viaje.unidad} · ${chofer} · ${enCurso ? `en ruta, día ${diasEntre(l.viaje.fechaSalida, hoy(ctx)) + 1}` : `cerrado el ${fechaDia(l.viaje.fechaRegreso)}`}`} />
       <div class="viaje-cols">
         <div class="col">
           <section class="tarjeta-oscura">
             <span class="lbl">Este viaje te deja{enCurso ? " (por ahora)" : ""}</span>
-            <b class={`cifra-grande${deja !== null && deja < 0 ? " neg" : ""}`}>{deja === null ? "Falta el flete" : soles(deja)}</b>
-            <span class="sub">Flete {soles(l.flete)} − gastos {soles(l.gastado)}{margen !== null ? ` · margen ${margen}%` : ""}</span>
+            {deja === null ? (
+              <>
+                <b class="deja-vacio">Todavía sin flete</b>
+                <span class="sub">Ponlo al cerrar el viaje · gastos hasta hoy {soles(l.gastado)}</span>
+              </>
+            ) : (
+              <>
+                <b class={`cifra-grande${deja < 0 ? " neg" : ""}`}>{soles(deja)}</b>
+                <span class="sub">Flete {soles(l.flete)} − gastos {soles(l.gastado)}{margen !== null ? <span class="nowrap"> · margen {margen}%</span> : null}</span>
+              </>
+            )}
           </section>
           <div class="dos-cifras">
             <Cifra etiqueta={`Le diste a ${chofer}`} valor={soles(l.entregado)} />
             <Cifra etiqueta={l.saldo >= 0 ? "Le queda" : "Le debes"} valor={soles(Math.abs(l.saldo))} tono={l.saldo < 0 ? "cambiar" : "ok"} />
           </div>
-          <p class="muted nota-saldo">{textoSaldo(l)}.</p>
+          <p class="muted nota-saldo">{textoSaldo(l, chofer)}.</p>
           <section class="col">
-            <h2 class="titulo-seccion">Gastos del viaje · {soles2(l.gastado)}{l.presupuestoTotal ? ` de ${soles2(l.presupuestoTotal)} previstos` : ""}</h2>
+            <h2 class="titulo-seccion">Gastos del viaje</h2>
+            <p class="gasto-resumen">
+              Gastó {soles(l.gastado)}{l.presupuestoTotal ? ` de ${soles(l.presupuestoTotal)} calculados` : ""}
+            </p>
+            {l.presupuestoTotal && l.gastado > l.presupuestoTotal ? <p class="gasto-resumen t-cambiar">Se pasó {soles(l.gastado - l.presupuestoTotal)} del presupuesto</p> : null}
             <div class="lista-filas">
               {top.length === 0 ? <Vacio>Todavía no hay gastos. El chofer los manda por Telegram (foto de la boleta o «grifo 350»).</Vacio> : top.map((x) => (
                 <div class="fila-barra">
@@ -109,16 +123,16 @@ async function vista(c: C, d: Deps) {
                 <div class="fila-papel"><span class="chip proximo">FALTA</span><span>Guía de remisión <span class="muted">· la emite el bot con el PDF del remitente</span></span></div>
               ) : l.guias.map((g) => (
                 <div class="fila-papel">
-                  <span class={`chip ${ESTADO_GUIA[g.estado] ?? "neutro"}`}>{g.estado === "aceptada" ? "SUNAT OK" : g.estado.toUpperCase().replace("_", " ")}</span>
-                  <span>Guía {g.serieNumero}{g.tramo ? ` · ${g.tramo}` : ""}</span>
-                  <a class="btn chico" href={`/guias/${g.id}/pdf`}>PDF</a>
+                  <span class={`chip ${ESTADO_GUIA[g.estado] ?? "neutro"}`}>{TEXTO_GUIA[g.estado] ?? g.estado.toUpperCase()}</span>
+                  <span>{nombreGuia(g.serieNumero)}{g.tramo === "retorno" ? " · de vuelta" : ""}</span>
+                  {g.estado === "aceptada" ? <a class="btn chico" href={`/guias/${g.id}/pdf`}>PDF</a> : null}
                 </div>
               ))}
               <div class="fila-papel">
                 {fila?.facturas.length ? <span class={`chip ${CHIP_FACTURA[fila.factura] ?? "neutro"}`}>{fila.factura}</span> : <span class="chip proximo">FALTA</span>}
                 <span>Factura{fila?.facturas.length ? ` ${fila.facturas.join(", ")}` : ""}</span>
                 {edita ? porFacturar.map((g) => (
-                  <FormFacturar guiaId={g.id} etiqueta={porFacturar.length > 1 ? `Facturar ${g.serieNumero}` : "Facturar"} volver={aqui} aviso={retornoVacio.has(g.id) ? AVISO_RETORNO_VACIO : null} />
+                  <FormFacturar guiaId={g.id} etiqueta={porFacturar.length > 1 ? `Facturar ${nombreGuia(g.serieNumero).toLowerCase()}` : "Facturar"} volver={aqui} aviso={retornoVacio.has(g.id) ? AVISO_RETORNO_VACIO : null} />
                 )) : null}
               </div>
               {porCobrar.map((f) => (
@@ -165,7 +179,7 @@ async function vista(c: C, d: Deps) {
               {l.entregas.length === 0 ? <Vacio>Sin entregas. También puede avisar por Telegram («me yapearon 500»).</Vacio> : (
                 <div class="tabla-wrap"><table class="t"><tbody>{l.entregas.map((e) => (
                   <tr>
-                    <td class="nowrap">{fechaCorta(e.fecha)}</td><td>{MEDIOS_ENTREGA[e.medio]}{e.nota ? <div class="muted">{e.nota}</div> : null}</td>
+                    <td class="nowrap">{fechaDia(e.fecha)}</td><td>{MEDIOS_ENTREGA[e.medio]}{e.nota ? <div class="muted">{e.nota}</div> : null}</td>
                     <td class="num">{soles2(e.monto)}</td>
                     <td>{edita ? <form method="post" action={`${aqui}/entrega/${e.id}/borrar`}><button class="btn chico fantasma" type="submit" aria-label="Borrar entrega">×</button></form> : null}</td>
                   </tr>
@@ -182,13 +196,13 @@ async function vista(c: C, d: Deps) {
                   </details>
                   {sinViaje.length ? (
                     <form method="post" action={`${aqui}/guia`} class="linea">
-                      <select name="guiaId" aria-label="Guía">{sinViaje.map((g) => <option value={g.id}>{g.serieNumero} · {fechaCorta(g.fechaTraslado)}</option>)}</select>
-                      <select name="tramo" aria-label="Tramo"><option value="ida">Ida</option><option value="retorno">Retorno</option></select>
+                      <select name="guiaId" aria-label="Guía">{sinViaje.map((g) => <option value={g.id}>{nombreGuia(g.serieNumero)} · {fechaDia(g.fechaTraslado)}</option>)}</select>
+                      <select name="tramo" aria-label="Tramo"><option value="ida">De ida</option><option value="retorno">De vuelta</option></select>
                       <button class="btn chico" type="submit">Enlazar guía</button>
                     </form>
                   ) : null}
                   {l.guias.map((g) => (
-                    <form method="post" action={`${aqui}/guia/${g.id}/quitar`} class="linea"><span>Guía {g.serieNumero}</span><button class="btn chico fantasma" type="submit">Quitar del viaje</button></form>
+                    <form method="post" action={`${aqui}/guia/${g.id}/quitar`} class="linea"><span>{nombreGuia(g.serieNumero)}</span><button class="btn chico fantasma" type="submit">Quitar del viaje</button></form>
                   ))}
                   <form method="post" action="/viajes/flete" class="linea">
                     <input type="hidden" name="viajeId" value={id} /><input type="hidden" name="volver" value={aqui} />

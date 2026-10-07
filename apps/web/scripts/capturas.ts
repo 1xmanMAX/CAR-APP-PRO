@@ -11,7 +11,7 @@
  * 12 px y contraste menor a 4.5:1 → capturas/<etiqueta>/revision.json.
  */
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { chromium, type Page } from "playwright-core";
 import { LUGARES, type LugarCaptura } from "./lugares-captura";
@@ -128,6 +128,9 @@ if (await fetch(BASE + "/salud").then(() => true, () => false)) {
   process.exit(1);
 }
 const web = levantarWeb();
+// Varias corridas con la misma etiqueta suman sus lugares (no se pisan las revisiones anteriores).
+const archivoRevision = join(SALIDA, "revision.json");
+const revisionPrevia: Record<string, Revision> = existsSync(archivoRevision) ? JSON.parse(readFileSync(archivoRevision, "utf8")) : {};
 const revision: Record<string, Revision> = {};
 try {
   await esperarServidor(web);
@@ -148,7 +151,7 @@ try {
   } finally {
     await navegador.close();
   }
-  writeFileSync(join(SALIDA, "revision.json"), JSON.stringify(revision, null, 2));
+  writeFileSync(archivoRevision, JSON.stringify({ ...revisionPrevia, ...revision }, null, 2));
   const malos = Object.entries(revision).filter(([, r]) => r.anchoPagina > 390 || r.botonesChicos.length || r.letraChica.length || r.contrasteBajo.length);
   console.log(malos.length ? `⚠ Revisar en 390 px: ${malos.map(([n]) => n).join(", ")} (ver revision.json)` : "✓ 390 px: sin desborde, botones chicos, letra chica ni contraste bajo");
 } finally {

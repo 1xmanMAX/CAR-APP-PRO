@@ -9,7 +9,7 @@ import {
 import { guardarCobro } from "../acciones";
 import { accion, formulario, pagina, servirDeAlmacen, volverA, type App, type C, type Deps } from "../base";
 import { enteroONull } from "./flota";
-import { Cabecera, diasEntre, ESTADO_GUIA, fechaCorta, ListaViajes, mesLargo, TarjetaEnRuta, Vacio } from "../ui";
+import { Cabecera, diasEntre, ESTADO_GUIA, fechaDia, ListaViajes, mesLargo, nombreGuia, TarjetaEnRuta, TEXTO_GUIA, Vacio } from "../ui";
 
 /** Formulario de «Facturar» de una guía aceptada (también lo usa el detalle del viaje). */
 export const FormFacturar: FC<{ guiaId: number; etiqueta: string; volver: string; aviso?: string | null }> = (p) => (
@@ -139,9 +139,10 @@ async function vista(c: C, d: Deps) {
           {guias.length === 0 ? <Vacio>Sin guías todavía: se emiten desde el bot mandándole el PDF del remitente.</Vacio> : (
             <div class="lista-filas">{guias.map((g) => (
               <div class="fila-papel">
-                <span class={`chip ${ESTADO_GUIA[g.estado] ?? "neutro"}`}>{g.facturada ? "FACTURADA" : g.estado.toUpperCase().replace("_", " ")}</span>
-                <span><b>{g.serieNumero}</b> · {fechaCorta(g.fechaTraslado)} · {g.destinatario}</span>
-                <span class="archivos"><a href={`/guias/${g.id}/pdf`}>PDF</a> · <a href={`/guias/${g.id}/xml`}>XML</a> · <a href={`/guias/${g.id}/cdr`}>CDR</a></span>
+                <span class={`chip ${ESTADO_GUIA[g.estado] ?? "neutro"}`}>{g.facturada ? "FACTURADA" : TEXTO_GUIA[g.estado] ?? g.estado.toUpperCase()}</span>
+                <span><b>{nombreGuia(g.serieNumero)}</b> · {fechaDia(g.fechaTraslado)} · {g.destinatario}</span>
+                {g.estado === "aceptada"
+                  ? <span class="archivos"><a href={`/guias/${g.id}/pdf`}>PDF</a> · <a href={`/guias/${g.id}/xml`}>XML</a> · <a href={`/guias/${g.id}/cdr`}>CDR</a></span> : null}
                 {edita && g.estado === "aceptada" && !g.facturada
                   ? <FormFacturar guiaId={g.id} etiqueta="Facturar" volver="/viajes" aviso={retornoVacio.has(g.id) ? AVISO_RETORNO_VACIO : null} /> : null}
               </div>
@@ -153,9 +154,9 @@ async function vista(c: C, d: Deps) {
               <div class="lista-filas">{sinViaje.map((g) => (
                 <form method="post" action={`/guias/${g.id}/enlazar`} class="linea fila-papel">
                   <input type="hidden" name="volver" value="/viajes" />
-                  <span><b>{g.serieNumero}</b> · {fechaCorta(g.fechaTraslado)}</span>
-                  <select name="viajeId" aria-label="Viaje">{recientes.map((v) => <option value={v.id}>{v.codigo} · {v.unidad} · {v.ruta}</option>)}</select>
-                  <select name="tramo" aria-label="Tramo"><option value="ida">ida</option><option value="retorno">retorno</option></select>
+                  <span><b>{nombreGuia(g.serieNumero)}</b> · {fechaDia(g.fechaTraslado)}</span>
+                  <select name="viajeId" aria-label="Viaje">{recientes.map((v) => <option value={v.id}>{v.unidad} · {v.ruta} · {fechaDia(v.fecha)}</option>)}</select>
+                  <select name="tramo" aria-label="Tramo"><option value="ida">de ida</option><option value="retorno">de vuelta</option></select>
                   <button class="btn chico" type="submit">Enlazar</button>
                 </form>
               ))}</div>

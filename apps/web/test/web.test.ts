@@ -532,6 +532,25 @@ describe("web", () => {
       expect(cierre).not.toContain('name="flete"');
     });
 
+    it("viaje sin flete ni plata: palabras de la calle, sin códigos ni «?»", async () => {
+      const cookie = await entrar();
+      await registrarViajeFlota(ctx, { vehiculoId: 1, origenLugar: "Arequipa", destinoLugar: "Juliaca", estado: "cerrado", km: 300, flete: 320000, origen: "web" });
+      const v = await registrarViajeFlota(ctx, { vehiculoId: 1, origenLugar: "Yura", destinoLugar: "Puno", estado: "en_curso", origen: "web" });
+      const guiaId = await registrarGuiaBorrador(ctx, entradaGuia());
+      const lista = await (await app.request("/viajes", { headers: { cookie } })).text();
+      expect(lista).toContain("SIN ENVIAR");
+      expect(lista).not.toContain("BORRADOR");
+      expect(lista).not.toContain("CERRADO");
+      expect(lista).not.toContain("-?");
+      // La guía nace enlazada sola al viaje en curso del camión.
+      const det = await (await app.request(`/viajes/${v.id}`, { headers: { cookie } })).text();
+      for (const t of ["Todavía sin flete", "Ponlo al cerrar el viaje", "Todavía no le diste plata a Jhon", "Guía (todavía sin número)", "SIN ENVIAR"]) expect(det, t).toContain(t);
+      expect(det).not.toContain("Falta el flete");
+      expect(det).not.toContain(`· ${v.codigo}`);
+      expect(det).not.toContain(`/guias/${guiaId}/pdf`);
+      expect(det).not.toContain("-?");
+    });
+
     it("liquidación del viaje: entregas, gastos, saldo y semáforo", async () => {
       const cookie = await entrar();
       const v = await registrarViajeFlota(ctx, { vehiculoId: 1, origenLugar: "Juliaca", destinoLugar: "Arequipa", estado: "en_curso", origen: "web" });
@@ -580,11 +599,11 @@ describe("web", () => {
       const v = await registrarViajeFlota(ctx, { vehiculoId: 1, origenLugar: "Puno", destinoLugar: "Lima", estado: "en_curso", origen: "web" });
       html = await (await app.request(`/viajes/${v.id}`, { headers: { cookie } })).text();
       expect(html).toContain("Presupuesto del viaje");
-      expect(html).toContain("S/\u00a0800.00");
+      expect(html).toContain("S/\u00a0800 calculados");
       r = await post(cookie, `/viajes/${v.id}/presupuesto`, { m_combustible: "1000", m_viaticos: "50" });
       expect(aviso(r)).toContain("ok=");
       html = await (await app.request(`/viajes/${v.id}`, { headers: { cookie } })).text();
-      expect(html).toContain("S/\u00a01,050.00 previstos");
+      expect(html).toContain("S/\u00a01,050 calculados");
     });
 
     it("detalle del viaje: corregir y borrar gastos, cerrar y reabrir", async () => {

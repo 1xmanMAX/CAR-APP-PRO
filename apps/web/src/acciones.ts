@@ -102,6 +102,16 @@ export async function guardarCambio(
   return { ok, vehiculoId, pieza: p?.id ?? null };
 }
 
+/**
+ * Qué parte se reinicia: la elegida a mano en la lista, o la que vino puesta si se marcó «Cambié la
+ * pieza por una nueva». La que vino puesta (`parteInicial`, p. ej. desde el 3D) sin la casilla no se
+ * reinicia: un arreglo no la vuelve nueva.
+ */
+export function conParteQueReinicia(f: Campos): Campos {
+  const elegidaAMano = !!f.parteId && f.parteId !== f.parteInicial;
+  return f.reinicia === "1" || elegidaAMano ? f : { ...f, parteId: "" };
+}
+
 /** Compra de repuestos para el stock (antes: POST /inventario/compra). */
 export async function guardarCompra(d: Deps, usuarioId: number, f: Campos): Promise<string> {
   const costo = parsearMonto(f.costo ?? "");

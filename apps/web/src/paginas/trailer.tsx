@@ -1,7 +1,7 @@
 /** @jsxRuntime automatic @jsxImportSource hono/jsx */
 import { ajustarVidaParte, ErrorNegocio, instalarParte, listarTiposParte, listarUnidades, partesDeUnidad, pieza, puedeEditar } from "@sunatapp/core";
 import { accion, formulario, type App, type C, type Deps } from "../base";
-import { guardarCambio } from "../acciones";
+import { conParteQueReinicia, guardarCambio } from "../acciones";
 import { redirigir } from "../redirecciones";
 
 const entero = (v: string | undefined): number | null => {
@@ -46,7 +46,7 @@ export function rutasTrailer(app: App, d: Deps): void {
     return accion(c, p ? `/camiones/${id}?pieza=${p.id}` : `/camiones/${id}`, async () => {
       if (!puedeEditar(c.get("usuario").rol, "reparaciones")) throw new ErrorNegocio("Tu rol no puede registrar reparaciones");
       if (!p) throw new ErrorNegocio("Elige una pieza del modelo");
-      return (await guardarCambio(d, c.get("usuario").id, { ...f, vehiculoId: String(id) }, f.tipo || "correctivo", { trabajoEnPieza: true })).ok;
+      return (await guardarCambio(d, c.get("usuario").id, conParteQueReinicia({ ...f, vehiculoId: String(id) }), f.tipo || "correctivo", { trabajoEnPieza: true })).ok;
     });
   });
   app.post("/parte/:id/vida", async (c) => {

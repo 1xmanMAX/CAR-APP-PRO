@@ -129,6 +129,13 @@
       viaje.dispatchEvent(new Event("change", { bubbles: true }));
     }
   });
+  // Reparé: elegir una parte en «cambiar» es decir que se cambió por una nueva (se marca la casilla).
+  document.addEventListener("change", (e) => {
+    const sel = e.target;
+    if (!(sel instanceof HTMLSelectElement) || sel.name !== "parteId" || !sel.form) return;
+    const casilla = sel.form.querySelector("input[name=reinicia]");
+    if (casilla && sel.value) casilla.checked = true;
+  });
   enlazarAsiQueda(document);
   // Si la ventana pasa a tamaño PC con /anotar abierto, «Así queda» empieza a escuchar.
   ancho.addEventListener("change", () => enlazarAsiQueda(document));

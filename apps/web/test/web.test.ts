@@ -524,7 +524,9 @@ describe("web", () => {
         // La casilla se ve y empieza sin marcar: un arreglo en la pieza no reinicia el contador a escondidas.
         expect(html).toContain("Cambié la pieza por una nueva (reinicia el contador de la parte elegida)");
         expect(html).toMatch(/<input type="checkbox" name="reinicia" value="1"\s*\/?>/);
-        const base = { tipo: "repare", volver: "/", vehiculoId: String(t01.id), componente: idPieza!, parteId: String(p!.id), casillaReinicia: "1", trabajo: "Revisión" };
+        expect(html).toContain(`<input type="hidden" name="parteInicial" value="${p!.id}"`);
+        // La parte vino puesta (no se tocó) y la casilla sin marcar: no se reinicia.
+        const base = { tipo: "repare", volver: "/", vehiculoId: String(t01.id), componente: idPieza!, parteId: String(p!.id), parteInicial: String(p!.id), trabajo: "Revisión" };
         expect(aviso(await enviar(cookie, base))).toContain("ok=");
         let [rep] = await listarReparaciones(ctx, { vehiculoId: t01.id });
         expect(rep).toMatchObject({ parte: null, desgastePct: null });
@@ -532,6 +534,28 @@ describe("web", () => {
         [rep] = await listarReparaciones(ctx, { vehiculoId: t01.id });
         expect(rep!.parte).not.toBeNull();
         expect(rep!.desgastePct).not.toBeNull();
+      });
+
+      it("Reparé: elegir a mano una parte en «cambiar» es decir que se cambió por una nueva (y en /trailer/:id/pieza igual)", async () => {
+        const cookie = await entrar();
+        const t01 = (await buscarUnidad(ctx, "T-01"))!;
+        const aceite = (await listarTiposParte(ctx)).find((t) => t.codigo === "aceite")!;
+        await instalarParte(ctx, { vehiculoId: t01.id, tipoParteId: aceite.id });
+        const [p] = await partesDeUnidad(ctx, t01.id);
+        // Sin parte puesta de antemano: elegirla en la lista la reinicia aunque no se marque la casilla.
+        expect(aviso(await enviar(cookie, { tipo: "repare", volver: "/", vehiculoId: String(t01.id), trabajo: "Cambio de aceite", parteId: String(p!.id), parteInicial: "" }))).toContain("ok=");
+        let [rep] = await listarReparaciones(ctx, { vehiculoId: t01.id });
+        expect(rep!.parte).not.toBeNull();
+        // /trailer/:id/pieza: la parte que vino puesta no se reinicia sola; elegida a mano, sí.
+        const [idPieza] = piezasDeTipo(aceite);
+        const [nueva] = await partesDeUnidad(ctx, t01.id);
+        expect(aviso(await post(cookie, `/trailer/${t01.id}/pieza`, { componente: idPieza!, trabajo: "Revisión", parteId: String(nueva!.id), parteInicial: String(nueva!.id) }))).toContain("ok=");
+        [rep] = await listarReparaciones(ctx, { vehiculoId: t01.id });
+        expect(rep).toMatchObject({ trabajo: "Revisión", parte: null });
+        expect(aviso(await post(cookie, `/trailer/${t01.id}/pieza`, { componente: idPieza!, trabajo: "Cambio", parteId: String(nueva!.id) }))).toContain("ok=");
+        [rep] = await listarReparaciones(ctx, { vehiculoId: t01.id });
+        expect(rep).toMatchObject({ trabajo: "Cambio" });
+        expect(rep!.parte).not.toBeNull();
       });
 
       it("una cuota vencida se ve en rojo con los días", async () => {

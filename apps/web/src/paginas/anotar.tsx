@@ -9,7 +9,7 @@ import {
 import { accion, formularioMultiparte, pagina, volverA, type App, type C, type Deps } from "../base";
 import {
   guardarCambio, guardarCobro, guardarCompra, guardarEntrega, guardarGasto, guardarGastoEmpresa, guardarIngreso, guardarPrestamo, guardarReinversion,
-  CATEGORIA_CUOTA, pagarCuotaDe, type Campos,
+  CATEGORIA_CUOTA, conParteQueReinicia, pagarCuotaDe, type Campos,
 } from "../acciones";
 import { TIPOS_ANOTAR, tiposAnotar, type TipoAnotar } from "../lugares";
 import { ESTADO_LECTURA, valoresLectura } from "./revisar";
@@ -394,7 +394,8 @@ async function parteRepare(c: C, d: Deps, q: Q): Promise<PartesForm> {
         </label>
         <label class="campo"><span>¿Qué se hizo?</span><input name="trabajo" maxlength={200} placeholder="Parchado, cambio…" /></label>
         <CampoPlata nombre="manoObra" etiqueta="Mano de obra (si hubo)" />
-        <input type="hidden" name="casillaReinicia" value="1" />
+        {/* La parte que vino puesta: solo se reinicia con la casilla; elegir otra a mano sí la reinicia. */}
+        <input type="hidden" name="parteInicial" value={parteSel ?? ""} />
         {partes.length ? (
           <label class="opcion-fila"><input type="checkbox" name="reinicia" value="1" /><span>{parteReinicia
             ? "Cambié la pieza por una nueva (reinicia el contador de la parte elegida)"
@@ -727,9 +728,7 @@ async function guardarAnotacion(d: Deps, u: UsuarioWeb, tipo: TipoAnotar, f: Cam
         if (!puedeEditar(u.rol, "inventario")) throw new ErrorNegocio("Tu rol no puede registrar compras");
         return guardarCompra(d, u.id, f);
       }
-      // Con la casilla en el formulario, la parte solo se reinicia si se marcó «Cambié la pieza por una nueva».
-      const campos = f.casillaReinicia === "1" && f.reinicia !== "1" ? { ...f, parteId: "" } : f;
-      return (await guardarCambio(d, u.id, campos, f.tipoReparacion, { algo: true })).ok;
+      return (await guardarCambio(d, u.id, conParteQueReinicia(f), f.tipoReparacion, { algo: true })).ok;
     }
     case "empresa":
       return guardarGastoEmpresa(d, u.id, f, archivos.foto);

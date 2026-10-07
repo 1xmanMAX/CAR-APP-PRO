@@ -1,13 +1,8 @@
 /** @jsxRuntime automatic @jsxImportSource hono/jsx */
 import {
   AVISO_RETORNO_VACIO, editarViajeFlota, emitirFactura, guiasConAvisoRetornoVacio, enlazarGuia, ErrorNegocio, finalizarViajeFlota, hoy, listarCobrosPendientes, listarGuias,
-<<<<<<< HEAD
   listarUnidades, listarViajesFlota, parsearMonto, FaltaDatoTransporteError, prepararFactura, puedeEditar, rangoMes, registrarViajeFlota,
-  sumarDias, formatearSoles, archivosDocumento, contarPorRevisar, puedeVer,
-=======
-  listarUnidades, listarViajesFlota, parsearMonto, FaltaDatoTransporteError, prepararFactura, puedeEditar, rangoMes, registrarCobro, registrarViajeFlota,
   sumarDias, formatearSoles, archivosDocumento, contarPorRevisar, puedeVer, listarDocumentosAtascados, confirmarFacturaEnSol, reconsultarGuia,
->>>>>>> sunat-salida-real
 } from "@sunatapp/core";
 import { guardarCobro } from "../acciones";
 import { accion, formulario, pagina, servirDeAlmacen, volverA, type App, type C, type Deps } from "../base";

@@ -18,13 +18,8 @@ vi.mock("@sunatapp/core", async (importOriginal) => {
   };
 });
 import {
-<<<<<<< HEAD
-  AVISO_RETORNO_VACIO, emitirGuia, leerPausaSunat, pausarSunat, registrarGuiaBorrador, listarValoresReferenciales,
+  AVISO_RETORNO_VACIO, emitirFactura, emitirGuia, leerPausaSunat, MAX_INTENTOS, MENSAJE_VERIFICAR_EN_SOL, pausarSunat, prepararFactura, registrarGuiaBorrador, listarValoresReferenciales,
   buscarUnidad, crearCategoria, crearEnlaceWeb, guardarUsuario, registrarGasto, registrarViajeFlota, listarEventos, listarUsuarios, listarViajesFlota, obtenerEmpresa, partesDeUnidad, crearRepuesto, listarCostosFijos, listarPrestamos, listarReparaciones, listarRepuestos, piezasDeTipo, instalarParte, listarTiposParte, liquidacionViaje,
-=======
-  AVISO_RETORNO_VACIO, emitirFactura, emitirGuia, leerPausaSunat, MAX_INTENTOS, MENSAJE_VERIFICAR_EN_SOL, pausarSunat, prepararFactura, registrarGuiaBorrador,
-  buscarUnidad, listarValoresReferenciales, crearCategoria, crearEnlaceWeb, guardarUsuario, registrarGasto, registrarViajeFlota, listarEventos, listarUsuarios, listarViajesFlota, obtenerEmpresa, partesDeUnidad, instalarParte, listarTiposParte,
->>>>>>> sunat-salida-real
   type Contexto,
 } from "@sunatapp/core";
 import { crearDb, eq, factura, gasto, guiaTransportista, vehiculo } from "../../../packages/db/src/index";
